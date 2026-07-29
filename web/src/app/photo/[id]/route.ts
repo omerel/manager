@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { readFile } from "fs/promises";
 import path from "path";
 import { prisma } from "@/lib/prisma";
-import { getSessionUser } from "@/lib/session";
+import { getSessionUserOrNull } from "@/lib/session";
 import { computeVisibility } from "@/lib/access";
 import { resolveUpload } from "@/lib/storage";
 
@@ -20,7 +20,8 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
   const person = await prisma.person.findUnique({ where: { id }, select: { teamId: true, photoPath: true } });
   if (!person?.photoPath) return new NextResponse("not found", { status: 404 });
 
-  const user = await getSessionUser();
+  const user = await getSessionUserOrNull();
+  if (!user) return new NextResponse("unauthorized", { status: 401 });
   const visibility = await computeVisibility(user);
   const allowed = person.teamId ? visibility.nodeIds.has(person.teamId) : visibility.isAdmin;
   if (!allowed) return new NextResponse("not found", { status: 404 });

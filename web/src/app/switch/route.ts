@@ -1,14 +1,22 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { SESSION_COOKIE } from "@/lib/session";
+import { SESSION_COOKIE, SESSION_TTL_MS, createSessionToken, devSwitchEnabled } from "@/lib/auth";
 
 /**
- * Dev-only active-user switch (stands in for real auth, task 0.2).
- * A plain GET navigation so it works over any origin/proxy (e.g. Tailscale),
- * unlike a Server Action which is origin-checked.
+ * Dev-only user switch for local role-testing. Inert unless DEV_USER_SWITCH=1:
+ * without the flag it changes nothing and just redirects home.
  */
 export async function GET(req: NextRequest) {
-  const uid = req.nextUrl.searchParams.get("uid") ?? "";
   const res = NextResponse.redirect(new URL("/", req.nextUrl.origin));
-  res.cookies.set(SESSION_COOKIE, uid, { httpOnly: true, sameSite: "lax", path: "/" });
+  if (!devSwitchEnabled()) return res; // no session change
+
+  const uid = req.nextUrl.searchParams.get("uid") ?? "";
+  if (uid) {
+    res.cookies.set(SESSION_COOKIE, createSessionToken(uid), {
+      httpOnly: true,
+      sameSite: "lax",
+      path: "/",
+      maxAge: SESSION_TTL_MS / 1000,
+    });
+  }
   return res;
 }

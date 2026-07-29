@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
-import { getSessionUser } from "@/lib/session";
+import { getSessionUserOrNull } from "@/lib/session";
+import { logout } from "@/lib/auth-actions";
+import { devSwitchEnabled } from "@/lib/auth";
 import { UserSwitcher } from "@/components/UserSwitcher";
 
 const navLinks = [
@@ -17,11 +19,22 @@ function roleLabel(role: string): string {
 }
 
 export async function Header() {
-  const [current, users] = await Promise.all([
-    getSessionUser(),
-    prisma.user.findMany({ orderBy: { role: "asc" } }),
-  ]);
+  const current = await getSessionUserOrNull();
+
+  // signed out (e.g. on /login): brand only
+  if (!current) {
+    return (
+      <header className="border-b border-border bg-card">
+        <div className="mx-auto max-w-5xl px-6 py-3">
+          <span className="text-lg font-bold">ניהול קריירה</span>
+        </div>
+      </header>
+    );
+  }
+
   const links = current.role === "ADMIN" ? [...navLinks, { href: "/hierarchy", label: "היררכיה והתמחויות" }] : navLinks;
+  const showSwitcher = devSwitchEnabled();
+  const users = showSwitcher ? await prisma.user.findMany({ orderBy: { role: "asc" } }) : [];
 
   return (
     <header className="border-b border-border bg-card">
@@ -36,10 +49,20 @@ export async function Header() {
             ))}
           </nav>
         </div>
-        <UserSwitcher
-          currentId={current.id}
-          users={users.map((u) => ({ id: u.id, label: `${u.name} · ${roleLabel(u.role)}` }))}
-        />
+        <div className="flex items-center gap-3">
+          {showSwitcher && (
+            <UserSwitcher
+              currentId={current.id}
+              users={users.map((u) => ({ id: u.id, label: `${u.name} · ${roleLabel(u.role)}` }))}
+            />
+          )}
+          <Link href="/account" className="text-sm text-muted hover:text-foreground" title="החשבון שלי">
+            {current.name}
+          </Link>
+          <form action={logout}>
+            <button className="rounded-md border border-border px-3 py-1 text-sm hover:bg-slate-50">התנתק</button>
+          </form>
+        </div>
       </div>
     </header>
   );

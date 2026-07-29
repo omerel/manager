@@ -5,6 +5,7 @@ import { computeVisibility } from "@/lib/access";
 import { KIND_LABEL } from "@/lib/org";
 import { LevelBadge } from "@/components/OrgTree";
 import { createUser, addGrant, removeGrant, deleteUser } from "@/lib/access-actions";
+import { adminResetPassword } from "@/lib/auth-actions";
 
 const inputCls = "rounded-md border border-border px-3 py-1.5 text-sm";
 
@@ -99,11 +100,28 @@ export default async function AccessPage({ searchParams }: { searchParams: Promi
                   <span className="text-xs text-muted">{u.email}</span>
                   {u.username && <span className="text-xs text-muted">· {u.username}</span>}
                 </div>
-                {isAdmin && u.id !== me.id && (
-                  <form action={deleteUser}>
-                    <input type="hidden" name="userId" value={u.id} />
-                    <button className="text-xs text-red-600 hover:underline">מחק משתמש</button>
-                  </form>
+                {isAdmin && (
+                  <span className="flex items-center gap-3">
+                    <form action={adminResetPassword} className="flex items-center gap-1">
+                      <input type="hidden" name="userId" value={u.id} />
+                      <input
+                        name="password"
+                        type="password"
+                        minLength={6}
+                        required
+                        placeholder="סיסמה חדשה"
+                        autoComplete="new-password"
+                        className="w-28 rounded border border-border px-2 py-1 text-xs"
+                      />
+                      <button className="text-xs text-blue-700 hover:underline">אפס סיסמה</button>
+                    </form>
+                    {u.id !== me.id && (
+                      <form action={deleteUser}>
+                        <input type="hidden" name="userId" value={u.id} />
+                        <button className="text-xs text-red-600 hover:underline">מחק משתמש</button>
+                      </form>
+                    )}
+                  </span>
                 )}
               </div>
 

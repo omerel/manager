@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { marked } from "marked";
 import { prisma } from "@/lib/prisma";
-import { getSessionUser } from "@/lib/session";
+import { getSessionUserOrNull } from "@/lib/session";
 
 /** Wrap rendered markdown in a printable RTL page. */
 function htmlShell(title: string, bodyHtml: string, dateStr: string): string {
@@ -32,7 +32,8 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
   const { id } = await ctx.params;
   const format = req.nextUrl.searchParams.get("format") === "pdf" ? "pdf" : "md";
 
-  const me = await getSessionUser();
+  const me = await getSessionUserOrNull();
+  if (!me) return new NextResponse("unauthorized", { status: 401 });
   const run = await prisma.agentRun.findFirst({
     where: { id, userId: me.id, status: "SUCCEEDED" },
     include: { rule: { select: { name: true } } },

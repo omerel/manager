@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getSessionUser } from "@/lib/session";
+import { getSessionUserOrNull } from "@/lib/session";
 import { computeVisibility } from "@/lib/access";
 import { resolveUpload } from "@/lib/storage";
 import { readFile } from "fs/promises";
@@ -14,7 +14,8 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
   });
   if (!att) return new NextResponse("not found", { status: 404 });
 
-  const user = await getSessionUser();
+  const user = await getSessionUserOrNull();
+  if (!user) return new NextResponse("unauthorized", { status: 401 });
   const visibility = await computeVisibility(user);
   const teamId = att.entry.person.teamId;
   const allowed = teamId ? visibility.nodeIds.has(teamId) : visibility.isAdmin;

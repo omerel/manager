@@ -22,15 +22,28 @@ npm run db:migrate            # prisma migrate dev
 npx tsx prisma/seed.ts        # or: npm run db:seed
 
 # 4. Run the app
-npm run dev                   # http://localhost:3000 (or next free port)
+npm run dev                   # http://localhost:4321
+
+# 5. Sign in
+# Seeded users (all with password "password"): admin, research.head, alpha.lead, viewer
+# Change these before any real deployment (admin can reset passwords on /access).
 ```
 
-## What the skeleton shows
+## Authentication
+
+Login (`/login`) accepts username **or** email + password (scrypt-hashed at rest).
+Sessions are HMAC-signed HTTP-only cookies (7 days, signed with `APP_SECRET`);
+every page and data route requires a valid session. Users change their own
+password on `/account`; the admin resets any password on `/access`.
+
+For local role-testing, set `DEV_USER_SWITCH="1"` in `.env` to enable the header
+user-switcher (impersonation). Leave it unset in any real deployment.
+
+## What the app shows
 
 - **Access control** — a user's visibility is the union of their granted org-tree
-  subtrees (`src/lib/access.ts`). Switch the **משתמש פעיל** in the header to see the
-  dashboard, headcount rollup, and people list re-clip per user. Real auth is deferred;
-  the active user is a cookie stand-in.
+  subtrees (`src/lib/access.ts`). The dashboard, rollups, people list, and the
+  agent all re-clip per signed-in user.
 - **Org tree + rollup** — `center ▸ domain ▸ section ▸ team ▸ person`, with a headcount
   rolled up the tree (`src/lib/org.ts`).
 - **People** — a scoped list and a person card. Opening a person outside your scope 404s.
