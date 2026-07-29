@@ -116,28 +116,23 @@ ${fields
   }
 }
 
-/** Run a one-shot chat question for a user. Returns the AgentRun id. */
-export async function runChatQuestion(user: SessionUser, question: string): Promise<string> {
-  const run = await prisma.agentRun.create({
-    data: { userId: user.id, kind: "CHAT", prompt: question, status: "RUNNING" },
-  });
-
+/** Execute a chat question against an existing job row (background-safe). */
+export async function executeChatJob(user: SessionUser, question: string, runId: string): Promise<void> {
   const started = Date.now();
   const visibility = await computeVisibility(user);
   const dir = await exportScopedSnapshot(visibility, new Date());
   try {
     const { output } = await runClaude(`${CHAT_INSTRUCTIONS}\n${question}`, dir);
     await prisma.agentRun.update({
-      where: { id: run.id },
+      where: { id: runId },
       data: { status: "SUCCEEDED", output, durationMs: Date.now() - started },
     });
   } catch (e) {
     await prisma.agentRun.update({
-      where: { id: run.id },
+      where: { id: runId },
       data: { status: "FAILED", error: e instanceof Error ? e.message : String(e), durationMs: Date.now() - started },
     });
   } finally {
     await removeSnapshot(dir);
   }
-  return run.id;
 }

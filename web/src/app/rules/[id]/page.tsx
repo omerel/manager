@@ -7,6 +7,8 @@ import { getSessionUser } from "@/lib/session";
 import { fmtDate } from "@/lib/dates";
 import { runRuleNow, updateRule, updateRuleSchedule, pinRuleFromRun, unpinRule, deleteRule } from "@/lib/rules-actions";
 import { PendingButton } from "@/components/PendingButton";
+import { AutoRefresh } from "@/components/AutoRefresh";
+import { effectiveStatus, staleError, STALE_MS } from "@/lib/jobs";
 
 const proseCls = "prose prose-sm max-w-none prose-headings:mt-4 prose-headings:mb-2 prose-p:my-1.5 prose-li:my-0.5 prose-table:text-sm";
 
@@ -15,10 +17,10 @@ export default async function RuleDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ run?: string; edit?: string; unpinned?: string }>;
+  searchParams: Promise<{ run?: string; edit?: string; unpinned?: string; busy?: string }>;
 }) {
   const { id } = await params;
-  const { run: focusRunId, edit, unpinned } = await searchParams;
+  const { run: focusRunId, edit, unpinned, busy } = await searchParams;
   const editing = edit === "1";
   const me = await getSessionUser();
 
@@ -29,7 +31,14 @@ export default async function RuleDetailPage({
   });
   if (!rule) notFound();
 
-  const latestSuccess = rule.runs.find((r) => r.status === "SUCCEEDED");
+  const ruleRuns = rule.runs.filter((r) => r.kind === "RULE");
+  const latestSuccess = ruleRuns.find((r) => r.status === "SUCCEEDED");
+  // a live (non-stale) job for this rule — blocks run/pin buttons
+  const liveJob = rule.runs.find((r) => effectiveStatus(r) === "RUNNING");
+  const pinning = liveJob?.kind === "PIN";
+  const latestPin = rule.runs.find((r) => r.kind === "PIN");
+  const pinFailed =
+    !rule.pinnedAt && latestPin && effectiveStatus(latestPin) === "FAILED" && Date.now() - latestPin.createdAt.getTime() < STALE_MS;
 
   return (
     <div className="space-y-6">
@@ -40,15 +49,21 @@ export default async function RuleDetailPage({
           <div className="flex items-center gap-2">
             {!editing && (
               <>
-                <form action={runRuleNow}>
-                  <input type="hidden" name="ruleId" value={rule.id} />
-                  <PendingButton
-                    pendingLabel={rule.pinnedAt ? "מריץ (מקובע)…" : "הסוכן מריץ… עד דקה-שתיים"}
-                    className="rounded-md bg-blue-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
-                  >
-                    ▶ הרץ עכשיו
-                  </PendingButton>
-                </form>
+                {liveJob ? (
+                  <span className="rounded-md bg-slate-100 px-4 py-1.5 text-sm text-slate-500">
+                    {pinning ? "קיבוע רץ…" : "ריצה פעילה…"}
+                  </span>
+                ) : (
+                  <form action={runRuleNow}>
+                    <input type="hidden" name="ruleId" value={rule.id} />
+                    <PendingButton
+                      pendingLabel="מתחיל…"
+                      className="rounded-md bg-blue-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
+                    >
+                      ▶ הרץ עכשיו
+                    </PendingButton>
+                  </form>
+                )}
                 <Link href={`/rules/${rule.id}?edit=1`} className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-slate-50">
                   ✎ ערוך
                 </Link>
@@ -64,6 +79,16 @@ export default async function RuleDetailPage({
         {unpinned === "1" && (
           <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
             נוסח החוק שונה — הקיבוע בוטל, כי המימוש ודוגמת-הזהב אושרו לנוסח הקודם. הרץ ואשר מחדש כדי לקבע.
+          </div>
+        )}
+        {busy === "1" && (
+          <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            כבר רצה פעולה עבור חוק זה — המתן לסיומה.
+          </div>
+        )}
+        {pinFailed && (
+          <div className="mt-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+            הקיבוע נכשל: {staleError(latestPin!)} — אפשר לנסות שוב.
           </div>
         )}
 
@@ -125,8 +150,18 @@ export default async function RuleDetailPage({
             <pre className="mt-2 max-h-64 overflow-auto rounded-md bg-slate-900 p-3 text-xs text-slate-100" dir="ltr">{rule.realization}</pre>
           </details>
         </section>
+      ) : pinning ? (
+        <section className="flex items-center gap-3 rounded-lg border border-indigo-200 bg-indigo-50/40 p-4 text-sm text-indigo-800">
+          <svg className="h-5 w-5 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden>
+            <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25" />
+            <path d="M22 12a10 10 0 0 1-10 10" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />
+          </svg>
+          מקבע… הסוכן כותב מימוש (עד כמה דקות). הדף יתעדכן לבד; אפשר לנווט ולחזור.
+          <AutoRefresh />
+        </section>
       ) : (
-        latestSuccess && (
+        latestSuccess &&
+        !liveJob && (
           <section className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-card p-4">
             <p className="text-sm text-muted">
               מרוצה מהתוצר האחרון? קיבוע יגרום לכל ריצה עתידית לשחזר אותו נאמנה — הסוכן יבחר לבד בין סקריפט דטרמיניסטי לנוהל נעול.
@@ -135,7 +170,7 @@ export default async function RuleDetailPage({
               <input type="hidden" name="ruleId" value={rule.id} />
               <input type="hidden" name="runId" value={latestSuccess.id} />
               <PendingButton
-                pendingLabel="מקבע… הסוכן כותב מימוש (עד כמה דקות)"
+                pendingLabel="מתחיל קיבוע…"
                 className="rounded-md bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-700"
               >
                 📌 קבע כדטרמיניסטי
@@ -148,10 +183,10 @@ export default async function RuleDetailPage({
       {/* Results */}
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">תוצרים</h2>
-        {rule.runs.length === 0 ? (
+        {ruleRuns.length === 0 ? (
           <p className="text-muted">אין ריצות עדיין — לחץ ״הרץ עכשיו״.</p>
         ) : (
-          rule.runs.map((run) => (
+          ruleRuns.map((run) => (
             <div
               key={run.id}
               className={`rounded-lg border p-4 ${
@@ -163,8 +198,17 @@ export default async function RuleDetailPage({
                   <span>{fmtDate(run.createdAt)}</span>
                   {run.durationMs && <span>· {Math.round(run.durationMs / 1000)} שניות</span>}
                   {run.pinnedRun && <span className="rounded bg-indigo-100 px-1.5 py-0.5 text-xs text-indigo-700">ריצה מקובעת</span>}
-                  {run.status === "FAILED" && <span className="text-red-600">נכשלה</span>}
-                  {run.status === "RUNNING" && <span>רצה…</span>}
+                  {effectiveStatus(run) === "FAILED" && <span className="text-red-600">נכשלה</span>}
+                  {effectiveStatus(run) === "RUNNING" && (
+                    <span className="inline-flex items-center gap-1.5 text-blue-700">
+                      <svg className="h-3.5 w-3.5 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden>
+                        <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25" />
+                        <path d="M22 12a10 10 0 0 1-10 10" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />
+                      </svg>
+                      הסוכן מריץ… יתעדכן לבד
+                      <AutoRefresh />
+                    </span>
+                  )}
                 </span>
                 {run.status === "SUCCEEDED" && (
                   <span className="flex items-center gap-2 text-xs">
@@ -173,12 +217,12 @@ export default async function RuleDetailPage({
                   </span>
                 )}
               </div>
-              {run.status === "SUCCEEDED" && (
+              {effectiveStatus(run) === "SUCCEEDED" && (
                 <div className={proseCls}>
                   <Markdown remarkPlugins={[remarkGfm]}>{run.output ?? ""}</Markdown>
                 </div>
               )}
-              {run.status === "FAILED" && <p className="text-sm text-red-700">{run.error}</p>}
+              {effectiveStatus(run) === "FAILED" && <p className="text-sm text-red-700">{staleError(run)}</p>}
             </div>
           ))
         )}

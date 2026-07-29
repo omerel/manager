@@ -37,12 +37,8 @@ function runNodeScript(scriptSource: string, cwd: string, todayIso: string): Pro
   });
 }
 
-/** Execute a rule for its owner. Handles pinned (script/flow) and unpinned runs. */
-export async function executeRule(user: SessionUser, rule: Rule): Promise<string> {
-  const run = await prisma.agentRun.create({
-    data: { userId: user.id, kind: "RULE", ruleId: rule.id, prompt: rule.text, status: "RUNNING", pinnedRun: !!rule.pinnedAt },
-  });
-
+/** Execute a rule against an existing job row (background-safe). */
+export async function executeRuleJob(user: SessionUser, rule: Rule, runId: string): Promise<void> {
   const started = Date.now();
   const today = new Date();
   const visibility = await computeVisibility(user);
@@ -69,18 +65,25 @@ ${rule.goldenOutput ?? ""}
       ({ output } = await runClaudeRaw(`${RULE_INSTRUCTIONS}\n${rule.text}`, dir));
     }
     await prisma.agentRun.update({
-      where: { id: run.id },
+      where: { id: runId },
       data: { status: "SUCCEEDED", output, durationMs: Date.now() - started },
     });
   } catch (e) {
     await prisma.agentRun.update({
-      where: { id: run.id },
+      where: { id: runId },
       data: { status: "FAILED", error: e instanceof Error ? e.message : String(e), durationMs: Date.now() - started },
     });
   } finally {
     await removeSnapshot(dir);
   }
-  await prisma.rule.update({ where: { id: rule.id }, data: {} }).catch(() => {});
+}
+
+/** Create a job row and execute synchronously (used by the chronic scheduler). */
+export async function executeRule(user: SessionUser, rule: Rule): Promise<string> {
+  const run = await prisma.agentRun.create({
+    data: { userId: user.id, kind: "RULE", ruleId: rule.id, prompt: rule.text, status: "RUNNING", pinnedRun: !!rule.pinnedAt },
+  });
+  await executeRuleJob(user, rule, run.id);
   return run.id;
 }
 

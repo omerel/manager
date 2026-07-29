@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/session";
-import { executeRule, pinRule, nextRunFrom } from "@/lib/rules-engine";
+import { executeRuleJob, pinRule, nextRunFrom } from "@/lib/rules-engine";
+import { runInBackground, hasLiveRun } from "@/lib/jobs";
 import type { RuleSchedule } from "@/generated/prisma/client";
 
 function str(v: FormDataEntryValue | null): string {
@@ -78,17 +79,41 @@ export async function updateRuleSchedule(formData: FormData) {
 
 export async function runRuleNow(formData: FormData) {
   const { me, rule } = await myRule(str(formData.get("ruleId")));
-  const runId = await executeRule(me, rule); // synchronous — may take a minute
+  // duplicate-run guard: one live job (run or pin) per rule
+  if (await hasLiveRun({ ruleId: rule.id })) redirect(`/rules/${rule.id}?busy=1`);
+  const runId = await runInBackground(
+    { userId: me.id, kind: "RULE", ruleId: rule.id, prompt: rule.text, pinnedRun: !!rule.pinnedAt },
+    (id) => executeRuleJob(me, rule, id),
+  );
   redirect(`/rules/${rule.id}?run=${runId}`);
 }
 
-/** Pin: the approved run's output becomes the golden example; agent picks the realization. */
+/** Pin: the approved run's output becomes the golden example; agent picks the realization.
+ *  Runs as a background PIN job — the rule page shows progress and flips when stored. */
 export async function pinRuleFromRun(formData: FormData) {
   const { me, rule } = await myRule(str(formData.get("ruleId")));
   const runId = str(formData.get("runId"));
   const run = await prisma.agentRun.findFirst({ where: { id: runId, ruleId: rule.id, status: "SUCCEEDED" } });
   if (!run?.output) throw new Error("אין תוצר מאושר לקבע.");
-  await pinRule(me, rule, run.output); // synchronous meta-run
+  if (await hasLiveRun({ ruleId: rule.id })) redirect(`/rules/${rule.id}?busy=1`);
+  const approved = run.output;
+  await runInBackground(
+    { userId: me.id, kind: "PIN", ruleId: rule.id, prompt: `קיבוע: ${rule.name}` },
+    async (id) => {
+      try {
+        await pinRule(me, rule, approved);
+        await prisma.agentRun.update({
+          where: { id },
+          data: { status: "SUCCEEDED", output: "הקיבוע הושלם." },
+        });
+      } catch (e) {
+        await prisma.agentRun.update({
+          where: { id },
+          data: { status: "FAILED", error: e instanceof Error ? e.message.slice(0, 2000) : String(e) },
+        });
+      }
+    },
+  );
   redirect(`/rules/${rule.id}`);
 }
 

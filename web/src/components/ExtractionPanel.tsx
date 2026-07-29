@@ -1,16 +1,24 @@
 import { extractFromDocument, resolveProposalItem, discardProposal, type ProposalItem } from "@/lib/extract-actions";
 import { PendingButton } from "@/components/PendingButton";
+import { AutoRefresh } from "@/components/AutoRefresh";
 
-/** Edit-mode: upload a document → agent proposes values → approve field-by-field. */
+export type ExtractionJobView = { status: "RUNNING" | "SUCCEEDED" | "FAILED"; error: string | null } | null;
+
+/** Edit-mode: upload a document → agent proposes values (in the background) → approve field-by-field. */
 export function ExtractionPanel({
   personId,
   proposal,
   emptyResult,
+  job,
+  busy,
 }: {
   personId: string;
   proposal: { id: string; items: ProposalItem[] } | null;
   emptyResult: boolean;
+  job: ExtractionJobView;
+  busy: boolean;
 }) {
+  const running = job?.status === "RUNNING";
   return (
     <section className="space-y-3 rounded-lg border border-border bg-card p-5">
       <h2 className="text-lg font-semibold">📄 טעינת נתונים ממסמך</h2>
@@ -19,24 +27,45 @@ export function ExtractionPanel({
         כל ערך שנמצא יוצג לאישור שדה-שדה.
       </p>
 
-      <form action={extractFromDocument} className="flex flex-wrap items-end gap-2">
-        <input type="hidden" name="personId" value={personId} />
-        <input
-          type="file"
-          name="document"
-          required
-          accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.md,.csv"
-          className="text-sm"
-        />
-        <PendingButton
-          pendingLabel="הסוכן מנתח את המסמך…"
-          className="rounded-md bg-blue-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
-        >
-          נתח מסמך
-        </PendingButton>
-        <p className="w-full text-xs text-muted">הניתוח לוקח עד דקה.</p>
-      </form>
+      {running ? (
+        <div className="flex items-center gap-3 rounded-md border border-blue-200 bg-blue-50/40 px-4 py-3 text-sm text-blue-800">
+          <svg className="h-5 w-5 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden>
+            <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25" />
+            <path d="M22 12a10 10 0 0 1-10 10" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />
+          </svg>
+          הסוכן מנתח את המסמך… ההצעות יופיעו כאן אוטומטית.
+          <AutoRefresh />
+        </div>
+      ) : (
+        <form action={extractFromDocument} className="flex flex-wrap items-end gap-2">
+          <input type="hidden" name="personId" value={personId} />
+          <input
+            type="file"
+            name="document"
+            required
+            accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.md,.csv"
+            className="text-sm"
+          />
+          <PendingButton
+            pendingLabel="מתחיל ניתוח…"
+            className="rounded-md bg-blue-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
+          >
+            נתח מסמך
+          </PendingButton>
+          <p className="w-full text-xs text-muted">הניתוח רץ ברקע — אפשר להמשיך לעבוד.</p>
+        </form>
+      )}
 
+      {busy && (
+        <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
+          כבר רץ ניתוח עבור עובד/ת זה/זו — המתן לסיומו.
+        </div>
+      )}
+      {job?.status === "FAILED" && (
+        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-800">
+          הניתוח נכשל: {job.error}
+        </div>
+      )}
       {emptyResult && (
         <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
           הסוכן לא מצא במסמך ערכים חדשים המתאימים לשדות הכרטיס.

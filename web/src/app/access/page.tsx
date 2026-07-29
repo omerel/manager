@@ -4,13 +4,13 @@ import { getSessionUser } from "@/lib/session";
 import { computeVisibility } from "@/lib/access";
 import { KIND_LABEL } from "@/lib/org";
 import { LevelBadge } from "@/components/OrgTree";
-import { createUser, addGrant, removeGrant, deleteUser } from "@/lib/access-actions";
+import { createUser, addGrant, removeGrant, deleteUser, updateUserProfile } from "@/lib/access-actions";
 import { adminResetPassword } from "@/lib/auth-actions";
 
 const inputCls = "rounded-md border border-border px-3 py-1.5 text-sm";
 
-export default async function AccessPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
-  const { q } = await searchParams;
+export default async function AccessPage({ searchParams }: { searchParams: Promise<{ q?: string; edit?: string }> }) {
+  const { q, edit: editUserId } = await searchParams;
   const query = (q ?? "").trim();
 
   const [me, allUsers, nodes] = await Promise.all([
@@ -87,6 +87,30 @@ export default async function AccessPage({ searchParams }: { searchParams: Promi
         <div className="space-y-4">
           {users.map((u) => (
             <div key={u.id} className="rounded-lg border border-border bg-card p-4">
+              {isAdmin && editUserId === u.id ? (
+                <div className="rounded-md bg-blue-50/40 p-3">
+                  <form action={updateUserProfile} className="flex flex-wrap items-end gap-2">
+                    <input type="hidden" name="userId" value={u.id} />
+                    <div className="flex flex-col">
+                      <label className="mb-1 text-xs text-muted">שם</label>
+                      <input name="name" defaultValue={u.name} required className={inputCls} />
+                    </div>
+                    <div className="flex flex-col">
+                      <label className="mb-1 text-xs text-muted">אימייל</label>
+                      <input name="email" type="email" defaultValue={u.email} required className={inputCls} />
+                    </div>
+                    <button className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700">
+                      שמור
+                    </button>
+                    <Link href="/access" className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-slate-50">
+                      ביטול
+                    </Link>
+                  </form>
+                  <p className="mt-1 text-xs text-muted">
+                    שם המשתמש להתחברות ({u.username ?? "—"}) נשאר קבוע גם אם האימייל משתנה.
+                  </p>
+                </div>
+              ) : (
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex flex-wrap items-center gap-3">
                   <span className="font-semibold">{u.name}</span>
@@ -99,6 +123,11 @@ export default async function AccessPage({ searchParams }: { searchParams: Promi
                   </span>
                   <span className="text-xs text-muted">{u.email}</span>
                   {u.username && <span className="text-xs text-muted">· {u.username}</span>}
+                  {isAdmin && (
+                    <Link href={`/access?edit=${u.id}`} className="text-xs text-blue-700 hover:underline">
+                      ערוך
+                    </Link>
+                  )}
                 </div>
                 {isAdmin && (
                   <span className="flex items-center gap-3">
@@ -124,6 +153,7 @@ export default async function AccessPage({ searchParams }: { searchParams: Promi
                   </span>
                 )}
               </div>
+              )}
 
               <div className="mt-3">
                 {u.role === "ADMIN" ? (

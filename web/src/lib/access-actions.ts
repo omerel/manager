@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/authz";
 import { hashPassword } from "@/lib/password";
@@ -38,6 +39,21 @@ export async function createUser(formData: FormData) {
   await prisma.user.create({ data: { name, email, username, passwordHash: hashPassword(password), role } });
   revalidatePath("/access");
   revalidatePath("/", "layout"); // refresh the header's user list
+}
+
+/** Admin edit of a user's name/email. The username (login id) stays stable. */
+export async function updateUserProfile(formData: FormData) {
+  await requireAdmin();
+  const userId = str(formData.get("userId"));
+  const name = str(formData.get("name"));
+  const email = str(formData.get("email"));
+  if (!name || !email) throw new Error("חובה להזין שם ואימייל.");
+  const clash = await prisma.user.findFirst({ where: { email, id: { not: userId } } });
+  if (clash) throw new Error("כבר קיים משתמש עם אימייל זה.");
+  await prisma.user.update({ where: { id: userId }, data: { name, email } });
+  revalidatePath("/access");
+  revalidatePath("/", "layout");
+  redirect("/access");
 }
 
 export async function deleteUser(formData: FormData) {

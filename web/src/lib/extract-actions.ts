@@ -12,6 +12,7 @@ import { computeVisibility } from "@/lib/access";
 import { materializeDocument } from "@/lib/doc-extract";
 import { runExtraction } from "@/lib/agent";
 import { saveUpload } from "@/lib/storage";
+import { runInBackground, hasLiveRun } from "@/lib/jobs";
 
 function str(v: FormDataEntryValue | null): string {
   return String(v ?? "").trim();
@@ -40,20 +41,10 @@ export async function setProfilePhoto(formData: FormData) {
 
 /* ---------- Document extraction (agent proposes, human approves per field) ---------- */
 
-export async function extractFromDocument(formData: FormData) {
-  const personId = str(formData.get("personId"));
-  const me = await requireEditForPerson(personId);
-  const file = formData.get("document");
-  if (!(file instanceof File) || file.size === 0) throw new Error("לא נבחר מסמך.");
-
-  const person = await prisma.person.findUniqueOrThrow({
-    where: { id: personId },
-    include: { fieldValues: { include: { field: true } } },
-  });
+/** The card schema handed to the agent (core fields + admin-defined fields). */
+async function extractionFields() {
   const defs = await prisma.personFieldDef.findMany({ orderBy: { order: "asc" } });
-
-  // schema handed to the agent
-  const fields = [
+  return [
     { key: "fullName", label: "שם מלא", type: "טקסט" },
     { key: "recruitmentDate", label: "תאריך גיוס", type: "תאריך" },
     { key: "endOfServiceDate", label: "תאריך סיום שירות", type: "תאריך" },
@@ -64,38 +55,63 @@ export async function extractFromDocument(formData: FormData) {
       options: d.type === "ENUM" ? d.options : undefined,
     })),
   ];
+}
 
+export async function extractFromDocument(formData: FormData) {
+  const personId = str(formData.get("personId"));
+  const me = await requireEditForPerson(personId);
+  const file = formData.get("document");
+  if (!(file instanceof File) || file.size === 0) throw new Error("לא נבחר מסמך.");
+  // duplicate-run guard: one live extraction per person
+  if (await hasLiveRun({ personId, kind: "EXTRACT" })) redirect(`/people/${personId}?edit=1&busy=1`);
+
+  const fields = await extractionFields();
+  // materialize the document now (fast); the agent part runs in the background
   const dir = await mkdtemp(path.join(tmpdir(), "extract-"));
-  let raw: { key: string; proposed: string }[] = [];
-  try {
-    const docName = await materializeDocument(dir, file);
-    raw = await runExtraction(dir, docName, fields);
-  } finally {
-    await rm(dir, { recursive: true, force: true });
-  }
+  const docName = await materializeDocument(dir, file);
 
-  // merge with current values; keep only real differences
-  const valueByDef = new Map(person.fieldValues.map((fv) => [fv.fieldDefId, fv.value]));
-  const currentOf = (key: string): string => {
-    if (key === "fullName") return person.fullName;
-    if (key === "recruitmentDate") return person.recruitmentDate.toISOString().slice(0, 10);
-    if (key === "endOfServiceDate") return person.endOfServiceDate?.toISOString().slice(0, 10) ?? "";
-    if (key.startsWith("field:")) return valueByDef.get(key.slice(6)) ?? "";
-    return "";
-  };
-  const labelOf = new Map(fields.map((f) => [f.key, f.label]));
-  const items: ProposalItem[] = raw
-    .filter((r) => labelOf.has(r.key))
-    .map((r) => ({ key: r.key, label: labelOf.get(r.key)!, current: currentOf(r.key), proposed: r.proposed }))
-    .filter((it) => it.proposed !== it.current);
+  await runInBackground(
+    { userId: me.id, kind: "EXTRACT", personId, prompt: `חילוץ ממסמך: ${file.name}` },
+    async (id) => {
+      try {
+        const raw = await runExtraction(dir, docName, fields);
+        const person = await prisma.person.findUniqueOrThrow({
+          where: { id: personId },
+          include: { fieldValues: { include: { field: true } } },
+        });
+        // merge with current values; keep only real differences
+        const valueByDef = new Map(person.fieldValues.map((fv) => [fv.fieldDefId, fv.value]));
+        const currentOf = (key: string): string => {
+          if (key === "fullName") return person.fullName;
+          if (key === "recruitmentDate") return person.recruitmentDate.toISOString().slice(0, 10);
+          if (key === "endOfServiceDate") return person.endOfServiceDate?.toISOString().slice(0, 10) ?? "";
+          if (key.startsWith("field:")) return valueByDef.get(key.slice(6)) ?? "";
+          return "";
+        };
+        const labelOf = new Map(fields.map((f) => [f.key, f.label]));
+        const items: ProposalItem[] = raw
+          .filter((r) => labelOf.has(r.key))
+          .map((r) => ({ key: r.key, label: labelOf.get(r.key)!, current: currentOf(r.key), proposed: r.proposed }))
+          .filter((it) => it.proposed !== it.current);
 
-  // one open proposal per person — replace any previous one
-  await prisma.extractionProposal.deleteMany({ where: { personId } });
-  if (items.length > 0) {
-    await prisma.extractionProposal.create({ data: { personId, createdBy: me.id, items } });
-  }
+        // one open proposal per person — replace any previous one
+        await prisma.extractionProposal.deleteMany({ where: { personId } });
+        if (items.length > 0) {
+          await prisma.extractionProposal.create({ data: { personId, createdBy: me.id, items } });
+        }
+        await prisma.agentRun.update({ where: { id }, data: { status: "SUCCEEDED", output: String(items.length) } });
+      } catch (e) {
+        await prisma.agentRun.update({
+          where: { id },
+          data: { status: "FAILED", error: e instanceof Error ? e.message.slice(0, 2000) : String(e) },
+        });
+      } finally {
+        await rm(dir, { recursive: true, force: true });
+      }
+    },
+  );
   revalidatePath(`/people/${personId}`);
-  redirect(`/people/${personId}?edit=1${items.length === 0 ? "&extract=none" : ""}`);
+  redirect(`/people/${personId}?edit=1`);
 }
 
 async function applyItem(personId: string, item: ProposalItem) {
@@ -153,34 +169,37 @@ export async function extractForNewPerson(formData: FormData) {
 
   const file = formData.get("document");
   if (!(file instanceof File) || file.size === 0) throw new Error("לא נבחר מסמך.");
+  // duplicate-run guard: one live new-person extraction per user
+  if (await hasLiveRun({ userId: me.id, kind: "EXTRACT", personId: null })) redirect("/people/new?busy=1");
 
-  const defs = await prisma.personFieldDef.findMany({ orderBy: { order: "asc" } });
-  const fields = [
-    { key: "fullName", label: "שם מלא", type: "טקסט" },
-    { key: "recruitmentDate", label: "תאריך גיוס", type: "תאריך" },
-    { key: "endOfServiceDate", label: "תאריך סיום שירות", type: "תאריך" },
-    ...defs.map((d) => ({
-      key: `field:${d.id}`,
-      label: d.label,
-      type: d.type === "DATE" ? "תאריך" : d.type === "NUMBER" ? "מספר" : "טקסט",
-      options: d.type === "ENUM" ? d.options : undefined,
-    })),
-  ];
-
+  const fields = await extractionFields();
   const dir = await mkdtemp(path.join(tmpdir(), "extract-new-"));
-  let raw: { key: string; proposed: string }[] = [];
-  try {
-    const docName = await materializeDocument(dir, file);
-    raw = await runExtraction(dir, docName, fields);
-  } finally {
-    await rm(dir, { recursive: true, force: true });
-  }
+  const docName = await materializeDocument(dir, file);
 
-  if (raw.length === 0) redirect("/people/new?extract=none");
-
-  const values = Object.fromEntries(raw.map((r) => [r.key, r.proposed]));
-  const draft = await prisma.personDraft.create({ data: { createdBy: me.id, values } });
-  redirect(`/people/new?draft=${draft.id}`);
+  await runInBackground(
+    { userId: me.id, kind: "EXTRACT", prompt: `יצירה ממסמך: ${file.name}` },
+    async (id) => {
+      try {
+        const raw = await runExtraction(dir, docName, fields);
+        if (raw.length === 0) {
+          await prisma.agentRun.update({ where: { id }, data: { status: "SUCCEEDED", output: "" } });
+          return;
+        }
+        const values = Object.fromEntries(raw.map((r) => [r.key, r.proposed]));
+        const draft = await prisma.personDraft.create({ data: { createdBy: me.id, values } });
+        // the new-person page picks the draft id up from the job record
+        await prisma.agentRun.update({ where: { id }, data: { status: "SUCCEEDED", output: draft.id } });
+      } catch (e) {
+        await prisma.agentRun.update({
+          where: { id },
+          data: { status: "FAILED", error: e instanceof Error ? e.message.slice(0, 2000) : String(e) },
+        });
+      } finally {
+        await rm(dir, { recursive: true, force: true });
+      }
+    },
+  );
+  redirect("/people/new?extracting=1");
 }
 
 export async function discardProposal(formData: FormData) {

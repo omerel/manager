@@ -8,16 +8,35 @@ import { PersonFormFields } from "@/components/PersonFormFields";
 import { createPerson } from "@/lib/person-actions";
 import { extractForNewPerson } from "@/lib/extract-actions";
 import { PendingButton } from "@/components/PendingButton";
+import { AutoRefresh } from "@/components/AutoRefresh";
+import { effectiveStatus, staleError, STALE_MS } from "@/lib/jobs";
+import { redirect } from "next/navigation";
 
 export default async function NewPersonPage({
   searchParams,
 }: {
-  searchParams: Promise<{ draft?: string; extract?: string }>;
+  searchParams: Promise<{ draft?: string; extracting?: string; busy?: string }>;
 }) {
-  const { draft: draftId, extract } = await searchParams;
+  const { draft: draftId, extracting, busy } = await searchParams;
   const user = await getSessionUser();
   const visibility = await computeVisibility(user);
   const [teams, defs] = await Promise.all([getEditableTeams(visibility), getFieldDefs()]);
+
+  // background new-person extraction job for this user
+  const extractRun = await prisma.agentRun.findFirst({
+    where: { userId: user.id, kind: "EXTRACT", personId: null },
+    orderBy: { createdAt: "desc" },
+  });
+  const jobStatus = extractRun ? effectiveStatus(extractRun) : null;
+  const jobRecent = !!extractRun && Date.now() - extractRun.createdAt.getTime() < STALE_MS;
+  // job finished with a draft → jump to the pre-filled form (only if the draft still exists)
+  if (!draftId && jobRecent && jobStatus === "SUCCEEDED" && extractRun!.output) {
+    const exists = await prisma.personDraft.findFirst({ where: { id: extractRun!.output, createdBy: user.id }, select: { id: true } });
+    if (exists) redirect(`/people/new?draft=${extractRun!.output}`);
+  }
+  const extractRunning = jobStatus === "RUNNING";
+  const extractFailed = jobRecent && jobStatus === "FAILED" && extracting === "1";
+  const extractEmpty = jobRecent && jobStatus === "SUCCEEDED" && !extractRun!.output && extracting === "1";
 
   // Draft pre-filled by the agent from a document (nothing persisted until save).
   const draft = draftId ? await prisma.personDraft.findFirst({ where: { id: draftId, createdBy: user.id } }) : null;
@@ -51,17 +70,38 @@ export default async function NewPersonPage({
             <p className="text-sm text-muted">
               העלה PDF / Word / Excel / טקסט — הסוכן ימלא את הטופס מראש ואת/ה בודק/ת ומאשר/ת לפני השמירה.
             </p>
-            <form action={extractForNewPerson} className="flex flex-wrap items-end gap-2">
-              <input type="file" name="document" required accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.md,.csv" className="text-sm" />
-              <PendingButton
-                pendingLabel="הסוכן מנתח את המסמך…"
-                className="rounded-md border border-border px-4 py-1.5 text-sm hover:bg-slate-50"
-              >
-                נתח מסמך ומלא טופס
-              </PendingButton>
-              <p className="w-full text-xs text-muted">הניתוח לוקח עד דקה.</p>
-            </form>
-            {extract === "none" && (
+            {extractRunning ? (
+              <div className="flex items-center gap-3 rounded-md border border-blue-200 bg-blue-50/40 px-4 py-3 text-sm text-blue-800">
+                <svg className="h-5 w-5 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden>
+                  <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25" />
+                  <path d="M22 12a10 10 0 0 1-10 10" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />
+                </svg>
+                הסוכן מנתח את המסמך… הטופס יתמלא אוטומטית כשיסיים.
+                <AutoRefresh />
+              </div>
+            ) : (
+              <form action={extractForNewPerson} className="flex flex-wrap items-end gap-2">
+                <input type="file" name="document" required accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.md,.csv" className="text-sm" />
+                <PendingButton
+                  pendingLabel="מתחיל ניתוח…"
+                  className="rounded-md border border-border px-4 py-1.5 text-sm hover:bg-slate-50"
+                >
+                  נתח מסמך ומלא טופס
+                </PendingButton>
+                <p className="w-full text-xs text-muted">הניתוח רץ ברקע — הטופס יתמלא לבד כשיסיים.</p>
+              </form>
+            )}
+            {busy === "1" && (
+              <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-1.5 text-sm text-amber-800">
+                כבר רץ ניתוח מסמך — המתן לסיומו.
+              </div>
+            )}
+            {extractFailed && (
+              <div className="rounded-md border border-red-200 bg-red-50 px-3 py-1.5 text-sm text-red-800">
+                הניתוח נכשל: {staleError(extractRun!)}
+              </div>
+            )}
+            {extractEmpty && (
               <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-1.5 text-sm text-amber-800">
                 הסוכן לא מצא במסמך ערכים מתאימים — מלא/י ידנית.
               </div>

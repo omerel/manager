@@ -11,8 +11,9 @@ import { computePersonGaps, levelForPoint, evalMetric, GAP_META, type GapLevel }
 import { PersonFormFields } from "@/components/PersonFormFields";
 import { MetricCurve } from "@/components/MetricCurve";
 import { EvaluationsSection } from "@/components/EvaluationsSection";
-import { ExtractionPanel } from "@/components/ExtractionPanel";
+import { ExtractionPanel, type ExtractionJobView } from "@/components/ExtractionPanel";
 import { setProfilePhoto, type ProposalItem } from "@/lib/extract-actions";
+import { effectiveStatus, staleError, STALE_MS } from "@/lib/jobs";
 import {
   updatePerson,
   assignPlan,
@@ -28,10 +29,10 @@ export default async function PersonPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ edit?: string; extract?: string }>;
+  searchParams: Promise<{ edit?: string; busy?: string }>;
 }) {
   const { id } = await params;
-  const { edit, extract } = await searchParams;
+  const { edit, busy } = await searchParams;
   const user = await getSessionUser();
   const visibility = await computeVisibility(user);
 
@@ -70,6 +71,20 @@ export default async function PersonPage({
     ? await prisma.extractionProposal.findFirst({ where: { personId: person.id }, orderBy: { createdAt: "desc" } })
     : null;
   const proposal = proposalRow ? { id: proposalRow.id, items: (proposalRow.items as ProposalItem[]) ?? [] } : null;
+
+  // latest extraction job for this person (background run) — drives the panel's progress state
+  const extractRun = editing
+    ? await prisma.agentRun.findFirst({ where: { personId: person.id, kind: "EXTRACT" }, orderBy: { createdAt: "desc" } })
+    : null;
+  const extractJob: ExtractionJobView = extractRun
+    ? { status: effectiveStatus(extractRun), error: staleError(extractRun) }
+    : null;
+  const emptyResult =
+    !!extractRun &&
+    extractJob?.status === "SUCCEEDED" &&
+    extractRun.output === "0" &&
+    !proposal &&
+    Date.now() - extractRun.createdAt.getTime() < STALE_MS;
 
   return (
     <div className="space-y-8">
@@ -152,7 +167,15 @@ export default async function PersonPage({
 
       <GapBanner status={gaps.status} items={gaps.items} />
 
-      {editing && <ExtractionPanel personId={person.id} proposal={proposal} emptyResult={extract === "none"} />}
+      {editing && (
+        <ExtractionPanel
+          personId={person.id}
+          proposal={proposal}
+          emptyResult={emptyResult}
+          job={extractJob}
+          busy={busy === "1"}
+        />
+      )}
 
       <PersonalDetails person={person} defs={defs} valueByDef={valueByDef} canEdit={editing} />
 

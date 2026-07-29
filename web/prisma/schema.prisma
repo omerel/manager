@@ -58,9 +58,11 @@ model AgentRun {
   id         String         @id @default(cuid())
   user       User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId     String
-  kind       String // "CHAT" | "RULE"
+  kind       String // "CHAT" | "RULE" | "PIN" | "EXTRACT"
   rule       Rule?          @relation(fields: [ruleId], references: [id], onDelete: Cascade)
   ruleId     String?
+  person     Person?        @relation(fields: [personId], references: [id], onDelete: Cascade)
+  personId   String? // extraction target; null for a new-person extraction
   prompt     String
   output     String?
   error      String?
@@ -234,6 +236,7 @@ model Person {
   metricReadings   MetricReading[]
   evalEntries      EvalEntry[]
   proposals        ExtractionProposal[]
+  agentRuns        AgentRun[]
   createdAt        DateTime           @default(now())
 }
 
