@@ -18,6 +18,7 @@ export type PersonRow = {
   status: EmploymentStatus;
   endOfServiceDate: Date | null;
   teamId: string | null;
+  photoPath: string | null;
   orgPath: string; // "מרכז ▸ תחום ▸ מדור ▸ צוות" or "ללא שיוך"
   canEdit: boolean;
 };
@@ -69,6 +70,7 @@ export async function getVisiblePeople(visibility: Visibility): Promise<PersonRo
     status: p.status,
     endOfServiceDate: p.endOfServiceDate,
     teamId: p.teamId,
+    photoPath: p.photoPath,
     orgPath: resolvePath(p.teamId),
     canEdit: canEditTeam(visibility, p.teamId),
   }));
@@ -88,6 +90,7 @@ export async function getVisiblePerson(id: string, visibility: Visibility): Prom
     status: p.status,
     endOfServiceDate: p.endOfServiceDate,
     teamId: p.teamId,
+    photoPath: p.photoPath,
     orgPath: resolvePath(p.teamId),
     canEdit: canEditTeam(visibility, p.teamId),
   };

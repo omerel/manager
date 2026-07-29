@@ -1,17 +1,21 @@
 import { redirect } from "next/navigation";
 import { getSessionUserOrNull } from "@/lib/session";
+import { getLogoPath } from "@/lib/branding";
 import { login } from "@/lib/auth-actions";
 import { PendingButton } from "@/components/PendingButton";
+import { AppLogo } from "@/components/Logo";
 
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   const { error } = await searchParams;
   // already signed in → straight to the dashboard
   if (await getSessionUserOrNull()) redirect("/");
+  const customLogo = !!(await getLogoPath());
 
   return (
     <div className="mx-auto mt-16 w-full max-w-sm space-y-6">
-      <div className="text-center">
-        <h1 className="text-2xl font-bold">ניהול קריירה</h1>
+      <div className="flex flex-col items-center text-center">
+        <AppLogo customLogo={customLogo} size={64} />
+        <h1 className="mt-3 text-2xl font-bold text-brand-900">ניהול קריירה</h1>
         <p className="mt-1 text-muted">התחברות למערכת</p>
       </div>
 
@@ -21,7 +25,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
         </div>
       )}
 
-      <form action={login} className="space-y-4 rounded-lg border border-border bg-card p-6">
+      <form action={login} className="space-y-4 rounded-xl border border-border/70 bg-card shadow-sm p-6">
         <div className="flex flex-col">
           <label htmlFor="identifier" className="mb-1 text-sm text-muted">
             שם משתמש או אימייל
@@ -49,7 +53,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
         </div>
         <PendingButton
           pendingLabel="מתחבר…"
-          className="w-full rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+          className="w-full rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"
         >
           התחבר
         </PendingButton>

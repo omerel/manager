@@ -32,7 +32,7 @@ export default async function RulesPage() {
         </p>
       </div>
 
-      <form action={createRule} className="space-y-3 rounded-lg border border-border bg-card p-4">
+      <form action={createRule} className="space-y-3 rounded-xl border border-border/70 bg-card shadow-sm p-4">
         <div className="flex flex-wrap items-end gap-2">
           <div className="flex flex-col">
             <label htmlFor="name" className="mb-1 text-sm text-muted">שם החוק</label>
@@ -59,7 +59,7 @@ export default async function RulesPage() {
             className={inputCls}
           />
         </div>
-        <button className="rounded-md bg-blue-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-blue-700">
+        <button className="rounded-md bg-brand-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-brand-700">
           צור חוק
         </button>
       </form>
@@ -71,15 +71,15 @@ export default async function RulesPage() {
           {rules.map((r) => {
             const last = r.runs[0];
             return (
-              <li key={r.id} className="rounded-lg border border-border bg-card p-4">
+              <li key={r.id} className="rounded-xl border border-border/70 bg-card shadow-sm p-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <Link href={`/rules/${r.id}`} className="font-semibold text-blue-700 hover:underline">
+                  <Link href={`/rules/${r.id}`} className="font-semibold text-brand-700 hover:underline">
                     {r.name}
                   </Link>
                   <span className="flex items-center gap-2 text-xs">
                     <span className="rounded bg-slate-100 px-2 py-0.5">{SCHEDULE_LABEL[r.schedule]}</span>
                     {r.pinnedAt && (
-                      <span className="rounded bg-indigo-100 px-2 py-0.5 text-indigo-700">
+                      <span className="rounded bg-brand-100 px-2 py-0.5 text-brand-800">
                         📌 מקובע · {r.realizationKind === "SCRIPT" ? "סקריפט" : "נוהל נעול"}
                       </span>
                     )}

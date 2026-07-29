@@ -10,6 +10,7 @@ import { getPersonFull, buildPersonTimeline, type PersonFull } from "@/lib/perso
 import { computePersonGaps, levelForPoint, evalMetric, GAP_META, type GapLevel } from "@/lib/gaps";
 import { PersonFormFields } from "@/components/PersonFormFields";
 import { MetricCurve } from "@/components/MetricCurve";
+import { CircleDot, TrendingUp, Map as MapIcon } from "lucide-react";
 import { EvaluationsSection } from "@/components/EvaluationsSection";
 import { ExtractionPanel, type ExtractionJobView } from "@/components/ExtractionPanel";
 import { setProfilePhoto, type ProposalItem } from "@/lib/extract-actions";
@@ -108,7 +109,7 @@ export default async function PersonPage({
             )}
             <h1 className="text-2xl font-bold">{person.fullName}</h1>
             {editing && (
-              <span className="rounded bg-blue-100 px-2 py-0.5 text-xs text-blue-700">מצב עריכה</span>
+              <span className="rounded bg-brand-100 px-2 py-0.5 text-xs text-brand-700">מצב עריכה</span>
             )}
             {!canEdit && (
               <span className="rounded bg-slate-100 px-2 py-0.5 text-xs text-slate-600">צפייה בלבד</span>
@@ -125,7 +126,7 @@ export default async function PersonPage({
             ) : (
               <Link
                 href={`/people/${person.id}?edit=1`}
-                className="rounded-md bg-blue-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
+                className="rounded-md bg-brand-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
               >
                 ✎ עריכה
               </Link>
@@ -199,7 +200,7 @@ function PersonalDetails({
   canEdit: boolean;
 }) {
   return (
-    <section className="rounded-lg border border-border bg-card p-5">
+    <section className="rounded-xl border border-border/70 bg-card shadow-sm p-5">
       <h2 className="mb-3 text-lg font-semibold">פרטים אישיים</h2>
       {canEdit ? (
         <form action={updatePerson} className="space-y-4">
@@ -214,7 +215,7 @@ function PersonalDetails({
               endOfServiceDate: person.endOfServiceDate,
             }}
           />
-          <button className="rounded-md bg-blue-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-blue-700">שמור פרטים</button>
+          <button className="rounded-md bg-brand-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-brand-700">שמור פרטים</button>
         </form>
       ) : (
         <dl className="grid grid-cols-1 gap-x-8 gap-y-3 sm:grid-cols-2">
@@ -248,8 +249,8 @@ function PlanSection({
 
   if (!person.assignedPlan) {
     return (
-      <section className="space-y-3 rounded-lg border border-border bg-card p-5">
-        <h2 className="text-lg font-semibold">תכנית קריירה</h2>
+      <section className="space-y-3 rounded-xl border border-border/70 bg-card shadow-sm p-5">
+        <h2 className="flex items-center gap-2 text-lg font-semibold text-brand-900"><MapIcon className="h-5 w-5 text-brand-600" aria-hidden /> תכנית קריירה</h2>
         <p className="text-muted">לא שויכה תכנית.</p>
         {canEdit && templates.length > 0 && (
           <form action={assignPlan} className="flex flex-wrap items-end gap-2">
@@ -261,7 +262,7 @@ function PlanSection({
                 </option>
               ))}
             </select>
-            <button className="rounded-md bg-blue-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-blue-700">שייך תכנית (עותק)</button>
+            <button className="rounded-md bg-brand-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-brand-700">שייך תכנית (עותק)</button>
           </form>
         )}
       </section>
@@ -269,7 +270,7 @@ function PlanSection({
   }
 
   return (
-    <section className="space-y-4 rounded-lg border border-border bg-card p-5">
+    <section className="space-y-4 rounded-xl border border-border/70 bg-card shadow-sm p-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-lg font-semibold">
           תכנית קריירה: <span className="font-normal">{person.assignedPlan.name}</span>{" "}
@@ -285,7 +286,7 @@ function PlanSection({
 
       {/* Point events */}
       <div>
-        <h3 className="mb-2 font-medium">● אירועים נקודתיים</h3>
+        <h3 className="mb-2 flex items-center gap-1.5 font-medium"><CircleDot className="h-4 w-4 text-brand-600" aria-hidden /> אירועים נקודתיים</h3>
         <ul className="divide-y divide-border rounded-md border border-border">
           {timeline.points.map((p) => (
             <li key={p.id} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm">
@@ -318,7 +319,7 @@ function PlanSection({
                     placeholder="הערה (למשל: איזה מופע)"
                     className="w-44 rounded border border-border px-2 py-1 text-xs"
                   />
-                  <button className="rounded bg-blue-600 px-2 py-1 text-xs text-white hover:bg-blue-700">סמן כהושלם</button>
+                  <button className="rounded bg-brand-600 px-2 py-1 text-xs text-white hover:bg-brand-700">סמן כהושלם</button>
                 </form>
               ) : (
                 <span className="text-muted">⬜ טרם</span>
@@ -331,7 +332,7 @@ function PlanSection({
 
       {/* Cumulative metrics */}
       <div>
-        <h3 className="mb-2 font-medium">📈 מדדים מצטברים</h3>
+        <h3 className="mb-2 flex items-center gap-1.5 font-medium"><TrendingUp className="h-4 w-4 text-brand-600" aria-hidden /> מדדים מצטברים</h3>
         <div className="space-y-2">
           {timeline.metrics.map((m) => {
             const ev = evalMetric(
@@ -380,7 +381,7 @@ function PlanSection({
                     placeholder="הערה (למשל: איזה קורס זיכה)"
                     className="w-52 rounded border border-border px-2 py-1 text-xs"
                   />
-                  <button className="rounded bg-blue-600 px-2 py-1 text-xs text-white hover:bg-blue-700">עדכן ערך</button>
+                  <button className="rounded bg-brand-600 px-2 py-1 text-xs text-white hover:bg-brand-700">עדכן ערך</button>
                 </form>
               )}
             </div>
@@ -405,7 +406,7 @@ function GapBadge({ level }: { level: GapLevel }) {
 function GapBanner({ status, items }: { status: GapLevel | null; items: { level: GapLevel }[] }) {
   if (status === null) {
     return (
-      <div className="rounded-lg border border-border bg-card px-4 py-3 text-sm text-muted">
+      <div className="rounded-xl border border-border/70 bg-card shadow-sm px-4 py-3 text-sm text-muted">
         לא שויכה תכנית — אין מה למדוד עדיין.
       </div>
     );

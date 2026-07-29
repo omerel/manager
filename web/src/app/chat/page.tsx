@@ -51,11 +51,11 @@ export default async function ChatPage({ searchParams }: { searchParams: Promise
         </p>
       </div>
 
-      <form action={askQuestion} className="flex flex-wrap items-end gap-2 rounded-lg border border-border bg-card p-4">
+      <form action={askQuestion} className="flex flex-wrap items-end gap-2 rounded-xl border border-border/70 bg-card shadow-sm p-4">
         <QuestionInput mentionables={mentionables} />
         <PendingButton
           pendingLabel="הסוכן חושב…"
-          className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+          className="rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"
         >
           שאל
         </PendingButton>
@@ -66,7 +66,7 @@ export default async function ChatPage({ searchParams }: { searchParams: Promise
 
       {run && (
         <div className="space-y-3">
-          <div className="rounded-lg border border-border bg-card p-4">
+          <div className="rounded-xl border border-border/70 bg-card shadow-sm p-4">
             <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted">
               <span>שאלה · {fmtDate(run.createdAt)}</span>
               <form action={deleteChatRun}>
@@ -102,7 +102,7 @@ export default async function ChatPage({ searchParams }: { searchParams: Promise
             </div>
           )}
           {runStatus === "RUNNING" && (
-            <div className="flex items-center gap-3 rounded-lg border border-blue-200 bg-blue-50/40 p-4 text-sm text-blue-800">
+            <div className="flex items-center gap-3 rounded-lg border border-brand-200 bg-brand-50/60 p-4 text-sm text-brand-800">
               <svg className="h-5 w-5 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden>
                 <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25" />
                 <path d="M22 12a10 10 0 0 1-10 10" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />

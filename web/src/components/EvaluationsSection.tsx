@@ -1,6 +1,7 @@
 import { fmtDate } from "@/lib/dates";
 import type { PersonFull, RecurrenceRow } from "@/lib/person-view";
 import { addFreeEntry, fillSlot, deleteEntry } from "@/lib/eval-actions";
+import { RefreshCw, PenLine, Paperclip, FolderOpen } from "lucide-react";
 
 const inputCls = "rounded-md border border-border px-3 py-1.5 text-sm";
 
@@ -30,12 +31,12 @@ export function EvaluationsSection({
   });
 
   return (
-    <section className="space-y-4 rounded-lg border border-border bg-card p-5">
-      <h2 className="text-lg font-semibold">חוות דעת ואירועים</h2>
+    <section className="space-y-4 rounded-xl border border-border/70 bg-card shadow-sm p-5">
+      <h2 className="flex items-center gap-2 text-lg font-semibold text-brand-900"><FolderOpen className="h-5 w-5 text-brand-600" aria-hidden /> חוות דעת ואירועים</h2>
 
       {/* Structured slots from recurring plan events */}
       <div>
-        <h3 className="mb-2 font-medium">🔁 מובנה (מוזן מהתכנית)</h3>
+        <h3 className="mb-2 flex items-center gap-1.5 font-medium"><RefreshCw className="h-4 w-4 text-brand-600" aria-hidden /> מובנה (מוזן מהתכנית)</h3>
         {visibleSlots.length === 0 ? (
           <p className="text-sm text-muted">אין מופעים מתוזמנים.</p>
         ) : (
@@ -86,7 +87,7 @@ export function EvaluationsSection({
                         className={`${inputCls} min-w-64 flex-1`}
                       />
                       <input type="file" name="file" className="text-xs" />
-                      <button className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700">
+                      <button className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700">
                         מלא מופע
                       </button>
                     </form>
@@ -100,7 +101,7 @@ export function EvaluationsSection({
 
       {/* Free-form entries */}
       <div>
-        <h3 className="mb-2 font-medium">✍️ חופשי</h3>
+        <h3 className="mb-2 flex items-center gap-1.5 font-medium"><PenLine className="h-4 w-4 text-brand-600" aria-hidden /> חופשי</h3>
         {freeEntries.length === 0 ? (
           <p className="text-sm text-muted">אין רשומות חופשיות.</p>
         ) : (
@@ -142,7 +143,7 @@ export function EvaluationsSection({
               <label className="mb-1 text-sm text-muted">קובץ (אופציונלי)</label>
               <input type="file" name="file" className="text-xs" />
             </div>
-            <button className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700">
+            <button className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700">
               הוסף רשומה
             </button>
           </form>
@@ -160,9 +161,9 @@ function AttachmentLinks({ attachments }: { attachments: { id: string; filename:
         <li key={a.id}>
           <a
             href={`/files/${a.id}`}
-            className="rounded-md border border-border px-2 py-0.5 text-xs text-blue-700 hover:bg-slate-50"
+            className="rounded-md border border-border px-2 py-0.5 text-xs text-brand-700 hover:bg-slate-50"
           >
-            📎 {a.filename} ({Math.max(1, Math.round(a.size / 1024))}KB)
+            <Paperclip className="inline h-3 w-3" aria-hidden /> {a.filename} ({Math.max(1, Math.round(a.size / 1024))}KB)
           </a>
         </li>
       ))}

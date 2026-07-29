@@ -112,7 +112,7 @@ export default async function HierarchyPage() {
         </div>
       )}
 
-      <div className="rounded-lg border border-border bg-card p-2">
+      <div className="rounded-xl border border-border/70 bg-card shadow-sm p-2">
         {roots.length === 0 ? (
           <p className="px-2 py-2 text-sm text-muted">אין מסגרות עדיין. התחל ביצירת מרכז.</p>
         ) : (
@@ -147,7 +147,7 @@ export default async function HierarchyPage() {
             ))}
           </select>
         </div>
-        <button className="rounded-md bg-blue-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-blue-700">הוסף מסגרת</button>
+        <button className="rounded-md bg-brand-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-brand-700">הוסף מסגרת</button>
         <p className="w-full text-xs text-muted">
           כלל: אב של תחום = מרכז · אב של מדור = תחום · אב של צוות = מדור. מחיקה חסומה אם יש תת-מסגרות; אנשים משויכים יעברו ל״ללא שיוך״.
         </p>
@@ -158,7 +158,7 @@ export default async function HierarchyPage() {
         <h2 className="text-lg font-semibold">התמחויות ורשימות סגורות</h2>
         <p className="text-sm text-muted">
           הערכים שמופיעים בשדות-בחירה בכרטיס העובד. הוספת רשימה חדשה נעשית דרך{" "}
-          <Link href="/people/card-schema" className="text-blue-700 underline">שדות כרטיס</Link>{" "}
+          <Link href="/people/card-schema" className="text-brand-700 underline">שדות כרטיס</Link>{" "}
           (שדה מסוג ״בחירה״).
         </p>
         {enumFields.length === 0 ? (
@@ -166,7 +166,7 @@ export default async function HierarchyPage() {
         ) : (
           <div className="space-y-3">
             {enumFields.map((f) => (
-              <div key={f.id} className="rounded-lg border border-border bg-card p-4">
+              <div key={f.id} className="rounded-xl border border-border/70 bg-card shadow-sm p-4">
                 <div className="font-medium">{f.label}</div>
                 <ul className="mt-2 flex flex-wrap gap-2">
                   {f.options.map((o) => (

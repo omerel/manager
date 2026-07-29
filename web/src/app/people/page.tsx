@@ -33,7 +33,7 @@ export default async function PeoplePage({ searchParams }: { searchParams: Promi
               שדות כרטיס
             </Link>
           )}
-          <Link href="/people/new" className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700">
+          <Link href="/people/new" className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700">
             עובד חדש
           </Link>
         </div>
@@ -60,7 +60,7 @@ export default async function PeoplePage({ searchParams }: { searchParams: Promi
       ) : people.length === 0 ? (
         <p className="text-muted">לא נמצאו אנשים התואמים ל״{query}״.</p>
       ) : (
-        <div className="overflow-hidden rounded-lg border border-border bg-card">
+        <div className="overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm">
           <table className="w-full text-start text-sm">
             <thead className="bg-slate-50 text-muted">
               <tr>
@@ -74,7 +74,15 @@ export default async function PeoplePage({ searchParams }: { searchParams: Promi
               {people.map((p) => (
                 <tr key={p.id} className="border-t border-border hover:bg-slate-50">
                   <td className="px-4 py-2.5">
-                    <Link href={`/people/${p.id}`} className="font-medium text-blue-700 hover:underline">
+                    <Link href={`/people/${p.id}`} className="flex items-center gap-2.5 font-medium text-brand-800 hover:underline">
+                      {p.photoPath ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={`/photo/${p.id}`} alt="" className="h-8 w-8 rounded-full border border-border object-cover" />
+                      ) : (
+                        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-100 text-sm font-bold text-brand-800">
+                          {p.fullName.slice(0, 1)}
+                        </span>
+                      )}
                       {p.fullName}
                     </Link>
                   </td>

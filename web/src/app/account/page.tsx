@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/session";
 import { changeMyPassword } from "@/lib/auth-actions";
+import { Lock } from "lucide-react";
 
 const inputCls = "rounded-md border border-border px-3 py-1.5 text-sm";
 
@@ -30,8 +31,8 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
         </div>
       )}
 
-      <section className="space-y-3 rounded-lg border border-border bg-card p-5">
-        <h2 className="text-lg font-semibold">🔒 החלפת סיסמה</h2>
+      <section className="space-y-3 rounded-xl border border-border/70 bg-card shadow-sm p-5">
+        <h2 className="flex items-center gap-2 text-lg font-semibold text-brand-900"><Lock className="h-5 w-5 text-brand-600" aria-hidden /> החלפת סיסמה</h2>
         <form action={changeMyPassword} className="flex flex-wrap items-end gap-2">
           <div className="flex flex-col">
             <label htmlFor="current" className="mb-1 text-sm text-muted">סיסמה נוכחית</label>
@@ -41,7 +42,7 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
             <label htmlFor="next" className="mb-1 text-sm text-muted">סיסמה חדשה (6+ תווים)</label>
             <input id="next" name="next" type="password" required minLength={6} autoComplete="new-password" className={inputCls} />
           </div>
-          <button className="rounded-md bg-blue-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-blue-700">
+          <button className="rounded-md bg-brand-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-brand-700">
             עדכן סיסמה
           </button>
         </form>

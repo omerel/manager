@@ -11,6 +11,12 @@ datasource db {
   provider = "postgresql"
 }
 
+// Generic system settings (branding etc.) — key/value, admin-managed.
+model AppSetting {
+  key   String @id
+  value String
+}
+
 enum Role {
   ADMIN // מנהלן = אדמין: users/grants, plan templates, person-card schema
   MANAGER // מנהל: operational, at VIEW or EDIT level

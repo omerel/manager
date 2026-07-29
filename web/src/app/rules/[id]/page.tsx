@@ -58,7 +58,7 @@ export default async function RuleDetailPage({
                     <input type="hidden" name="ruleId" value={rule.id} />
                     <PendingButton
                       pendingLabel="מתחיל…"
-                      className="rounded-md bg-blue-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
+                      className="rounded-md bg-brand-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
                     >
                       ▶ הרץ עכשיו
                     </PendingButton>
@@ -93,7 +93,7 @@ export default async function RuleDetailPage({
         )}
 
         {editing ? (
-          <form action={updateRule} className="mt-2 space-y-2 rounded-md border border-blue-200 bg-blue-50/40 p-3">
+          <form action={updateRule} className="mt-2 space-y-2 rounded-md border border-brand-200 bg-brand-50/60 p-3">
             <input type="hidden" name="ruleId" value={rule.id} />
             <div className="flex flex-col">
               <label className="mb-1 text-sm text-muted">שם החוק</label>
@@ -107,7 +107,7 @@ export default async function RuleDetailPage({
               <p className="text-xs text-amber-700">שים לב: שינוי הנוסח יבטל את הקיבוע הקיים (שינוי שם בלבד לא).</p>
             )}
             <div className="flex gap-2">
-              <button className="rounded-md bg-blue-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-blue-700">שמור</button>
+              <button className="rounded-md bg-brand-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-brand-700">שמור</button>
               <Link href={`/rules/${rule.id}`} className="rounded-md border border-border px-4 py-1.5 text-sm hover:bg-slate-50">ביטול</Link>
             </div>
           </form>
@@ -132,9 +132,9 @@ export default async function RuleDetailPage({
 
       {/* Pin status */}
       {rule.pinnedAt ? (
-        <section className="space-y-2 rounded-lg border border-indigo-200 bg-indigo-50/40 p-4">
+        <section className="space-y-2 rounded-lg border border-brand-200 bg-brand-50/70 p-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="font-semibold text-indigo-800">
+            <h2 className="font-semibold text-brand-900">
               📌 מקובע לדטרמיניסטי · {rule.realizationKind === "SCRIPT" ? "סקריפט (ללא LLM, שחזור 1:1)" : "נוהל נעול (LLM עקבי לפי תבנית)"}
             </h2>
             <form action={unpinRule}>
@@ -142,16 +142,16 @@ export default async function RuleDetailPage({
               <button className="text-xs text-red-600 hover:underline">בטל קיבוע</button>
             </form>
           </div>
-          <p className="text-sm text-indigo-900/80">
+          <p className="text-sm text-brand-900/80">
             קובע {fmtDate(rule.pinnedAt)}. כל ריצה משחזרת את התוצר שאושר; הסוכן בחר את המימוש לפי אופי החוק.
           </p>
           <details className="text-sm">
-            <summary className="cursor-pointer text-indigo-800">הצג מימוש</summary>
+            <summary className="cursor-pointer text-brand-900">הצג מימוש</summary>
             <pre className="mt-2 max-h-64 overflow-auto rounded-md bg-slate-900 p-3 text-xs text-slate-100" dir="ltr">{rule.realization}</pre>
           </details>
         </section>
       ) : pinning ? (
-        <section className="flex items-center gap-3 rounded-lg border border-indigo-200 bg-indigo-50/40 p-4 text-sm text-indigo-800">
+        <section className="flex items-center gap-3 rounded-lg border border-brand-200 bg-brand-50/70 p-4 text-sm text-brand-900">
           <svg className="h-5 w-5 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden>
             <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25" />
             <path d="M22 12a10 10 0 0 1-10 10" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />
@@ -162,7 +162,7 @@ export default async function RuleDetailPage({
       ) : (
         latestSuccess &&
         !liveJob && (
-          <section className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-card p-4">
+          <section className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border/70 bg-card shadow-sm p-4">
             <p className="text-sm text-muted">
               מרוצה מהתוצר האחרון? קיבוע יגרום לכל ריצה עתידית לשחזר אותו נאמנה — הסוכן יבחר לבד בין סקריפט דטרמיניסטי לנוהל נעול.
             </p>
@@ -171,7 +171,7 @@ export default async function RuleDetailPage({
               <input type="hidden" name="runId" value={latestSuccess.id} />
               <PendingButton
                 pendingLabel="מתחיל קיבוע…"
-                className="rounded-md bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-700"
+                className="rounded-md bg-brand-800 px-4 py-1.5 text-sm font-medium text-white hover:bg-brand-900"
               >
                 📌 קבע כדטרמיניסטי
               </PendingButton>
@@ -190,17 +190,17 @@ export default async function RuleDetailPage({
             <div
               key={run.id}
               className={`rounded-lg border p-4 ${
-                run.id === focusRunId ? "border-blue-300 bg-blue-50/30" : "border-border bg-card"
+                run.id === focusRunId ? "border-blue-300 bg-brand-50/30" : "border-border bg-card"
               }`}
             >
               <div className="mb-1 flex flex-wrap items-center justify-between gap-2 text-sm text-muted">
                 <span className="flex flex-wrap items-center gap-2">
                   <span>{fmtDate(run.createdAt)}</span>
                   {run.durationMs && <span>· {Math.round(run.durationMs / 1000)} שניות</span>}
-                  {run.pinnedRun && <span className="rounded bg-indigo-100 px-1.5 py-0.5 text-xs text-indigo-700">ריצה מקובעת</span>}
+                  {run.pinnedRun && <span className="rounded bg-brand-100 px-1.5 py-0.5 text-xs text-brand-800">ריצה מקובעת</span>}
                   {effectiveStatus(run) === "FAILED" && <span className="text-red-600">נכשלה</span>}
                   {effectiveStatus(run) === "RUNNING" && (
-                    <span className="inline-flex items-center gap-1.5 text-blue-700">
+                    <span className="inline-flex items-center gap-1.5 text-brand-700">
                       <svg className="h-3.5 w-3.5 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden>
                         <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25" />
                         <path d="M22 12a10 10 0 0 1-10 10" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />

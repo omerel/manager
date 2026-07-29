@@ -28,7 +28,7 @@ export default async function CardSchemaPage({ searchParams }: { searchParams: P
         </div>
       )}
 
-      <div className="rounded-lg border border-border bg-card">
+      <div className="rounded-xl border border-border/70 bg-card shadow-sm">
         <div className="border-b border-border px-4 py-2 text-sm text-muted">
           שדות ליבה קבועים: שם · תאריך גיוס · סטטוס · סיום שירות · צוות
         </div>
@@ -38,7 +38,7 @@ export default async function CardSchemaPage({ searchParams }: { searchParams: P
           <ul className="divide-y divide-border">
             {defs.map((d, i) =>
               admin && editId === d.id ? (
-                <li key={d.id} className="bg-blue-50/40 px-4 py-3">
+                <li key={d.id} className="bg-brand-50/60 px-4 py-3">
                   <form action={updateFieldDef} className="flex flex-wrap items-end gap-2">
                     <input type="hidden" name="id" value={d.id} />
                     <div className="flex flex-col">
@@ -61,7 +61,7 @@ export default async function CardSchemaPage({ searchParams }: { searchParams: P
                     <label className="flex items-center gap-1 text-sm">
                       <input type="checkbox" name="required" defaultChecked={d.required} /> חובה
                     </label>
-                    <button className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700">
+                    <button className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700">
                       שמור
                     </button>
                     <Link href="/people/card-schema" className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-slate-50">
@@ -96,7 +96,7 @@ export default async function CardSchemaPage({ searchParams }: { searchParams: P
                           ▼
                         </button>
                       </form>
-                      <Link href={`/people/card-schema?edit=${d.id}`} className="text-xs text-blue-700 hover:underline">
+                      <Link href={`/people/card-schema?edit=${d.id}`} className="text-xs text-brand-700 hover:underline">
                         ערוך
                       </Link>
                       <form action={removeFieldDef}>
@@ -134,7 +134,7 @@ export default async function CardSchemaPage({ searchParams }: { searchParams: P
           <label className="flex items-center gap-1 text-sm">
             <input type="checkbox" name="required" /> חובה
           </label>
-          <button className="rounded-md bg-blue-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-blue-700">הוסף שדה</button>
+          <button className="rounded-md bg-brand-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-brand-700">הוסף שדה</button>
         </form>
       )}
     </div>

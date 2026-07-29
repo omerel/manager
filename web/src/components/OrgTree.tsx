@@ -43,7 +43,7 @@ export function OrgTree({ roots }: { roots: OrgTreeNode[] }) {
     return <p className="text-muted">אין מסגרות בהרשאה שלך.</p>;
   }
   return (
-    <div className="rounded-lg border border-border bg-card p-2">
+    <div className="rounded-xl border border-border/70 bg-card shadow-sm p-2">
       {roots.map((r) => (
         <TreeRow key={r.id} node={r} depth={0} />
       ))}

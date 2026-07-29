@@ -2,7 +2,6 @@ import Link from "next/link";
 import { KIND_LABEL } from "@/lib/org";
 import { GAP_META, type GapLevel } from "@/lib/gaps";
 import type { GapTreeNode } from "@/lib/gap-dashboard";
-import { LevelBadge } from "@/components/OrgTree";
 
 function Counts({ node }: { node: GapTreeNode }) {
   return (
@@ -25,7 +24,7 @@ function PersonRow({ id, name, status }: { id: string; name: string; status: Gap
       style={{ paddingInlineStart: "12px" }}
     >
       <span className={`inline-block h-2 w-2 rounded-full ${meta ? meta.dot : "bg-slate-200"}`} />
-      <span className="text-blue-700 hover:underline">{name}</span>
+      <span className="text-brand-700 hover:underline">{name}</span>
       <span className="text-xs text-muted">{status ? meta!.label : "אין תכנית"}</span>
     </Link>
   );
@@ -41,7 +40,6 @@ function Node({ node, depth }: { node: GapTreeNode; depth: number }) {
         <span className="flex items-center gap-2">
           <span className="text-xs text-muted">{KIND_LABEL[node.kind]}</span>
           <span className="font-medium">{node.name}</span>
-          <LevelBadge level={node.level} />
         </span>
         <Counts node={node} />
       </div>
@@ -63,7 +61,7 @@ function Node({ node, depth }: { node: GapTreeNode; depth: number }) {
 export function GapDashboard({ roots }: { roots: GapTreeNode[] }) {
   if (roots.length === 0) return <p className="text-muted">אין מסגרות בהרשאה שלך.</p>;
   return (
-    <div className="rounded-lg border border-border bg-card p-2">
+    <div className="rounded-xl border border-border/70 bg-card shadow-sm p-2">
       {roots.map((r) => (
         <Node key={r.id} node={r} depth={0} />
       ))}

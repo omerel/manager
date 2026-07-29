@@ -47,7 +47,7 @@ export default async function PlansPage({ searchParams }: { searchParams: Promis
       </form>
 
       {admin && (
-        <form action={createPlan} className="flex flex-wrap items-end gap-2 rounded-lg border border-border bg-card p-4">
+        <form action={createPlan} className="flex flex-wrap items-end gap-2 rounded-xl border border-border/70 bg-card shadow-sm p-4">
           <div className="flex flex-col">
             <label htmlFor="name" className="mb-1 text-sm text-muted">
               שם תכנית חדשה
@@ -60,7 +60,7 @@ export default async function PlansPage({ searchParams }: { searchParams: Promis
               className="rounded-md border border-border px-3 py-1.5 text-sm"
             />
           </div>
-          <button className="rounded-md bg-blue-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-blue-700">
+          <button className="rounded-md bg-brand-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-brand-700">
             צור תכנית
           </button>
         </form>
@@ -77,10 +77,10 @@ export default async function PlansPage({ searchParams }: { searchParams: Promis
             return (
             <li
               key={p.id}
-              className="flex items-center justify-between gap-3 rounded-lg border border-border bg-card p-4"
+              className="flex items-center justify-between gap-3 rounded-xl border border-border/70 bg-card shadow-sm p-4"
             >
               <div>
-                <Link href={`/plans/${p.id}`} className="font-semibold text-blue-700 hover:underline">
+                <Link href={`/plans/${p.id}`} className="font-semibold text-brand-700 hover:underline">
                   {p.name}
                 </Link>
                 <div className="mt-1 text-sm text-muted">

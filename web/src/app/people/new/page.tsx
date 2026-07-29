@@ -71,7 +71,7 @@ export default async function NewPersonPage({
               העלה PDF / Word / Excel / טקסט — הסוכן ימלא את הטופס מראש ואת/ה בודק/ת ומאשר/ת לפני השמירה.
             </p>
             {extractRunning ? (
-              <div className="flex items-center gap-3 rounded-md border border-blue-200 bg-blue-50/40 px-4 py-3 text-sm text-blue-800">
+              <div className="flex items-center gap-3 rounded-md border border-brand-200 bg-brand-50/60 px-4 py-3 text-sm text-brand-800">
                 <svg className="h-5 w-5 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden>
                   <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25" />
                   <path d="M22 12a10 10 0 0 1-10 10" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />
@@ -109,12 +109,12 @@ export default async function NewPersonPage({
           </section>
 
           {draft && (
-            <div className="rounded-md border border-blue-200 bg-blue-50 px-4 py-2 text-sm text-blue-800">
+            <div className="rounded-md border border-brand-200 bg-brand-50 px-4 py-2 text-sm text-brand-800">
               הטופס מולא מראש מהמסמך — בדוק/י את הערכים, השלם/י את החסר ולחץ/י ״צור עובד״ לאישור.
             </div>
           )}
 
-          <form action={createPerson} className="space-y-4 rounded-lg border border-border bg-card p-5">
+          <form action={createPerson} className="space-y-4 rounded-xl border border-border/70 bg-card shadow-sm p-5">
             {draft && <input type="hidden" name="draftId" value={draft.id} />}
             <div className="flex flex-col">
               <label htmlFor="teamId" className="mb-1 text-sm text-muted">
@@ -147,7 +147,7 @@ export default async function NewPersonPage({
             </div>
 
             <div className="flex gap-2">
-              <button className="rounded-md bg-blue-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-blue-700">
+              <button className="rounded-md bg-brand-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-brand-700">
                 צור עובד
               </button>
               <Link href="/people" className="rounded-md border border-border px-4 py-1.5 text-sm hover:bg-slate-50">

@@ -61,7 +61,7 @@ export default async function AccessPage({ searchParams }: { searchParams: Promi
       </form>
 
       {isAdmin && (
-        <form action={createUser} className="flex flex-wrap items-end gap-2 rounded-lg border border-border bg-card p-4">
+        <form action={createUser} className="flex flex-wrap items-end gap-2 rounded-xl border border-border/70 bg-card shadow-sm p-4">
           <Field name="name" label="שם" placeholder="שם מלא" />
           <Field name="email" label="אימייל" placeholder="name@example.com" type="email" />
           <Field name="password" label="סיסמה" placeholder="סיסמה" type="password" />
@@ -74,7 +74,7 @@ export default async function AccessPage({ searchParams }: { searchParams: Promi
               <option value="ADMIN">אדמין</option>
             </select>
           </div>
-          <button className="rounded-md bg-blue-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-blue-700">
+          <button className="rounded-md bg-brand-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-brand-700">
             צור משתמש
           </button>
           <p className="w-full text-xs text-muted">שם המשתמש (username) ייגזר אוטומטית מהאימייל עד ה־@.</p>
@@ -86,9 +86,9 @@ export default async function AccessPage({ searchParams }: { searchParams: Promi
       ) : (
         <div className="space-y-4">
           {users.map((u) => (
-            <div key={u.id} className="rounded-lg border border-border bg-card p-4">
+            <div key={u.id} className="rounded-xl border border-border/70 bg-card shadow-sm p-4">
               {isAdmin && editUserId === u.id ? (
-                <div className="rounded-md bg-blue-50/40 p-3">
+                <div className="rounded-md bg-brand-50/60 p-3">
                   <form action={updateUserProfile} className="flex flex-wrap items-end gap-2">
                     <input type="hidden" name="userId" value={u.id} />
                     <div className="flex flex-col">
@@ -99,7 +99,7 @@ export default async function AccessPage({ searchParams }: { searchParams: Promi
                       <label className="mb-1 text-xs text-muted">אימייל</label>
                       <input name="email" type="email" defaultValue={u.email} required className={inputCls} />
                     </div>
-                    <button className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700">
+                    <button className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700">
                       שמור
                     </button>
                     <Link href="/access" className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-slate-50">
@@ -116,7 +116,7 @@ export default async function AccessPage({ searchParams }: { searchParams: Promi
                   <span className="font-semibold">{u.name}</span>
                   <span
                     className={`rounded px-2 py-0.5 text-xs ${
-                      u.role === "ADMIN" ? "bg-indigo-100 text-indigo-700" : "bg-slate-100 text-slate-600"
+                      u.role === "ADMIN" ? "bg-brand-100 text-brand-800" : "bg-slate-100 text-slate-600"
                     }`}
                   >
                     {u.role === "ADMIN" ? "אדמין" : "מנהל"}
@@ -124,7 +124,7 @@ export default async function AccessPage({ searchParams }: { searchParams: Promi
                   <span className="text-xs text-muted">{u.email}</span>
                   {u.username && <span className="text-xs text-muted">· {u.username}</span>}
                   {isAdmin && (
-                    <Link href={`/access?edit=${u.id}`} className="text-xs text-blue-700 hover:underline">
+                    <Link href={`/access?edit=${u.id}`} className="text-xs text-brand-700 hover:underline">
                       ערוך
                     </Link>
                   )}
@@ -142,7 +142,7 @@ export default async function AccessPage({ searchParams }: { searchParams: Promi
                         autoComplete="new-password"
                         className="w-28 rounded border border-border px-2 py-1 text-xs"
                       />
-                      <button className="text-xs text-blue-700 hover:underline">אפס סיסמה</button>
+                      <button className="text-xs text-brand-700 hover:underline">אפס סיסמה</button>
                     </form>
                     {u.id !== me.id && (
                       <form action={deleteUser}>

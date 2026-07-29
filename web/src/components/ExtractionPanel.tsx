@@ -1,6 +1,7 @@
 import { extractFromDocument, resolveProposalItem, discardProposal, type ProposalItem } from "@/lib/extract-actions";
 import { PendingButton } from "@/components/PendingButton";
 import { AutoRefresh } from "@/components/AutoRefresh";
+import { FileScan } from "lucide-react";
 
 export type ExtractionJobView = { status: "RUNNING" | "SUCCEEDED" | "FAILED"; error: string | null } | null;
 
@@ -20,15 +21,15 @@ export function ExtractionPanel({
 }) {
   const running = job?.status === "RUNNING";
   return (
-    <section className="space-y-3 rounded-lg border border-border bg-card p-5">
-      <h2 className="text-lg font-semibold">📄 טעינת נתונים ממסמך</h2>
+    <section className="space-y-3 rounded-xl border border-border/70 bg-card shadow-sm p-5">
+      <h2 className="flex items-center gap-2 text-lg font-semibold text-brand-900"><FileScan className="h-5 w-5 text-brand-600" aria-hidden /> טעינת נתונים ממסמך</h2>
       <p className="text-sm text-muted">
         העלה PDF / Word / Excel / טקסט — הסוכן ינסה להתאים ערכים לשדות הכרטיס. שום דבר לא ישתנה אוטומטית:
         כל ערך שנמצא יוצג לאישור שדה-שדה.
       </p>
 
       {running ? (
-        <div className="flex items-center gap-3 rounded-md border border-blue-200 bg-blue-50/40 px-4 py-3 text-sm text-blue-800">
+        <div className="flex items-center gap-3 rounded-md border border-brand-200 bg-brand-50/60 px-4 py-3 text-sm text-brand-800">
           <svg className="h-5 w-5 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden>
             <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25" />
             <path d="M22 12a10 10 0 0 1-10 10" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />
@@ -48,7 +49,7 @@ export function ExtractionPanel({
           />
           <PendingButton
             pendingLabel="מתחיל ניתוח…"
-            className="rounded-md bg-blue-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
+            className="rounded-md bg-brand-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
           >
             נתח מסמך
           </PendingButton>
@@ -88,7 +89,7 @@ export function ExtractionPanel({
                   <span className="font-medium">{it.label}:</span>
                   <span className="text-muted line-through">{it.current || "—"}</span>
                   <span>←</span>
-                  <span className="rounded bg-blue-50 px-1.5 py-0.5 font-medium text-blue-800">{it.proposed}</span>
+                  <span className="rounded bg-brand-50 px-1.5 py-0.5 font-medium text-brand-800">{it.proposed}</span>
                 </span>
                 <span className="flex items-center gap-2">
                   <form action={resolveProposalItem}>

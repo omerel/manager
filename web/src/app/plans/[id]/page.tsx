@@ -75,7 +75,7 @@ function Timeline({ plan }: { plan: PlanWithEvents }) {
   items.sort((a, b) => a.offset - b.offset);
 
   const icon = { point: "●", metric: "📈", recurring: "🔁" } as const;
-  const color = { point: "text-blue-600", metric: "text-emerald-600", recurring: "text-purple-600" } as const;
+  const color = { point: "text-brand-600", metric: "text-emerald-600", recurring: "text-purple-600" } as const;
 
   return (
     <section className="space-y-2">
@@ -83,7 +83,7 @@ function Timeline({ plan }: { plan: PlanWithEvents }) {
       {items.length === 0 ? (
         <p className="text-muted">אין עדיין אירועים בתכנית.</p>
       ) : (
-        <ol className="rounded-lg border border-border bg-card">
+        <ol className="rounded-xl border border-border/70 bg-card shadow-sm">
           {items.map((it, i) => (
             <li key={i} className="flex items-center gap-3 border-b border-border px-4 py-2 last:border-b-0">
               <span className="w-28 shrink-0 text-sm text-muted">{formatOffset(it.offset)}</span>
@@ -121,7 +121,7 @@ function PointEventsSection({ plan, admin }: { plan: PlanWithEvents; admin: bool
       {plan.pointEvents.length === 0 ? (
         <p className="text-sm text-muted">אין אירועים נקודתיים.</p>
       ) : (
-        <ul className="divide-y divide-border rounded-lg border border-border bg-card">
+        <ul className="divide-y divide-border rounded-xl border border-border/70 bg-card shadow-sm">
           {plan.pointEvents.map((e) => (
             <li key={e.id} className="flex items-center justify-between gap-3 px-4 py-2">
               <span>
@@ -155,7 +155,7 @@ function CumulativeSection({ plan, admin }: { plan: PlanWithEvents; admin: boole
       ) : (
         <div className="space-y-3">
           {plan.cumulativeMetrics.map((m) => (
-            <div key={m.id} className="rounded-lg border border-border bg-card p-4">
+            <div key={m.id} className="rounded-xl border border-border/70 bg-card shadow-sm p-4">
               <div className="flex items-center justify-between">
                 <span className="font-medium">
                   {m.name} <span className="text-sm text-muted">({m.unit})</span>
@@ -207,7 +207,7 @@ function RecurringSection({ plan, admin }: { plan: PlanWithEvents; admin: boolea
       {plan.recurringEvents.length === 0 ? (
         <p className="text-sm text-muted">אין אירועים כרוניים.</p>
       ) : (
-        <ul className="divide-y divide-border rounded-lg border border-border bg-card">
+        <ul className="divide-y divide-border rounded-xl border border-border/70 bg-card shadow-sm">
           {plan.recurringEvents.map((r) => {
             const stop =
               r.stopMode === "UNTIL_OFFSET" ? `עד ${formatOffset(r.stopOffsetMonths ?? 0)}` : "עד סוף השירות";
@@ -276,6 +276,6 @@ function NumField({ name, label, defaultValue, step }: { name: string; label: st
 }
 function AddButton({ children }: { children: React.ReactNode }) {
   return (
-    <button className="rounded-md bg-blue-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-blue-700">{children}</button>
+    <button className="rounded-md bg-brand-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-brand-700">{children}</button>
   );
 }
