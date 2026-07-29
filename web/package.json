@@ -1,0 +1,45 @@
+{
+  "name": "web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "postinstall": "prisma generate",
+    "dev": "next dev -p 4321",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "db:up": "docker run -d --name manager-db -e POSTGRES_USER=manager -e POSTGRES_PASSWORD=manager -e POSTGRES_DB=manager -p 5433:5432 -v manager-pgdata:/var/lib/postgresql/data postgres:16",
+    "db:down": "docker rm -f manager-db",
+    "db:migrate": "prisma migrate dev",
+    "db:seed": "prisma db seed",
+    "db:reset": "prisma migrate reset --force"
+  },
+  "dependencies": {
+    "@prisma/adapter-pg": "^7.9.0",
+    "@prisma/client": "^7.9.0",
+    "mammoth": "^1.12.0",
+    "marked": "^18.0.7",
+    "next": "16.2.11",
+    "pg": "^8.22.0",
+    "prisma": "^7.9.0",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@tailwindcss/typography": "^0.5.20",
+    "@types/node": "^20",
+    "@types/pg": "^8.20.0",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.11",
+    "playwright": "^1.62.0",
+    "tailwindcss": "^4",
+    "tsx": "^4.23.1",
+    "typescript": "^5"
+  }
+}

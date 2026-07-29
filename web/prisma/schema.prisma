@@ -1,0 +1,319 @@
+// Career-management system — walking skeleton schema.
+// Scope: access-control (roles + grants), org tree, people.
+// Later phases add plans, progress, evaluations, gaps, and the agent half.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  ADMIN // מנהלן = אדמין: users/grants, plan templates, person-card schema
+  MANAGER // מנהל: operational, at VIEW or EDIT level
+}
+
+enum AccessLevel {
+  VIEW // read-only
+  EDIT // read + manual data entry
+}
+
+enum OrgKind {
+  CENTER // מרכז
+  DOMAIN // תחום
+  SECTION // מדור
+  TEAM // צוות
+}
+
+enum EmploymentStatus {
+  ACTIVE
+  PLANNED_END
+  DEPARTED
+}
+
+model User {
+  id               String        @id @default(cuid())
+  name             String
+  email            String        @unique
+  username         String?       @unique // derived from the email prefix (before @)
+  passwordHash     String? // real auth is deferred (task 0.2); stored hashed as a placeholder
+  role             Role
+  grants           AccessGrant[]
+  agentRuns        AgentRun[]
+  rules            Rule[]
+  createdAt        DateTime      @default(now())
+}
+
+enum AgentRunStatus {
+  RUNNING
+  SUCCEEDED
+  FAILED
+}
+
+// One agent execution (a chat question or a rule run). Output is the rendered document.
+model AgentRun {
+  id         String         @id @default(cuid())
+  user       User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId     String
+  kind       String // "CHAT" | "RULE"
+  rule       Rule?          @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  ruleId     String?
+  prompt     String
+  output     String?
+  error      String?
+  status     AgentRunStatus @default(RUNNING)
+  pinnedRun  Boolean        @default(false) // executed via a pinned realization
+  durationMs Int?
+  createdAt  DateTime       @default(now())
+}
+
+enum RuleSchedule {
+  NONE // on-demand only
+  DAILY
+  WEEKLY
+  MONTHLY
+}
+
+enum RealizationKind {
+  SCRIPT // deterministic Node script — reproduces the golden output 1:1 from data
+  FLOW // locked procedure + format template the LLM must follow
+}
+
+// A user's verbal rule (דף חוקים). Private to its owner — even from superiors/admin.
+model Rule {
+  id        String       @id @default(cuid())
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  name      String
+  text      String // the verbal rule
+  schedule  RuleSchedule @default(NONE)
+  nextRunAt DateTime? // when the next chronic run is due
+  // Pinning ("deterministic" = fidelity to the approved output, not necessarily no-LLM)
+  pinnedAt        DateTime?
+  realizationKind RealizationKind?
+  realization     String? // script source or locked-flow instructions
+  goldenOutput    String? // the user-approved output (imitation template + sanity reference)
+  runs      AgentRun[]
+  createdAt DateTime     @default(now())
+}
+
+// An access grant = (org node, level). A user may hold several; effective
+// visibility is the union of the subtrees rooted at the granted nodes.
+model AccessGrant {
+  id     String      @id @default(cuid())
+  user   User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+  node   OrgNode     @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+  nodeId String
+  level  AccessLevel
+
+  @@unique([userId, nodeId])
+}
+
+// Strict tree: CENTER > DOMAIN > SECTION > TEAM. People attach to TEAM nodes.
+model OrgNode {
+  id       String        @id @default(cuid())
+  name     String
+  kind     OrgKind
+  parent   OrgNode?      @relation("OrgTree", fields: [parentId], references: [id])
+  parentId String?
+  children OrgNode[]     @relation("OrgTree")
+  people   Person[]
+  grants   AccessGrant[]
+}
+
+// --- Career plans (templates, relative to recruitment). Admin-authored. ---
+
+model CareerPlan {
+  id                String             @id @default(cuid())
+  name              String
+  isTemplate        Boolean            @default(true) // false = a per-person assigned copy
+  createdAt         DateTime           @default(now())
+  pointEvents       PointEvent[]
+  cumulativeMetrics CumulativeMetric[]
+  recurringEvents   RecurringEvent[]
+  assignedTo        Person[]           @relation("AssignedPlan")
+  // A per-person copy points back to the template it was created from.
+  sourceTemplateId  String?
+  sourceTemplate    CareerPlan?        @relation("PlanCopies", fields: [sourceTemplateId], references: [id], onDelete: SetNull)
+  copies            CareerPlan[]       @relation("PlanCopies")
+}
+
+// One-time, binary milestone at a month offset from recruitment.
+model PointEvent {
+  id           String          @id @default(cuid())
+  plan         CareerPlan      @relation(fields: [planId], references: [id], onDelete: Cascade)
+  planId       String
+  label        String
+  offsetMonths Int
+  progress     PointProgress[]
+}
+
+// A live accumulating measure (e.g. grant hours, grant money) with timed targets.
+model CumulativeMetric {
+  id          String             @id @default(cuid())
+  plan        CareerPlan         @relation(fields: [planId], references: [id], onDelete: Cascade)
+  planId      String
+  name        String
+  unit        String
+  checkpoints MetricCheckpoint[]
+  readings    MetricReading[]
+}
+
+model MetricCheckpoint {
+  id           String           @id @default(cuid())
+  metric       CumulativeMetric @relation(fields: [metricId], references: [id], onDelete: Cascade)
+  metricId     String
+  offsetMonths Int
+  target       Float
+}
+
+enum RecurringStopMode {
+  UNTIL_OFFSET // stop at a relative month cap (the template's stand-in for "a specific date")
+  END_OF_SERVICE // stop at the person's end of service
+}
+
+// Defined once; auto-unrolls every `intervalMonths` from recruitment.
+model RecurringEvent {
+  id               String            @id @default(cuid())
+  plan             CareerPlan        @relation(fields: [planId], references: [id], onDelete: Cascade)
+  planId           String
+  label            String
+  intervalMonths   Int
+  stopMode         RecurringStopMode
+  stopOffsetMonths Int? // required when stopMode = UNTIL_OFFSET
+  evalEntries      EvalEntry[]
+}
+
+// --- Evaluations & events page (חוות דעת ואירועים) ---
+
+// An entry on a person's evaluations page. Either free-form (recurringEventId null)
+// or a structured slot filling a specific recurring occurrence (event + month offset).
+model EvalEntry {
+  id               String          @id @default(cuid())
+  person           Person          @relation(fields: [personId], references: [id], onDelete: Cascade)
+  personId         String
+  title            String
+  content          String? // textual body
+  recurringEvent   RecurringEvent? @relation(fields: [recurringEventId], references: [id], onDelete: Cascade)
+  recurringEventId String?
+  occurrenceOffset Int? // months from recruitment; set together with recurringEventId
+  attachments      Attachment[]
+  createdAt        DateTime        @default(now())
+
+  @@unique([personId, recurringEventId, occurrenceOffset])
+}
+
+model Attachment {
+  id          String    @id @default(cuid())
+  entry       EvalEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  entryId     String
+  filename    String // original name shown to users
+  storagePath String // relative path under the uploads dir
+  mimeType    String
+  size        Int
+  createdAt   DateTime  @default(now())
+}
+
+model Person {
+  id               String             @id @default(cuid())
+  fullName         String
+  photoPath        String? // profile picture, relative path under uploads/
+  recruitmentDate  DateTime // anchor that converts plan offsets to calendar dates
+  status           EmploymentStatus   @default(ACTIVE)
+  endOfServiceDate DateTime?
+  team             OrgNode?           @relation(fields: [teamId], references: [id])
+  teamId           String? // null = unassigned (e.g. after its framework was deleted)
+  assignedPlan     CareerPlan?        @relation("AssignedPlan", fields: [assignedPlanId], references: [id])
+  assignedPlanId   String?
+  fieldValues      PersonFieldValue[]
+  pointProgress    PointProgress[]
+  metricReadings   MetricReading[]
+  evalEntries      EvalEntry[]
+  proposals        ExtractionProposal[]
+  createdAt        DateTime           @default(now())
+}
+
+// A pre-filled draft for creating a NEW person from a document. Nothing is
+// persisted to the registry until the manager reviews the form and saves.
+model PersonDraft {
+  id        String   @id @default(cuid())
+  createdBy String // user id
+  values    Json // { "fullName": "...", "recruitmentDate": "...", "field:<defId>": "..." }
+  createdAt DateTime @default(now())
+}
+
+// Field values the agent proposed from an uploaded document — awaiting per-field
+// human approval. The agent never writes to the person directly.
+model ExtractionProposal {
+  id        String   @id @default(cuid())
+  person    Person   @relation(fields: [personId], references: [id], onDelete: Cascade)
+  personId  String
+  createdBy String // user id that ran the extraction
+  items     Json // [{key,label,current,proposed,fieldDefId?}]
+  createdAt DateTime @default(now())
+}
+
+// --- Admin-configurable person-card schema (extra fields beyond the core ones) ---
+
+enum FieldType {
+  TEXT
+  DATE
+  NUMBER
+  ENUM
+}
+
+model PersonFieldDef {
+  id       String             @id @default(cuid())
+  key      String             @unique
+  label    String
+  type     FieldType
+  required Boolean            @default(false)
+  options  String[] // for ENUM
+  order    Int                @default(0)
+  values   PersonFieldValue[]
+}
+
+model PersonFieldValue {
+  id         String         @id @default(cuid())
+  person     Person         @relation(fields: [personId], references: [id], onDelete: Cascade)
+  personId   String
+  field      PersonFieldDef @relation(fields: [fieldDefId], references: [id], onDelete: Cascade)
+  fieldDefId String
+  value      String
+  order      Int            @default(0)
+
+  @@unique([personId, fieldDefId])
+}
+
+// --- Progress against the person's assigned plan copy ---
+
+// Existence = the point event is done (with its completion date).
+model PointProgress {
+  id           String     @id @default(cuid())
+  person       Person     @relation(fields: [personId], references: [id], onDelete: Cascade)
+  personId     String
+  pointEvent   PointEvent @relation(fields: [pointEventId], references: [id], onDelete: Cascade)
+  pointEventId String
+  doneOn       DateTime
+  note         String? // e.g. which occurrence type was completed
+
+  @@unique([personId, pointEventId])
+}
+
+// Current accumulated value of a cumulative metric, with an as-of date.
+model MetricReading {
+  id       String           @id @default(cuid())
+  person   Person           @relation(fields: [personId], references: [id], onDelete: Cascade)
+  personId String
+  metric   CumulativeMetric @relation(fields: [metricId], references: [id], onDelete: Cascade)
+  metricId String
+  value    Float
+  asOf     DateTime
+  note     String? // e.g. which course/training earned the credit
+
+  @@unique([personId, metricId])
+}

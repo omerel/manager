@@ -1,0 +1,291 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
+import { prisma } from "@/lib/prisma";
+import { requireAdmin, requireEditForNode, requireEditForPerson } from "@/lib/authz";
+import type { EmploymentStatus, FieldType } from "@/generated/prisma/client";
+
+function str(v: FormDataEntryValue | null): string {
+  return String(v ?? "").trim();
+}
+function dateOrNull(v: FormDataEntryValue | null): Date | null {
+  const s = str(v);
+  if (!s) return null;
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? null : d;
+}
+function statusOf(v: FormDataEntryValue | null): EmploymentStatus {
+  const s = str(v);
+  return s === "PLANNED_END" || s === "DEPARTED" ? (s as EmploymentStatus) : "ACTIVE";
+}
+
+/* ---------- Person-card schema (Admin) ---------- */
+
+export async function addFieldDef(formData: FormData) {
+  await requireAdmin();
+  const label = str(formData.get("label")) || "שדה";
+  const type = (["TEXT", "DATE", "NUMBER", "ENUM"].includes(str(formData.get("type"))) ? str(formData.get("type")) : "TEXT") as FieldType;
+  const required = str(formData.get("required")) === "on";
+  const options = str(formData.get("options"))
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  // A stable, unique key derived from label + a short suffix from the current count.
+  const count = await prisma.personFieldDef.count();
+  const key = `f${count + 1}_${label.replace(/\s+/g, "_")}`;
+  await prisma.personFieldDef.create({ data: { key, label, type, required, options, order: count } });
+  revalidatePath("/people/card-schema");
+}
+
+export async function removeFieldDef(formData: FormData) {
+  await requireAdmin();
+  await prisma.personFieldDef.delete({ where: { id: str(formData.get("id")) } });
+  revalidatePath("/people/card-schema");
+  revalidatePath("/hierarchy");
+}
+
+/** Edit an existing field definition. Stored person values are kept as-is. */
+export async function updateFieldDef(formData: FormData) {
+  await requireAdmin();
+  const id = str(formData.get("id"));
+  const label = str(formData.get("label"));
+  if (!label) throw new Error("יש להזין שם שדה.");
+  const type = (["TEXT", "DATE", "NUMBER", "ENUM"].includes(str(formData.get("type"))) ? str(formData.get("type")) : "TEXT") as FieldType;
+  const required = str(formData.get("required")) === "on";
+  const options =
+    type === "ENUM"
+      ? str(formData.get("options"))
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean)
+      : [];
+  await prisma.personFieldDef.update({ where: { id }, data: { label, type, required, options } });
+  revalidatePath("/people/card-schema");
+  revalidatePath("/hierarchy");
+  redirect("/people/card-schema");
+}
+
+/** Move a field up/down in the display order. */
+export async function moveFieldDef(formData: FormData) {
+  await requireAdmin();
+  const id = str(formData.get("id"));
+  const dir = str(formData.get("dir")) === "up" ? -1 : 1;
+  const defs = await prisma.personFieldDef.findMany({ orderBy: [{ order: "asc" }, { label: "asc" }] });
+  const idx = defs.findIndex((d) => d.id === id);
+  const target = idx + dir;
+  if (idx < 0 || target < 0 || target >= defs.length) return; // edge — nothing to do
+  [defs[idx], defs[target]] = [defs[target], defs[idx]];
+  // normalize orders 0..n-1 (also heals any historical duplicates)
+  await prisma.$transaction(
+    defs.map((d, i) => prisma.personFieldDef.update({ where: { id: d.id }, data: { order: i } })),
+  );
+  revalidatePath("/people/card-schema");
+}
+
+/** Add an option to a closed list (ENUM field), e.g. a new specialty. */
+export async function addEnumOption(formData: FormData) {
+  await requireAdmin();
+  const fieldId = str(formData.get("fieldId"));
+  const option = str(formData.get("option"));
+  if (!option) throw new Error("יש להזין ערך.");
+  const def = await prisma.personFieldDef.findUnique({ where: { id: fieldId } });
+  if (!def || def.type !== "ENUM") throw new Error("שדה רשימה לא נמצא.");
+  if (def.options.includes(option)) throw new Error("הערך כבר קיים ברשימה.");
+  await prisma.personFieldDef.update({ where: { id: fieldId }, data: { options: [...def.options, option] } });
+  revalidatePath("/hierarchy");
+  revalidatePath("/people/card-schema");
+}
+
+/** Remove an option from a closed list. Existing person values keep their old text. */
+export async function removeEnumOption(formData: FormData) {
+  await requireAdmin();
+  const fieldId = str(formData.get("fieldId"));
+  const option = str(formData.get("option"));
+  const def = await prisma.personFieldDef.findUnique({ where: { id: fieldId } });
+  if (!def || def.type !== "ENUM") throw new Error("שדה רשימה לא נמצא.");
+  await prisma.personFieldDef.update({
+    where: { id: fieldId },
+    data: { options: def.options.filter((o) => o !== option) },
+  });
+  revalidatePath("/hierarchy");
+  revalidatePath("/people/card-schema");
+}
+
+/* ---------- Person create / update (Editor on the team) ---------- */
+
+async function collectFieldValues(formData: FormData) {
+  const defs = await prisma.personFieldDef.findMany();
+  const values: { fieldDefId: string; value: string; order: number }[] = [];
+  for (const def of defs) {
+    const v = str(formData.get(`field_${def.id}`));
+    if (v) values.push({ fieldDefId: def.id, value: v, order: def.order });
+  }
+  return values;
+}
+
+/** Reassign (or first-assign) a person to a team. Requires EDIT on the target team. */
+export async function reassignTeam(formData: FormData) {
+  const personId = str(formData.get("personId"));
+  const teamId = str(formData.get("teamId"));
+  await requireEditForNode(teamId); // must be able to edit the destination
+  const team = await prisma.orgNode.findUnique({ where: { id: teamId } });
+  if (!team || team.kind !== "TEAM") throw new Error("יש לשייך לצוות (צומת מסוג צוות).");
+  await prisma.person.update({ where: { id: personId }, data: { teamId } });
+  revalidatePath(`/people/${personId}`);
+  revalidatePath("/people");
+}
+
+export async function createPerson(formData: FormData) {
+  const teamId = str(formData.get("teamId"));
+  await requireEditForNode(teamId);
+
+  const team = await prisma.orgNode.findUnique({ where: { id: teamId } });
+  if (!team || team.kind !== "TEAM") throw new Error("יש לשייך איש לצוות (צומת מסוג צוות).");
+
+  const recruitmentDate = dateOrNull(formData.get("recruitmentDate"));
+  if (!recruitmentDate) throw new Error("חובה להזין תאריך גיוס.");
+
+  const values = await collectFieldValues(formData);
+  const person = await prisma.person.create({
+    data: {
+      fullName: str(formData.get("fullName")) || "ללא שם",
+      recruitmentDate,
+      status: statusOf(formData.get("status")),
+      endOfServiceDate: dateOrNull(formData.get("endOfServiceDate")),
+      teamId,
+      fieldValues: { create: values },
+    },
+  });
+
+  // optional profile photo
+  const photo = formData.get("photo");
+  if (photo instanceof File && photo.size > 0 && photo.type.startsWith("image/")) {
+    const { saveUpload } = await import("@/lib/storage");
+    const { storagePath } = await saveUpload(person.id, photo);
+    await prisma.person.update({ where: { id: person.id }, data: { photoPath: storagePath } });
+  }
+
+  // if this creation came from a document draft, the draft is now consumed
+  const draftId = str(formData.get("draftId"));
+  if (draftId) await prisma.personDraft.deleteMany({ where: { id: draftId } });
+
+  redirect(`/people/${person.id}`);
+}
+
+export async function updatePerson(formData: FormData) {
+  const personId = str(formData.get("personId"));
+  await requireEditForPerson(personId);
+
+  const recruitmentDate = dateOrNull(formData.get("recruitmentDate"));
+  if (!recruitmentDate) throw new Error("חובה להזין תאריך גיוס.");
+  const values = await collectFieldValues(formData);
+
+  await prisma.$transaction([
+    prisma.person.update({
+      where: { id: personId },
+      data: {
+        fullName: str(formData.get("fullName")) || "ללא שם",
+        recruitmentDate,
+        status: statusOf(formData.get("status")),
+        endOfServiceDate: dateOrNull(formData.get("endOfServiceDate")),
+      },
+    }),
+    prisma.personFieldValue.deleteMany({ where: { personId } }),
+    prisma.personFieldValue.createMany({ data: values.map((v) => ({ personId, ...v })) }),
+  ]);
+  revalidatePath(`/people/${personId}`);
+}
+
+/* ---------- Plan assignment (Editor on the team) ---------- */
+
+export async function assignPlan(formData: FormData) {
+  const personId = str(formData.get("personId"));
+  const templateId = str(formData.get("templateId"));
+  await requireEditForPerson(personId);
+
+  const tpl = await prisma.careerPlan.findUnique({
+    where: { id: templateId },
+    include: { pointEvents: true, recurringEvents: true, cumulativeMetrics: { include: { checkpoints: true } } },
+  });
+  if (!tpl || !tpl.isTemplate) throw new Error("תבנית לא נמצאה.");
+
+  // Remove any previous assigned copy so a person has exactly one.
+  const prev = await prisma.person.findUnique({ where: { id: personId }, select: { assignedPlanId: true } });
+
+  const copy = await prisma.careerPlan.create({
+    data: {
+      name: tpl.name,
+      isTemplate: false,
+      sourceTemplateId: tpl.id,
+      pointEvents: { create: tpl.pointEvents.map((e) => ({ label: e.label, offsetMonths: e.offsetMonths })) },
+      recurringEvents: {
+        create: tpl.recurringEvents.map((r) => ({
+          label: r.label,
+          intervalMonths: r.intervalMonths,
+          stopMode: r.stopMode,
+          stopOffsetMonths: r.stopOffsetMonths,
+        })),
+      },
+      cumulativeMetrics: {
+        create: tpl.cumulativeMetrics.map((m) => ({
+          name: m.name,
+          unit: m.unit,
+          checkpoints: { create: m.checkpoints.map((c) => ({ offsetMonths: c.offsetMonths, target: c.target })) },
+        })),
+      },
+    },
+  });
+
+  await prisma.person.update({ where: { id: personId }, data: { assignedPlanId: copy.id } });
+  if (prev?.assignedPlanId) await prisma.careerPlan.delete({ where: { id: prev.assignedPlanId } });
+  revalidatePath(`/people/${personId}`);
+}
+
+export async function unassignPlan(formData: FormData) {
+  const personId = str(formData.get("personId"));
+  await requireEditForPerson(personId);
+  const prev = await prisma.person.findUnique({ where: { id: personId }, select: { assignedPlanId: true } });
+  await prisma.person.update({ where: { id: personId }, data: { assignedPlanId: null } });
+  if (prev?.assignedPlanId) await prisma.careerPlan.delete({ where: { id: prev.assignedPlanId } });
+  revalidatePath(`/people/${personId}`);
+}
+
+/* ---------- Progress recording (Editor on the team) ---------- */
+
+export async function setPointDone(formData: FormData) {
+  const personId = str(formData.get("personId"));
+  await requireEditForPerson(personId);
+  const pointEventId = str(formData.get("pointEventId"));
+  const doneOn = dateOrNull(formData.get("doneOn")) ?? new Date();
+  const note = str(formData.get("note")) || null;
+  await prisma.pointProgress.upsert({
+    where: { personId_pointEventId: { personId, pointEventId } },
+    create: { personId, pointEventId, doneOn, note },
+    update: { doneOn, note },
+  });
+  revalidatePath(`/people/${personId}`);
+}
+
+export async function clearPointDone(formData: FormData) {
+  const personId = str(formData.get("personId"));
+  await requireEditForPerson(personId);
+  await prisma.pointProgress.deleteMany({ where: { personId, pointEventId: str(formData.get("pointEventId")) } });
+  revalidatePath(`/people/${personId}`);
+}
+
+export async function setMetricReading(formData: FormData) {
+  const personId = str(formData.get("personId"));
+  await requireEditForPerson(personId);
+  const metricId = str(formData.get("metricId"));
+  const value = Number(str(formData.get("value")));
+  const asOf = dateOrNull(formData.get("asOf")) ?? new Date();
+  const note = str(formData.get("note")) || null;
+  if (!Number.isFinite(value)) throw new Error("ערך לא תקין.");
+  await prisma.metricReading.upsert({
+    where: { personId_metricId: { personId, metricId } },
+    create: { personId, metricId, value, asOf, note },
+    update: { value, asOf, note },
+  });
+  revalidatePath(`/people/${personId}`);
+}
