@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getPlan, formatOffset, unrollRecurring, type PlanWithEvents } from "@/lib/plans";
+import { buildPlanDiagramSvg } from "@/lib/plan-diagram";
+import { Route, FileDown } from "lucide-react";
 import { isAdmin } from "@/lib/authz";
 import {
   addPointEvent,
@@ -61,41 +63,37 @@ export default async function PlanDetailPage({ params }: { params: Promise<{ id:
   );
 }
 
-/* --- Merged relative timeline (sorted by offset) --- */
+/* --- Career-path diagram (upward arrow, shared SVG builder) --- */
 function Timeline({ plan }: { plan: PlanWithEvents }) {
-  type Item = { offset: number; kind: "point" | "metric" | "recurring"; label: string };
-  const items: Item[] = [];
-  for (const e of plan.pointEvents) items.push({ offset: e.offsetMonths, kind: "point", label: e.label });
-  for (const m of plan.cumulativeMetrics)
-    for (const c of m.checkpoints)
-      items.push({ offset: c.offsetMonths, kind: "metric", label: `${m.name}: ${c.target} ${m.unit}` });
-  for (const r of plan.recurringEvents)
-    for (const off of unrollRecurring(r.intervalMonths, r.stopMode, r.stopOffsetMonths, RECURRING_PREVIEW_HORIZON))
-      items.push({ offset: off, kind: "recurring", label: r.label });
-  items.sort((a, b) => a.offset - b.offset);
-
-  const icon = { point: "●", metric: "📈", recurring: "🔁" } as const;
-  const color = { point: "text-brand-600", metric: "text-emerald-600", recurring: "text-purple-600" } as const;
+  const hasEvents =
+    plan.pointEvents.length > 0 || plan.recurringEvents.length > 0 ||
+    plan.cumulativeMetrics.some((m) => m.checkpoints.length > 0);
 
   return (
     <section className="space-y-2">
-      <h2 className="text-lg font-semibold">ציר זמן (יחסי לגיוס)</h2>
-      {items.length === 0 ? (
-        <p className="text-muted">אין עדיין אירועים בתכנית.</p>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="flex items-center gap-2 text-lg font-semibold text-brand-900">
+          <Route className="h-5 w-5 text-brand-600" aria-hidden />
+          מסלול הקריירה
+        </h2>
+        {hasEvents && (
+          <a
+            href={`/plans/${plan.id}/diagram?format=pdf`}
+            className="flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm hover:bg-stone-50"
+          >
+            <FileDown className="h-4 w-4 text-brand-600" aria-hidden />
+            הפק PDF למצגת
+          </a>
+        )}
+      </div>
+      {!hasEvents ? (
+        <p className="text-muted">אין עדיין אירועים בתכנית — הוסף אירועים למטה והמסלול יצויר כאן.</p>
       ) : (
-        <ol className="rounded-xl border border-border/70 bg-card shadow-sm">
-          {items.map((it, i) => (
-            <li key={i} className="flex items-center gap-3 border-b border-border px-4 py-2 last:border-b-0">
-              <span className="w-28 shrink-0 text-sm text-muted">{formatOffset(it.offset)}</span>
-              <span className={color[it.kind]}>{icon[it.kind]}</span>
-              <span className="text-sm">{it.label}</span>
-            </li>
-          ))}
-        </ol>
+        <div
+          className="overflow-hidden rounded-xl border border-border/70 bg-card p-2 shadow-sm"
+          dangerouslySetInnerHTML={{ __html: buildPlanDiagramSvg(plan) }}
+        />
       )}
-      <p className="text-xs text-muted">
-        אירועים כרוניים מוצגים בתצוגה מקדימה עד +{RECURRING_PREVIEW_HORIZON} חודשים; בפועל הם ייפרשו עד סיום השירות/התאריך שהוגדר.
-      </p>
     </section>
   );
 }
