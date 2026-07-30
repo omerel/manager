@@ -5,6 +5,7 @@ import { getSessionUser } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { getFieldDefs, formatFieldValue } from "@/lib/person-schema";
 import { STATUS_LABEL, getEditableTeams, UNASSIGNED_LABEL } from "@/lib/people";
+import { ageFromBirthDate } from "@/lib/person-name";
 import { fmtDate, toDateInput } from "@/lib/dates";
 import { getPersonFull, buildPersonTimeline, type PersonFull } from "@/lib/person-view";
 import { computePersonGaps, levelForPoint, evalMetric, GAP_META, type GapLevel } from "@/lib/gaps";
@@ -13,6 +14,8 @@ import { MetricCurve } from "@/components/MetricCurve";
 import { CircleDot, TrendingUp, Map as MapIcon } from "lucide-react";
 import { EvaluationsSection } from "@/components/EvaluationsSection";
 import { ExtractionPanel, type ExtractionJobView } from "@/components/ExtractionPanel";
+import { FileDrop } from "@/components/FileDrop";
+import { PhotoLightbox } from "@/components/PhotoLightbox";
 import { setProfilePhoto, type ProposalItem } from "@/lib/extract-actions";
 import { effectiveStatus, staleError, STALE_MS } from "@/lib/jobs";
 import {
@@ -96,8 +99,7 @@ export default async function PersonPage({
         <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             {person.photoPath ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
+              <PhotoLightbox
                 src={`/photo/${person.id}`}
                 alt={person.fullName}
                 className="h-14 w-14 rounded-full border border-border object-cover"
@@ -137,7 +139,7 @@ export default async function PersonPage({
           <form action={setProfilePhoto} className="mt-2 flex flex-wrap items-center gap-2">
             <input type="hidden" name="personId" value={person.id} />
             <label className="text-sm text-muted">תמונת פרופיל:</label>
-            <input type="file" name="photo" accept="image/*" required className="text-xs" />
+            <FileDrop name="photo" accept="image/*" required label="גרור/י תמונה" className="min-w-56" />
             <button className="rounded-md border border-border px-3 py-1 text-sm hover:bg-slate-50">
               {person.photoPath ? "החלף תמונה" : "העלה תמונה"}
             </button>
@@ -209,7 +211,9 @@ function PersonalDetails({
             defs={defs}
             valueByDef={valueByDef}
             core={{
-              fullName: person.fullName,
+              firstName: person.firstName,
+              lastName: person.lastName,
+              birthDate: person.birthDate,
               recruitmentDate: person.recruitmentDate,
               status: person.status,
               endOfServiceDate: person.endOfServiceDate,
@@ -219,6 +223,10 @@ function PersonalDetails({
         </form>
       ) : (
         <dl className="grid grid-cols-1 gap-x-8 gap-y-3 sm:grid-cols-2">
+          <Field label="שם פרטי" value={person.firstName} />
+          <Field label="שם משפחה" value={person.lastName} />
+          <Field label="תאריך לידה" value={fmtDate(person.birthDate)} />
+          <Field label="גיל" value={ageFromBirthDate(person.birthDate)} />
           <Field label="תאריך גיוס" value={fmtDate(person.recruitmentDate)} />
           <Field label="סטטוס העסקה" value={STATUS_LABEL[person.status]} />
           <Field label="תאריך סיום שירות" value={fmtDate(person.endOfServiceDate)} />

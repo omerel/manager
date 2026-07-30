@@ -1,39 +1,36 @@
 import path from "path";
 import { writeFile } from "fs/promises";
+import { extractTextFromFile } from "@/lib/doc-text";
 
 /**
- * Normalize an uploaded document into something the agent's Read tool handles:
- * - PDF / plain text / markdown / csv → copied as-is
- * - docx → text via mammoth · xlsx → CSV per sheet via SheetJS
- * Returns the filename written inside `dir`.
+ * Two-step by design: staging the upload is instant and happens in the request;
+ * extraction (which may fall back to OCR and take minutes) runs inside the
+ * background job. The agent only ever reads the resulting text file, so a
+ * non-multimodal model works and no script execution is ever needed.
  */
-export async function materializeDocument(dir: string, file: File): Promise<string> {
-  const buf = Buffer.from(await file.arrayBuffer());
-  const ext = path.extname(file.name).toLowerCase();
 
-  if (ext === ".docx" || ext === ".doc") {
-    const mammoth = (await import("mammoth")).default;
-    const { value } = await mammoth.extractRawText({ buffer: buf });
-    const name = "document.txt";
-    await writeFile(path.join(dir, name), value, "utf8");
-    return name;
-  }
+/** Write the raw upload into `dir`; returns its absolute path and original name. */
+export async function stageUpload(dir: string, file: File): Promise<{ abs: string; filename: string }> {
+  const filename = path.basename(file.name) || "upload";
+  const abs = path.join(dir, `raw-${filename}`);
+  await writeFile(abs, Buffer.from(await file.arrayBuffer()));
+  return { abs, filename };
+}
 
-  if (ext === ".xlsx" || ext === ".xls") {
-    const XLSX = await import("xlsx");
-    const wb = XLSX.read(buf, { type: "buffer" });
-    const parts: string[] = [];
-    for (const sheetName of wb.SheetNames) {
-      parts.push(`# גיליון: ${sheetName}`, XLSX.utils.sheet_to_csv(wb.Sheets[sheetName]), "");
-    }
-    const name = "document.txt";
-    await writeFile(path.join(dir, name), parts.join("\n"), "utf8");
-    return name;
-  }
+/** Extract text from a staged upload into `document.txt`. Null when unreadable. */
+export async function materializeDocument(
+  dir: string,
+  staged: { abs: string; filename: string },
+): Promise<{ name: string; method: string; note?: string } | null> {
+  const { text, method, note } = await extractTextFromFile(staged.abs, staged.filename);
+  if (!text.trim()) return null;
 
-  // pdf / txt / md / csv — pass through under a predictable name
-  const safeExt = [".pdf", ".txt", ".md", ".csv"].includes(ext) ? ext : ".txt";
-  const name = `document${safeExt}`;
-  await writeFile(path.join(dir, name), buf);
-  return name;
+  const name = "document.txt";
+  const header = [
+    `# ${staged.filename}`,
+    `# חולץ בשיטת: ${method === "ocr" ? "OCR (מסמך סרוק)" : "טקסט מקורי"}`,
+    "",
+  ].join("\n");
+  await writeFile(path.join(dir, name), header + text, "utf8");
+  return { name, method, note };
 }

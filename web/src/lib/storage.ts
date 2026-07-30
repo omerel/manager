@@ -3,8 +3,12 @@ import { createReadStream, existsSync } from "fs";
 import path from "path";
 import { randomBytes } from "crypto";
 
-// Local-disk file storage for attachments (dev default; swappable later).
-const UPLOADS_ROOT = path.join(process.cwd(), "uploads");
+// File storage root. MUST be backed by persistent storage in production
+// (an anonymous container volume does not survive pod replacement) — see
+// UPLOADS_DIR in the deployment docs.
+export const UPLOADS_ROOT = process.env.UPLOADS_DIR
+  ? path.resolve(process.env.UPLOADS_DIR)
+  : path.join(process.cwd(), "uploads");
 
 /** Persist an uploaded file; returns its relative storage path. */
 export async function saveUpload(personId: string, file: File): Promise<{ storagePath: string; size: number }> {

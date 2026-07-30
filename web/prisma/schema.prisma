@@ -163,6 +163,7 @@ model PointEvent {
 // A live accumulating measure (e.g. grant hours, grant money) with timed targets.
 model CumulativeMetric {
   id          String             @id @default(cuid())
+  color       String? // soft-palette color assigned at creation (stable)
   plan        CareerPlan         @relation(fields: [planId], references: [id], onDelete: Cascade)
   planId      String
   name        String
@@ -193,6 +194,7 @@ model RecurringEvent {
   intervalMonths   Int
   stopMode         RecurringStopMode
   stopOffsetMonths Int? // required when stopMode = UNTIL_OFFSET
+  color            String? // soft-palette color assigned at creation (stable)
   evalEntries      EvalEntry[]
 }
 
@@ -228,7 +230,10 @@ model Attachment {
 
 model Person {
   id               String             @id @default(cuid())
-  fullName         String
+  firstName        String             @default("")
+  lastName         String             @default("")
+  fullName         String // maintained = firstName + " " + lastName (display + sort + search)
+  birthDate        DateTime? // required in forms; age is derived from it, never stored
   photoPath        String? // profile picture, relative path under uploads/
   recruitmentDate  DateTime // anchor that converts plan offsets to calendar dates
   status           EmploymentStatus   @default(ACTIVE)

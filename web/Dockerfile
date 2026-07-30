@@ -25,8 +25,11 @@ RUN npx prisma generate && npm run build \
 FROM ubuntu:24.04
 ENV DEBIAN_FRONTEND=noninteractive
 # fonts-noto: Hebrew rendering in PDF export (Chromium print)
+# poppler-utils: pdftotext/pdftoppm — document text extraction
+# tesseract + heb/eng: OCR fallback for scanned documents and images
 RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates \
       fonts-noto fonts-noto-color-emoji \
+      poppler-utils tesseract-ocr tesseract-ocr-heb tesseract-ocr-eng \
  && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
  && apt-get install -y --no-install-recommends nodejs \
  && rm -rf /var/lib/apt/lists/*
@@ -35,6 +38,7 @@ WORKDIR /app
 ENV NODE_ENV=production \
     HOME=/app/.home \
     PLAYWRIGHT_BROWSERS_PATH=/app/.pw-browsers \
+    UPLOADS_DIR=/app/uploads \
     PORT=3000
 
 COPY --from=builder /app/package.json ./package.json

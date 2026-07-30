@@ -12,7 +12,13 @@ import {
   copyPlan,
   renamePlan,
   deletePlanItem,
+  updatePointEvent,
+  updateCumulativeMetric,
+  updateCheckpoint,
+  updateRecurringEvent,
 } from "@/lib/plan-actions";
+import { InlineEdit } from "@/components/InlineEdit";
+import { softColorFor } from "@/lib/palette";
 
 const RECURRING_PREVIEW_HORIZON = 36;
 
@@ -120,15 +126,29 @@ function PointEventsSection({ plan, admin }: { plan: PlanWithEvents; admin: bool
         <p className="text-sm text-muted">אין אירועים נקודתיים.</p>
       ) : (
         <ul className="divide-y divide-border rounded-xl border border-border/70 bg-card shadow-sm">
-          {plan.pointEvents.map((e) => (
-            <li key={e.id} className="flex items-center justify-between gap-3 px-4 py-2">
+          {plan.pointEvents.map((e) => {
+            const summary = (
               <span>
                 <span className="font-medium">{e.label}</span>{" "}
                 <span className="text-sm text-muted">· {formatOffset(e.offsetMonths)}</span>
               </span>
-              {admin && <DeleteButton planId={plan.id} kind="point" id={e.id} />}
-            </li>
-          ))}
+            );
+            return (
+              <li key={e.id} className="flex items-center justify-between gap-3 px-4 py-2">
+                {admin ? (
+                  <InlineEdit view={summary} action={updatePointEvent} title="ערוך אירוע">
+                    <input type="hidden" name="planId" value={plan.id} />
+                    <input type="hidden" name="id" value={e.id} />
+                    <TextField name={`label-${e.id}`} field="label" label="שם האירוע" defaultValue={e.label} required />
+                    <NumField name={`offset-${e.id}`} field="offsetMonths" label="חודשים מהגיוס" defaultValue={e.offsetMonths} />
+                  </InlineEdit>
+                ) : (
+                  summary
+                )}
+                {admin && <DeleteButton planId={plan.id} kind="point" id={e.id} />}
+              </li>
+            );
+          })}
         </ul>
       )}
       {admin && (
@@ -152,37 +172,74 @@ function CumulativeSection({ plan, admin }: { plan: PlanWithEvents; admin: boole
         <p className="text-sm text-muted">אין מדדים מצטברים.</p>
       ) : (
         <div className="space-y-3">
-          {plan.cumulativeMetrics.map((m) => (
-            <div key={m.id} className="rounded-xl border border-border/70 bg-card shadow-sm p-4">
+          {plan.cumulativeMetrics.map((m, mi) => {
+            const c = softColorFor(m.color, mi);
+            const nameSummary = (
+              <span className="font-medium" style={{ color: c.accent }}>
+                {m.name} <span className="text-sm opacity-70">({m.unit})</span>
+              </span>
+            );
+            return (
+            <div
+              key={m.id}
+              className="rounded-xl border p-4 shadow-sm"
+              style={{ backgroundColor: c.bg, borderColor: c.border }}
+            >
               <div className="flex items-center justify-between">
-                <span className="font-medium">
-                  {m.name} <span className="text-sm text-muted">({m.unit})</span>
-                </span>
+                {admin ? (
+                  <InlineEdit view={nameSummary} action={updateCumulativeMetric} title="ערוך מדד">
+                    <input type="hidden" name="planId" value={plan.id} />
+                    <input type="hidden" name="id" value={m.id} />
+                    <TextField name={`mname-${m.id}`} field="name" label="שם המדד" defaultValue={m.name} required />
+                    <TextField name={`munit-${m.id}`} field="unit" label="יחידה" defaultValue={m.unit} />
+                  </InlineEdit>
+                ) : (
+                  nameSummary
+                )}
                 {admin && <DeleteButton planId={plan.id} kind="metric" id={m.id} />}
               </div>
               {m.checkpoints.length > 0 && (
                 <ul className="mt-2 flex flex-wrap gap-2">
-                  {m.checkpoints.map((c) => (
-                    <li key={c.id} className="flex items-center gap-2 rounded-md border border-border px-2 py-1 text-sm">
+                  {m.checkpoints.map((cp) => {
+                    const cpSummary = (
                       <span>
-                        {c.target} {m.unit} עד {formatOffset(c.offsetMonths)}
+                        {cp.target} {m.unit} עד {formatOffset(cp.offsetMonths)}
                       </span>
-                      {admin && <DeleteButton planId={plan.id} kind="checkpoint" id={c.id} />}
-                    </li>
-                  ))}
+                    );
+                    return (
+                      <li
+                        key={cp.id}
+                        className="flex items-center gap-2 rounded-md border bg-card/70 px-2 py-1 text-sm"
+                        style={{ borderColor: c.border }}
+                      >
+                        {admin ? (
+                          <InlineEdit view={cpSummary} action={updateCheckpoint} title="ערוך יעד-ביניים">
+                            <input type="hidden" name="planId" value={plan.id} />
+                            <input type="hidden" name="id" value={cp.id} />
+                            <NumField name={`cptarget-${cp.id}`} field="target" label={`יעד (${m.unit})`} defaultValue={cp.target} step="any" />
+                            <NumField name={`cpoffset-${cp.id}`} field="offsetMonths" label="חודשים מהגיוס" defaultValue={cp.offsetMonths} />
+                          </InlineEdit>
+                        ) : (
+                          cpSummary
+                        )}
+                        {admin && <DeleteButton planId={plan.id} kind="checkpoint" id={cp.id} />}
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
               {admin && (
                 <form action={addCheckpoint} className="mt-3 flex flex-wrap items-end gap-2">
                   <input type="hidden" name="planId" value={plan.id} />
                   <input type="hidden" name="metricId" value={m.id} />
-                  <NumField name="target" label={`יעד (${m.unit})`} defaultValue={100} step="any" />
-                  <NumField name="offsetMonths" label="חודשים מהגיוס" defaultValue={6} />
+                  <NumField name={`newtarget-${m.id}`} field="target" label={`יעד (${m.unit})`} defaultValue={100} step="any" />
+                  <NumField name={`newoffset-${m.id}`} field="offsetMonths" label="חודשים מהגיוס" defaultValue={6} />
                   <AddButton>הוסף יעד-ביניים</AddButton>
                 </form>
               )}
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
       {admin && (
@@ -205,19 +262,58 @@ function RecurringSection({ plan, admin }: { plan: PlanWithEvents; admin: boolea
       {plan.recurringEvents.length === 0 ? (
         <p className="text-sm text-muted">אין אירועים כרוניים.</p>
       ) : (
-        <ul className="divide-y divide-border rounded-xl border border-border/70 bg-card shadow-sm">
-          {plan.recurringEvents.map((r) => {
+        <ul className="space-y-2">
+          {plan.recurringEvents.map((r, ri) => {
+            const c = softColorFor(r.color, ri);
             const stop =
               r.stopMode === "UNTIL_OFFSET" ? `עד ${formatOffset(r.stopOffsetMonths ?? 0)}` : "עד סוף השירות";
             const preview = unrollRecurring(r.intervalMonths, r.stopMode, r.stopOffsetMonths, RECURRING_PREVIEW_HORIZON);
-            return (
-              <li key={r.id} className="flex items-center justify-between gap-3 px-4 py-2">
-                <span>
-                  <span className="font-medium">{r.label}</span>{" "}
-                  <span className="text-sm text-muted">
-                    · כל {r.intervalMonths} חודשים · {stop} · מופעים: {preview.map((o) => `+${o}`).join(", ") || "—"}
-                  </span>
+            const summary = (
+              <span>
+                <span className="font-medium" style={{ color: c.accent }}>
+                  {r.label}
+                </span>{" "}
+                <span className="text-sm text-muted">
+                  · כל {r.intervalMonths} חודשים · {stop} · מופעים: {preview.map((o) => `+${o}`).join(", ") || "—"}
                 </span>
+              </span>
+            );
+            return (
+              <li
+                key={r.id}
+                className="flex items-center justify-between gap-3 rounded-xl border px-4 py-2 shadow-sm"
+                style={{ backgroundColor: c.bg, borderColor: c.border }}
+              >
+                {admin ? (
+                  <InlineEdit view={summary} action={updateRecurringEvent} title="ערוך אירוע כרוני">
+                    <input type="hidden" name="planId" value={plan.id} />
+                    <input type="hidden" name="id" value={r.id} />
+                    <TextField name={`rlabel-${r.id}`} field="label" label="שם האירוע" defaultValue={r.label} required />
+                    <NumField name={`rint-${r.id}`} field="intervalMonths" label="כל כמה חודשים" defaultValue={r.intervalMonths} />
+                    <div className="flex flex-col">
+                      <label htmlFor={`rstop-${r.id}`} className="mb-1 text-sm text-muted">
+                        תנאי עצירה
+                      </label>
+                      <select
+                        id={`rstop-${r.id}`}
+                        name="stopMode"
+                        defaultValue={r.stopMode}
+                        className="rounded-md border border-border px-2 py-1.5 text-sm"
+                      >
+                        <option value="END_OF_SERVICE">עד סוף השירות</option>
+                        <option value="UNTIL_OFFSET">עד חודש מסוים</option>
+                      </select>
+                    </div>
+                    <NumField
+                      name={`rstopoff-${r.id}`}
+                      field="stopOffsetMonths"
+                      label="עד חודש (אם נבחר)"
+                      defaultValue={r.stopOffsetMonths ?? 24}
+                    />
+                  </InlineEdit>
+                ) : (
+                  summary
+                )}
                 {admin && <DeleteButton planId={plan.id} kind="recurring" id={r.id} />}
               </li>
             );
@@ -244,18 +340,22 @@ function RecurringSection({ plan, admin }: { plan: PlanWithEvents; admin: boolea
   );
 }
 
-/* --- small form field helpers --- */
-function TextField({ name, label, placeholder }: { name: string; label: string; placeholder?: string }) {
-  return (
-    <div className="flex flex-col">
-      <label htmlFor={name} className="mb-1 text-sm text-muted">
-        {label}
-      </label>
-      <input id={name} name={name} placeholder={placeholder} className="rounded-md border border-border px-3 py-1.5 text-sm" />
-    </div>
-  );
-}
-function NumField({ name, label, defaultValue, step }: { name: string; label: string; defaultValue: number; step?: string }) {
+/* --- small form field helpers (`name` = element id, `field` = form field name) --- */
+function TextField({
+  name,
+  field,
+  label,
+  placeholder,
+  defaultValue,
+  required,
+}: {
+  name: string;
+  field?: string;
+  label: string;
+  placeholder?: string;
+  defaultValue?: string;
+  required?: boolean;
+}) {
   return (
     <div className="flex flex-col">
       <label htmlFor={name} className="mb-1 text-sm text-muted">
@@ -263,7 +363,36 @@ function NumField({ name, label, defaultValue, step }: { name: string; label: st
       </label>
       <input
         id={name}
-        name={name}
+        name={field ?? name}
+        placeholder={placeholder}
+        defaultValue={defaultValue}
+        required={required}
+        className="rounded-md border border-border px-3 py-1.5 text-sm"
+      />
+    </div>
+  );
+}
+function NumField({
+  name,
+  field,
+  label,
+  defaultValue,
+  step,
+}: {
+  name: string;
+  field?: string;
+  label: string;
+  defaultValue: number;
+  step?: string;
+}) {
+  return (
+    <div className="flex flex-col">
+      <label htmlFor={name} className="mb-1 text-sm text-muted">
+        {label}
+      </label>
+      <input
+        id={name}
+        name={field ?? name}
         type="number"
         step={step ?? "1"}
         defaultValue={defaultValue}

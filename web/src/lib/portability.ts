@@ -3,7 +3,7 @@ import { readFile, rm, mkdir, writeFile } from "fs/promises";
 import { existsSync } from "fs";
 import AdmZip from "adm-zip";
 import { prisma } from "@/lib/prisma";
-import { resolveUpload } from "@/lib/storage";
+import { resolveUpload, UPLOADS_ROOT } from "@/lib/storage";
 
 /**
  * Bundle format v1. The model inventory is EXPLICIT (not reflective): adding a
@@ -16,8 +16,6 @@ export type BundleScope = "full" | "config";
 
 type Tables = Record<string, unknown[]>;
 export type Bundle = { version: number; scope: BundleScope; exportedAt: string; tables: Tables };
-
-const UPLOADS_ROOT = path.join(process.cwd(), "uploads");
 
 /** Topological sort for self-referencing trees (parents before children). */
 function byDepth<T extends { id: string }>(rows: T[], parentOf: (r: T) => string | null): T[] {

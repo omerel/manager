@@ -9,17 +9,18 @@ import { prisma } from "@/lib/prisma";
 import { requireEditForPerson } from "@/lib/authz";
 import { getSessionUser } from "@/lib/session";
 import { computeVisibility } from "@/lib/access";
-import { materializeDocument } from "@/lib/doc-extract";
+import { stageUpload, materializeDocument } from "@/lib/doc-extract";
 import { runExtraction } from "@/lib/agent";
 import { saveUpload } from "@/lib/storage";
 import { runInBackground, hasLiveRun } from "@/lib/jobs";
+import { composeFullName } from "@/lib/person-name";
 
 function str(v: FormDataEntryValue | null): string {
   return String(v ?? "").trim();
 }
 
 export type ProposalItem = {
-  key: string; // "fullName" | "recruitmentDate" | "endOfServiceDate" | "field:<fieldDefId>"
+  key: string; // "firstName" | "lastName" | "birthDate" | "recruitmentDate" | "endOfServiceDate" | "field:<fieldDefId>"
   label: string;
   current: string;
   proposed: string;
@@ -45,7 +46,9 @@ export async function setProfilePhoto(formData: FormData) {
 async function extractionFields() {
   const defs = await prisma.personFieldDef.findMany({ orderBy: { order: "asc" } });
   return [
-    { key: "fullName", label: "שם מלא", type: "טקסט" },
+    { key: "firstName", label: "שם פרטי", type: "טקסט" },
+    { key: "lastName", label: "שם משפחה", type: "טקסט" },
+    { key: "birthDate", label: "תאריך לידה", type: "תאריך" },
     { key: "recruitmentDate", label: "תאריך גיוס", type: "תאריך" },
     { key: "endOfServiceDate", label: "תאריך סיום שירות", type: "תאריך" },
     ...defs.map((d) => ({
@@ -66,15 +69,17 @@ export async function extractFromDocument(formData: FormData) {
   if (await hasLiveRun({ personId, kind: "EXTRACT" })) redirect(`/people/${personId}?edit=1&busy=1`);
 
   const fields = await extractionFields();
-  // materialize the document now (fast); the agent part runs in the background
+  // staging is instant; extraction (possibly OCR) happens inside the job
   const dir = await mkdtemp(path.join(tmpdir(), "extract-"));
-  const docName = await materializeDocument(dir, file);
+  const staged = await stageUpload(dir, file);
 
   await runInBackground(
     { userId: me.id, kind: "EXTRACT", personId, prompt: `חילוץ ממסמך: ${file.name}` },
     async (id) => {
       try {
-        const raw = await runExtraction(dir, docName, fields);
+        const doc = await materializeDocument(dir, staged);
+        if (!doc) throw new Error("לא ניתן לחלץ טקסט מהמסמך (גם לא באמצעות OCR).");
+        const raw = await runExtraction(dir, doc.name, fields);
         const person = await prisma.person.findUniqueOrThrow({
           where: { id: personId },
           include: { fieldValues: { include: { field: true } } },
@@ -82,7 +87,9 @@ export async function extractFromDocument(formData: FormData) {
         // merge with current values; keep only real differences
         const valueByDef = new Map(person.fieldValues.map((fv) => [fv.fieldDefId, fv.value]));
         const currentOf = (key: string): string => {
-          if (key === "fullName") return person.fullName;
+          if (key === "firstName") return person.firstName;
+          if (key === "lastName") return person.lastName;
+          if (key === "birthDate") return person.birthDate?.toISOString().slice(0, 10) ?? "";
           if (key === "recruitmentDate") return person.recruitmentDate.toISOString().slice(0, 10);
           if (key === "endOfServiceDate") return person.endOfServiceDate?.toISOString().slice(0, 10) ?? "";
           if (key.startsWith("field:")) return valueByDef.get(key.slice(6)) ?? "";
@@ -115,9 +122,15 @@ export async function extractFromDocument(formData: FormData) {
 }
 
 async function applyItem(personId: string, item: ProposalItem) {
-  if (item.key === "fullName") {
-    await prisma.person.update({ where: { id: personId }, data: { fullName: item.proposed } });
-  } else if (item.key === "recruitmentDate" || item.key === "endOfServiceDate") {
+  if (item.key === "firstName" || item.key === "lastName") {
+    const p = await prisma.person.findUniqueOrThrow({ where: { id: personId } });
+    const firstName = item.key === "firstName" ? item.proposed : p.firstName;
+    const lastName = item.key === "lastName" ? item.proposed : p.lastName;
+    await prisma.person.update({
+      where: { id: personId },
+      data: { firstName, lastName, fullName: composeFullName(firstName, lastName) },
+    });
+  } else if (item.key === "birthDate" || item.key === "recruitmentDate" || item.key === "endOfServiceDate") {
     const d = new Date(item.proposed);
     if (isNaN(d.getTime())) throw new Error("תאריך מוצע לא תקין.");
     await prisma.person.update({ where: { id: personId }, data: { [item.key]: d } });
@@ -174,13 +187,15 @@ export async function extractForNewPerson(formData: FormData) {
 
   const fields = await extractionFields();
   const dir = await mkdtemp(path.join(tmpdir(), "extract-new-"));
-  const docName = await materializeDocument(dir, file);
+  const staged = await stageUpload(dir, file);
 
   await runInBackground(
     { userId: me.id, kind: "EXTRACT", prompt: `יצירה ממסמך: ${file.name}` },
     async (id) => {
       try {
-        const raw = await runExtraction(dir, docName, fields);
+        const doc = await materializeDocument(dir, staged);
+        if (!doc) throw new Error("לא ניתן לחלץ טקסט מהמסמך (גם לא באמצעות OCR).");
+        const raw = await runExtraction(dir, doc.name, fields);
         if (raw.length === 0) {
           await prisma.agentRun.update({ where: { id }, data: { status: "SUCCEEDED", output: "" } });
           return;

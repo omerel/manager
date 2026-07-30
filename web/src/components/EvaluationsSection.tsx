@@ -2,6 +2,7 @@ import { fmtDate } from "@/lib/dates";
 import type { PersonFull, RecurrenceRow } from "@/lib/person-view";
 import { addFreeEntry, fillSlot, deleteEntry } from "@/lib/eval-actions";
 import { RefreshCw, PenLine, Paperclip, FolderOpen } from "lucide-react";
+import { FileDrop } from "@/components/FileDrop";
 
 const inputCls = "rounded-md border border-border px-3 py-1.5 text-sm";
 
@@ -86,7 +87,7 @@ export function EvaluationsSection({
                         placeholder="תוכן חוות הדעת…"
                         className={`${inputCls} min-w-64 flex-1`}
                       />
-                      <input type="file" name="file" className="text-xs" />
+                      <FileDrop name="file" label="גרור/י קובץ" className="min-w-48" />
                       <button className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700">
                         מלא מופע
                       </button>
@@ -141,7 +142,7 @@ export function EvaluationsSection({
             </div>
             <div className="flex flex-col">
               <label className="mb-1 text-sm text-muted">קובץ (אופציונלי)</label>
-              <input type="file" name="file" className="text-xs" />
+              <FileDrop name="file" label="גרור/י קובץ" className="min-w-48" />
             </div>
             <button className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700">
               הוסף רשומה

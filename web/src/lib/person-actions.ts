@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin, requireEditForNode, requireEditForPerson } from "@/lib/authz";
 import type { EmploymentStatus, FieldType } from "@/generated/prisma/client";
+import { composeFullName } from "@/lib/person-name";
 
 function str(v: FormDataEntryValue | null): string {
   return String(v ?? "").trim();
@@ -145,11 +146,19 @@ export async function createPerson(formData: FormData) {
 
   const recruitmentDate = dateOrNull(formData.get("recruitmentDate"));
   if (!recruitmentDate) throw new Error("חובה להזין תאריך גיוס.");
+  const firstName = str(formData.get("firstName"));
+  const lastName = str(formData.get("lastName"));
+  if (!firstName || !lastName) throw new Error("חובה להזין שם פרטי ושם משפחה.");
+  const birthDate = dateOrNull(formData.get("birthDate"));
+  if (!birthDate) throw new Error("חובה להזין תאריך לידה.");
 
   const values = await collectFieldValues(formData);
   const person = await prisma.person.create({
     data: {
-      fullName: str(formData.get("fullName")) || "ללא שם",
+      firstName,
+      lastName,
+      fullName: composeFullName(firstName, lastName),
+      birthDate,
       recruitmentDate,
       status: statusOf(formData.get("status")),
       endOfServiceDate: dateOrNull(formData.get("endOfServiceDate")),
@@ -179,13 +188,21 @@ export async function updatePerson(formData: FormData) {
 
   const recruitmentDate = dateOrNull(formData.get("recruitmentDate"));
   if (!recruitmentDate) throw new Error("חובה להזין תאריך גיוס.");
+  const firstName = str(formData.get("firstName"));
+  const lastName = str(formData.get("lastName"));
+  if (!firstName || !lastName) throw new Error("חובה להזין שם פרטי ושם משפחה.");
+  const birthDate = dateOrNull(formData.get("birthDate"));
+  if (!birthDate) throw new Error("חובה להזין תאריך לידה.");
   const values = await collectFieldValues(formData);
 
   await prisma.$transaction([
     prisma.person.update({
       where: { id: personId },
       data: {
-        fullName: str(formData.get("fullName")) || "ללא שם",
+        firstName,
+        lastName,
+        fullName: composeFullName(firstName, lastName),
+        birthDate,
         recruitmentDate,
         status: statusOf(formData.get("status")),
         endOfServiceDate: dateOrNull(formData.get("endOfServiceDate")),

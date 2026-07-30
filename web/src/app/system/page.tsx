@@ -4,6 +4,7 @@ import { getLogoPath, getSystemName, DEFAULT_SYSTEM_NAME } from "@/lib/branding"
 import { uploadLogo, resetLogo, updateSystemName } from "@/lib/branding-actions";
 import { importBundle } from "@/lib/portability-actions";
 import { AppLogo, LogoMark } from "@/components/Logo";
+import { FileDrop } from "@/components/FileDrop";
 import { Palette, DatabaseBackup, Download, Upload } from "lucide-react";
 
 export default async function SystemSettingsPage({
@@ -61,7 +62,7 @@ export default async function SystemSettingsPage({
           <form action={uploadLogo} className="flex flex-wrap items-end gap-2">
             <div className="flex flex-col">
               <label htmlFor="logo" className="mb-1 text-sm text-muted">העלאת לוגו (PNG / SVG / JPG)</label>
-              <input id="logo" name="logo" type="file" accept="image/*" required className="text-sm" />
+              <FileDrop name="logo" accept="image/*" required label="גרור/י לוגו לכאן (PNG / SVG / JPG)" className="min-w-72" />
             </div>
             <button className="rounded-md bg-brand-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-brand-700">
               החלף לוגו
@@ -137,7 +138,7 @@ export default async function SystemSettingsPage({
               ייבוא תצורה מותר רק כשאין אנשים במרשם.
             </p>
             <form action={importBundle} className="space-y-2">
-              <input type="file" name="bundle" required accept=".zip,.json" className="text-sm" />
+              <FileDrop name="bundle" required accept=".zip,.json" label="גרור/י חבילת גיבוי לכאן (ZIP / JSON)" />
               <label className="flex items-start gap-2 text-sm text-red-800">
                 <input type="checkbox" name="confirm" className="mt-0.5" />
                 אני מבין/ה שהייבוא ימחק את הנתונים הקיימים ויחליף אותם בתוכן הקובץ.

@@ -1,5 +1,6 @@
 import type { PlanWithEvents } from "@/lib/plans";
 import { unrollRecurring } from "@/lib/plans";
+import { softColorFor } from "@/lib/palette";
 
 /**
  * Pure SVG-string builder for the career-path diagram: a large upward arrow
@@ -52,12 +53,16 @@ type EventCard = {
   title: string;
   sub: string;
   kind: "point" | "metric";
+  /** per-metric soft colour; point events use the brand green */
+  bg?: string;
+  accent?: string;
+  border?: string;
 };
 
-function iconDisc(kind: EventCard["kind"] | "repeat", cx: number, cy: number): string {
-  const fill = kind === "point" ? C.action : kind === "metric" ? C.deep : C.amber;
+function iconDisc(kind: EventCard["kind"] | "repeat", cx: number, cy: number, fill?: string): string {
+  const disc = fill ?? (kind === "point" ? C.action : kind === "metric" ? C.deep : C.amber);
   const icon = kind === "point" ? ICON.flag : kind === "metric" ? ICON.target : ICON.repeat;
-  return `<g><circle cx="${cx}" cy="${cy}" r="16" fill="${fill}"/><g transform="translate(${cx - 11},${cy - 11}) scale(0.92)">${icon}</g></g>`;
+  return `<g><circle cx="${cx}" cy="${cy}" r="16" fill="${disc}"/><g transform="translate(${cx - 11},${cy - 11}) scale(0.92)">${icon}</g></g>`;
 }
 
 export function buildPlanDiagramSvg(plan: PlanWithEvents): string {
@@ -66,23 +71,28 @@ export function buildPlanDiagramSvg(plan: PlanWithEvents): string {
   for (const e of plan.pointEvents) {
     cards.push({ offset: e.offsetMonths, title: e.label, sub: `${e.offsetMonths} חודשים מהגיוס`, kind: "point" });
   }
-  for (const m of plan.cumulativeMetrics) {
+  plan.cumulativeMetrics.forEach((m, mi) => {
+    const col = softColorFor(m.color, mi); // one colour per metric, shared by all its checkpoints
     for (const c of m.checkpoints) {
       cards.push({
         offset: c.offsetMonths,
         title: `${m.name}: ${c.target} ${m.unit}`,
         sub: `יעד עד ${c.offsetMonths} חודשים מהגיוס`,
         kind: "metric",
+        bg: col.bg,
+        accent: col.accent,
+        border: col.border,
       });
     }
-  }
+  });
   cards.sort((a, b) => a.offset - b.offset);
 
-  const recurring = plan.recurringEvents.map((r) => ({
+  const recurring = plan.recurringEvents.map((r, ri) => ({
     label: r.label,
     interval: r.intervalMonths,
     stop: r.stopMode === "UNTIL_OFFSET" ? `עד חודש ${r.stopOffsetMonths} מהגיוס` : "עד סוף השירות",
     offsets: unrollRecurring(r.intervalMonths, r.stopMode, r.stopOffsetMonths, RECURRING_HORIZON),
+    accent: softColorFor(r.color, ri).accent,
   }));
 
   const maxOffset = Math.max(
@@ -156,11 +166,11 @@ export function buildPlanDiagramSvg(plan: PlanWithEvents): string {
     // rendered identically by browsers and by Chromium's PDF print.
     parts.push(
       // elbow connector: spine → out → card
-      `<path d="M ${CX} ${anchorY} h ${side === "R" ? 46 : -46} L ${innerEdge} ${cardCy}" fill="none" stroke="${C.border}" stroke-width="2"/>`,
-      `<circle cx="${CX}" cy="${anchorY}" r="7" fill="white" stroke="${C.action}" stroke-width="3"/>`,
+      `<path d="M ${CX} ${anchorY} h ${side === "R" ? 46 : -46} L ${innerEdge} ${cardCy}" fill="none" stroke="${card.border ?? C.border}" stroke-width="2"/>`,
+      `<circle cx="${CX}" cy="${anchorY}" r="7" fill="white" stroke="${card.accent ?? C.action}" stroke-width="3"/>`,
       // card
-      `<g filter="url(#soft)"><rect x="${cardX}" y="${cardCy - CARD_H / 2}" width="${CARD_W}" height="${CARD_H}" rx="14" fill="${card.kind === "metric" ? C.mist : "white"}" stroke="${C.border}"/></g>`,
-      iconDisc(card.kind, discX, cardCy),
+      `<g filter="url(#soft)"><rect x="${cardX}" y="${cardCy - CARD_H / 2}" width="${CARD_W}" height="${CARD_H}" rx="14" fill="${card.bg ?? (card.kind === "metric" ? C.mist : "white")}" stroke="${card.border ?? C.border}"/></g>`,
+      iconDisc(card.kind, discX, cardCy, card.accent),
       `<foreignObject x="${cardX + 10}" y="${cardCy - CARD_H / 2 + 6}" width="${CARD_W - 62}" height="${CARD_H - 10}">
          <div xmlns="http://www.w3.org/1999/xhtml" dir="rtl" style="font-family:Rubik,'Noto Sans Hebrew',sans-serif;height:100%;display:flex;flex-direction:column;justify-content:center;overflow:hidden">
            <div style="font-size:14px;font-weight:600;color:${C.ink};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(card.title)}</div>
@@ -184,17 +194,22 @@ export function buildPlanDiagramSvg(plan: PlanWithEvents): string {
     `<text x="${CX - 30}" y="${topTickY - 16}" text-anchor="end" font-size="10" fill="${C.muted}" stroke="white" stroke-width="4" paint-order="stroke">חודשים</text>`,
   );
 
-  // ---- recurring cadence markers ON TOP (amber diamonds — never hidden by
-  // the cards' white connector dots at shared offsets) ----
-  for (const r of recurring) {
+  // ---- recurring cadence markers ON TOP (diamonds — never hidden by the
+  // cards' white connector dots at shared offsets). Each event keeps its own
+  // colour, and several events are fanned out sideways so markers that land on
+  // the same month stay visible side by side. ----
+  const fanStep = 15;
+  const fanBase = -((recurring.length - 1) / 2) * fanStep;
+  recurring.forEach((r, ri) => {
+    const mx = CX + fanBase + ri * fanStep;
     for (const off of r.offsets) {
       if (off > maxOffset) continue;
       const yy = y(off);
       parts.push(
-        `<rect x="${CX - 6}" y="${yy - 6}" width="12" height="12" rx="2.5" transform="rotate(45 ${CX} ${yy})" fill="${C.amber}" stroke="white" stroke-width="2"/>`,
+        `<rect x="${mx - 6}" y="${yy - 6}" width="12" height="12" rx="2.5" transform="rotate(45 ${mx} ${yy})" fill="${r.accent}" stroke="white" stroke-width="2"/>`,
       );
     }
-  }
+  });
 
   // ---- recurring legend (bottom corner, HTML for clean bidi) ----
   if (recurring.length > 0) {
@@ -202,14 +217,13 @@ export function buildPlanDiagramSvg(plan: PlanWithEvents): string {
     parts.push(
       `<foreignObject x="16" y="${H - lh - 14}" width="330" height="${lh}">
          <div xmlns="http://www.w3.org/1999/xhtml" dir="rtl" style="font-family:Rubik,'Noto Sans Hebrew',sans-serif;font-size:12px">
-           <div style="font-weight:600;color:${C.ink}">
-             <span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${C.amber};border:2px solid white;outline:1px solid ${C.border};transform:rotate(45deg);vertical-align:-2px;margin-left:6px"></span>
-             אירועים מחזוריים לאורך המסלול:
-           </div>
+           <div style="font-weight:600;color:${C.ink}">אירועים מחזוריים לאורך המסלול:</div>
            ${recurring
              .map(
                (r) =>
-                 `<div style="color:${C.muted};margin-top:4px">• ${esc(r.label)} — כל ${r.interval} חודשים, ${esc(r.stop)}</div>`,
+                 `<div style="color:${C.muted};margin-top:4px">` +
+                 `<span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${r.accent};border:2px solid white;outline:1px solid ${C.border};transform:rotate(45deg);vertical-align:-2px;margin-left:8px"></span>` +
+                 `${esc(r.label)} — כל ${r.interval} חודשים, ${esc(r.stop)}</div>`,
              )
              .join("")}
          </div>

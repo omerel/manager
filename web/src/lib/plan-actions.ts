@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/authz";
+import { nextColorKey } from "@/lib/palette";
 import type { RecurringStopMode } from "@/generated/prisma/client";
 
 function int(v: FormDataEntryValue | null, fallback = 0): number {
@@ -58,12 +59,14 @@ export async function copyPlan(formData: FormData) {
           intervalMonths: r.intervalMonths,
           stopMode: r.stopMode,
           stopOffsetMonths: r.stopOffsetMonths,
+          color: r.color,
         })),
       },
       cumulativeMetrics: {
         create: src.cumulativeMetrics.map((m) => ({
           name: m.name,
           unit: m.unit,
+          color: m.color,
           checkpoints: { create: m.checkpoints.map((c) => ({ offsetMonths: c.offsetMonths, target: c.target })) },
         })),
       },
@@ -84,8 +87,15 @@ export async function addPointEvent(formData: FormData) {
 export async function addCumulativeMetric(formData: FormData) {
   await requireAdmin();
   const planId = str(formData.get("planId"));
+  // each metric card gets its own soft colour, stable from creation onwards
+  const existing = await prisma.cumulativeMetric.count({ where: { planId } });
   await prisma.cumulativeMetric.create({
-    data: { planId, name: str(formData.get("name")) || "מדד", unit: str(formData.get("unit")) || "יחידות" },
+    data: {
+      planId,
+      name: str(formData.get("name")) || "מדד",
+      unit: str(formData.get("unit")) || "יחידות",
+      color: nextColorKey(existing),
+    },
   });
   revalidatePath(`/plans/${planId}`);
 }
@@ -108,6 +118,9 @@ export async function addRecurringEvent(formData: FormData) {
   const planId = str(formData.get("planId"));
   const stopMode = str(formData.get("stopMode")) as RecurringStopMode;
   const stopOffsetMonths = stopMode === "UNTIL_OFFSET" ? int(formData.get("stopOffsetMonths")) : null;
+  // each recurring event gets its own soft colour so its occurrences are
+  // distinguishable from the other recurring events on the diagram
+  const existing = await prisma.recurringEvent.count({ where: { planId } });
   await prisma.recurringEvent.create({
     data: {
       planId,
@@ -115,6 +128,61 @@ export async function addRecurringEvent(formData: FormData) {
       intervalMonths: Math.max(1, int(formData.get("intervalMonths"), 6)),
       stopMode: stopMode === "UNTIL_OFFSET" ? "UNTIL_OFFSET" : "END_OF_SERVICE",
       stopOffsetMonths,
+      color: nextColorKey(existing),
+    },
+  });
+  revalidatePath(`/plans/${planId}`);
+}
+
+/* --- editing existing plan items (colours stay put: they identify the item) --- */
+
+export async function updatePointEvent(formData: FormData) {
+  await requireAdmin();
+  const planId = str(formData.get("planId"));
+  const label = str(formData.get("label"));
+  if (!label) throw new Error("שם האירוע לא יכול להיות ריק.");
+  await prisma.pointEvent.update({
+    where: { id: str(formData.get("id")) },
+    data: { label, offsetMonths: int(formData.get("offsetMonths")) },
+  });
+  revalidatePath(`/plans/${planId}`);
+}
+
+export async function updateCumulativeMetric(formData: FormData) {
+  await requireAdmin();
+  const planId = str(formData.get("planId"));
+  const name = str(formData.get("name"));
+  if (!name) throw new Error("שם המדד לא יכול להיות ריק.");
+  await prisma.cumulativeMetric.update({
+    where: { id: str(formData.get("id")) },
+    data: { name, unit: str(formData.get("unit")) || "יחידות" },
+  });
+  revalidatePath(`/plans/${planId}`);
+}
+
+export async function updateCheckpoint(formData: FormData) {
+  await requireAdmin();
+  const planId = str(formData.get("planId"));
+  await prisma.metricCheckpoint.update({
+    where: { id: str(formData.get("id")) },
+    data: { offsetMonths: int(formData.get("offsetMonths")), target: num(formData.get("target")) },
+  });
+  revalidatePath(`/plans/${planId}`);
+}
+
+export async function updateRecurringEvent(formData: FormData) {
+  await requireAdmin();
+  const planId = str(formData.get("planId"));
+  const label = str(formData.get("label"));
+  if (!label) throw new Error("שם האירוע לא יכול להיות ריק.");
+  const stopMode = str(formData.get("stopMode")) === "UNTIL_OFFSET" ? "UNTIL_OFFSET" : "END_OF_SERVICE";
+  await prisma.recurringEvent.update({
+    where: { id: str(formData.get("id")) },
+    data: {
+      label,
+      intervalMonths: Math.max(1, int(formData.get("intervalMonths"), 6)),
+      stopMode,
+      stopOffsetMonths: stopMode === "UNTIL_OFFSET" ? int(formData.get("stopOffsetMonths")) : null,
     },
   });
   revalidatePath(`/plans/${planId}`);

@@ -1,6 +1,7 @@
 import { extractFromDocument, resolveProposalItem, discardProposal, type ProposalItem } from "@/lib/extract-actions";
 import { PendingButton } from "@/components/PendingButton";
 import { AutoRefresh } from "@/components/AutoRefresh";
+import { FileDrop } from "@/components/FileDrop";
 import { FileScan } from "lucide-react";
 
 export type ExtractionJobView = { status: "RUNNING" | "SUCCEEDED" | "FAILED"; error: string | null } | null;
@@ -40,12 +41,12 @@ export function ExtractionPanel({
       ) : (
         <form action={extractFromDocument} className="flex flex-wrap items-end gap-2">
           <input type="hidden" name="personId" value={personId} />
-          <input
-            type="file"
+          <FileDrop
             name="document"
             required
-            accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.md,.csv"
-            className="text-sm"
+            accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.md,.csv,.png,.jpg,.jpeg"
+            label="גרור/י מסמך לכאן (PDF / Word / Excel / טקסט / סרוק)"
+            className="min-w-72 flex-1"
           />
           <PendingButton
             pendingLabel="מתחיל ניתוח…"

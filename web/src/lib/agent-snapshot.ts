@@ -8,6 +8,7 @@ import { KIND_LABEL } from "@/lib/org";
 import { STATUS_LABEL } from "@/lib/people";
 import { addMonths } from "@/lib/dates";
 import { resolveUpload } from "@/lib/storage";
+import { extractTextFromFile } from "@/lib/doc-text";
 
 /**
  * Export a read-only snapshot of the career data — clipped to the user's
@@ -55,24 +56,36 @@ export async function exportScopedSnapshot(visibility: Visibility, today: Date):
     .filter((n) => visibility.nodeIds.has(n.id))
     .map((n) => ({ name: n.name, kind: KIND_LABEL[n.kind], path: pathOf(n.id) }));
 
-  // Copy attachment files into the snapshot (files/<person>/<filename>) so the
-  // agent can Read their contents — still a copy, still read-only.
-  const filesRoot = path.join(dir, "files");
-  const attachmentRel = new Map<string, string>(); // attachment id -> relative path
+  // Attachments are converted to TEXT for the agent (see design D1): a
+  // text-only model cannot read binaries, and reading them would otherwise
+  // require giving the agent script execution. The original is copied too,
+  // but `people.json` points at the .txt sidecar.
+  const attachmentRel = new Map<string, string>(); // attachment id -> relative .txt path
   for (const p of people) {
     for (const e of p.evalEntries) {
       for (const a of e.attachments) {
         const abs = resolveUpload(a.storagePath);
         if (!abs) continue;
         const personDir = p.fullName.replace(/[/\\]/g, "_");
-        const rel = path.join("files", personDir, `${a.id.slice(-6)}-${a.filename.replace(/[/\\]/g, "_")}`);
-        await mkdir(path.dirname(path.join(dir, rel)), { recursive: true });
-        await copyFile(abs, path.join(dir, rel));
-        attachmentRel.set(a.id, rel);
+        const safeName = a.filename.replace(/[/\\]/g, "_");
+        const baseRel = path.join("files", personDir, `${a.id.slice(-6)}-${safeName}`);
+        await mkdir(path.dirname(path.join(dir, baseRel)), { recursive: true });
+        await copyFile(abs, path.join(dir, baseRel));
+
+        const { text, method, note } = await extractTextFromFile(abs, a.filename);
+        if (text.trim()) {
+          const textRel = `${baseRel}.txt`;
+          const header = `# ${a.filename}\n# חולץ בשיטת: ${method === "ocr" ? "OCR (מסמך סרוק)" : "טקסט מקורי"}\n\n`;
+          await writeFile(path.join(dir, textRel), header + text, "utf8");
+          attachmentRel.set(a.id, textRel);
+        } else {
+          const textRel = `${baseRel}.txt`;
+          await writeFile(path.join(dir, textRel), `# ${a.filename}\n# ${note ?? "לא ניתן לחלץ טקסט מקובץ זה."}\n`, "utf8");
+          attachmentRel.set(a.id, textRel);
+        }
       }
     }
   }
-  void filesRoot;
 
   // People with plan, progress, gaps, and evaluation text
   const peopleOut = people.map((p) => {
@@ -144,7 +157,7 @@ export async function exportScopedSnapshot(visibility: Visibility, today: Date):
       "",
       "- `org.json` — המסגרות שבראות המשתמש (מרכז ▸ תחום ▸ מדור ▸ צוות).",
       "- `people.json` — האנשים שבראות: פרטים, תכנית קריירה, התקדמות, פערים, חוות דעת.",
-      "- `files/` — עותקי הקבצים המצורפים לחוות הדעת; הנתיב של כל קובץ מופיע בשדה `נתיב` ב-people.json. קרא אותם כשהשאלה נוגעת לתוכנם.",
+      "- `files/` — תוכן הקבצים המצורפים לחוות הדעת, כטקסט מחולץ (.txt). הנתיב מופיע בשדה `נתיב` ב-people.json — קרא אותו כשהשאלה נוגעת לתוכן הקובץ. אין צורך (ואין אפשרות) להריץ סקריפטים: הטקסט כבר חולץ.",
       "",
       "הנתונים כוללים רק את מה שהמשתמש המפעיל רשאי לראות.",
     ].join("\n"),

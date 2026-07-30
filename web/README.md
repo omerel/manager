@@ -88,7 +88,10 @@ populate the system.
 **Operational notes:**
 - `/healthz` (public) returns 200 when app+DB are healthy — wire it to
   liveness/readiness probes.
-- `/app/uploads` must be a persistent volume.
+- **Uploads must live on a mounted persistent volume (PVC), not on the pod's own
+  filesystem** — otherwise photos and attached documents vanish when the pod is
+  replaced or crashes. The image defaults to `UPLOADS_DIR=/app/uploads`; mount a
+  PVC there, or mount it elsewhere and set `UPLOADS_DIR` to the mount path.
 - Keep `APP_SECRET` stable across upgrades.
 - Single instance only (in-process scheduler + background jobs).
 - OpenShift restricted SCC (arbitrary UID) is supported — all writable paths

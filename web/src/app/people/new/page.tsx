@@ -8,6 +8,7 @@ import { PersonFormFields } from "@/components/PersonFormFields";
 import { createPerson } from "@/lib/person-actions";
 import { extractForNewPerson } from "@/lib/extract-actions";
 import { PendingButton } from "@/components/PendingButton";
+import { FileDrop } from "@/components/FileDrop";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import { effectiveStatus, staleError, STALE_MS } from "@/lib/jobs";
 import { redirect } from "next/navigation";
@@ -81,7 +82,7 @@ export default async function NewPersonPage({
               </div>
             ) : (
               <form action={extractForNewPerson} className="flex flex-wrap items-end gap-2">
-                <input type="file" name="document" required accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.md,.csv" className="text-sm" />
+                <FileDrop name="document" required accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.md,.csv,.png,.jpg,.jpeg" label="גרור/י מסמך לכאן (PDF / Word / Excel / טקסט / סרוק)" className="min-w-72 flex-1" />
                 <PendingButton
                   pendingLabel="מתחיל ניתוח…"
                   className="rounded-md border border-border px-4 py-1.5 text-sm hover:bg-slate-50"
@@ -133,7 +134,9 @@ export default async function NewPersonPage({
               defs={defs}
               valueByDef={valueByDef}
               core={{
-                fullName: dv["fullName"] ?? "",
+                firstName: dv["firstName"] ?? "",
+                lastName: dv["lastName"] ?? "",
+                birthDate: draftDate(dv["birthDate"]) ?? null,
                 recruitmentDate: draftDate(dv["recruitmentDate"]) ?? null,
                 endOfServiceDate: draftDate(dv["endOfServiceDate"]) ?? null,
               }}
@@ -143,7 +146,7 @@ export default async function NewPersonPage({
               <label htmlFor="photo" className="mb-1 text-sm text-muted">
                 תמונת פרופיל (אופציונלי)
               </label>
-              <input id="photo" name="photo" type="file" accept="image/*" className="text-sm" />
+              <FileDrop name="photo" accept="image/*" label="גרור/י תמונה לכאן או לחץ/י לבחירה" />
             </div>
 
             <div className="flex gap-2">

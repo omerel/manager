@@ -1,8 +1,11 @@
 import type { PersonFieldDef } from "@/generated/prisma/client";
 import { toDateInput } from "@/lib/dates";
+import { ageFromBirthDate } from "@/lib/person-name";
 
 type CoreDefaults = {
-  fullName?: string;
+  firstName?: string;
+  lastName?: string;
+  birthDate?: Date | null;
   recruitmentDate?: Date | null;
   status?: string;
   endOfServiceDate?: Date | null;
@@ -27,8 +30,22 @@ export function PersonFormFields({
 }) {
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-      <Labeled label="שם מלא">
-        <input name="fullName" required defaultValue={core?.fullName ?? ""} className={inputCls} />
+      <Labeled label="שם פרטי">
+        <input name="firstName" required defaultValue={core?.firstName ?? ""} className={inputCls} />
+      </Labeled>
+      <Labeled label="שם משפחה">
+        <input name="lastName" required defaultValue={core?.lastName ?? ""} className={inputCls} />
+      </Labeled>
+      <Labeled label="תאריך לידה">
+        <input type="date" name="birthDate" required defaultValue={toDateInput(core?.birthDate)} className={inputCls} />
+      </Labeled>
+      <Labeled label="גיל (מחושב מתאריך הלידה)">
+        <input
+          value={ageFromBirthDate(core?.birthDate)}
+          readOnly
+          disabled
+          className={`${inputCls} bg-stone-100 text-muted`}
+        />
       </Labeled>
       <Labeled label="תאריך גיוס (עוגן התכנית)">
         <input type="date" name="recruitmentDate" required defaultValue={toDateInput(core?.recruitmentDate)} className={inputCls} />

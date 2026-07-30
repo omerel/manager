@@ -8,6 +8,9 @@ services:
     ports:
       - "3000:3000"
     volumes:
+      # Uploaded photos/documents/logo. Must be a real volume (here) or a PVC (OpenShift) —
+      # the container's own filesystem does not survive a restart. Mounting elsewhere?
+      # set UPLOADS_DIR in app.env to the mount path.
       - manager-uploads:/app/uploads
     restart: unless-stopped
     healthcheck:
