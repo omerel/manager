@@ -2,9 +2,10 @@ import { NextResponse, type NextRequest } from "next/server";
 import { marked } from "marked";
 import { prisma } from "@/lib/prisma";
 import { getSessionUserOrNull } from "@/lib/session";
+import { getSystemName } from "@/lib/branding";
 
 /** Wrap rendered markdown in a printable RTL page. */
-function htmlShell(title: string, bodyHtml: string, dateStr: string): string {
+function htmlShell(title: string, bodyHtml: string, dateStr: string, systemName: string): string {
   return `<!doctype html>
 <html lang="he" dir="rtl">
 <head>
@@ -21,7 +22,7 @@ function htmlShell(title: string, bodyHtml: string, dateStr: string): string {
 </style>
 </head>
 <body>
-<div class="meta">${title} · הופק ${dateStr} · מערכת ניהול קריירה</div>
+<div class="meta">${title} · הופק ${dateStr} · ${systemName}</div>
 ${bodyHtml}
 </body>
 </html>`;
@@ -53,7 +54,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
 
   // PDF: markdown → HTML → print via headless chromium (real RTL rendering)
   const bodyHtml = await marked.parse(run.output, { gfm: true });
-  const html = htmlShell(base, bodyHtml, dateStr);
+  const html = htmlShell(base, bodyHtml, dateStr, await getSystemName());
   const { chromium } = await import("playwright");
   const browser = await chromium.launch();
   try {

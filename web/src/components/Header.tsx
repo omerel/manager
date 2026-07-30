@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getSessionUserOrNull } from "@/lib/session";
 import { logout } from "@/lib/auth-actions";
 import { devSwitchEnabled } from "@/lib/auth";
-import { getLogoPath } from "@/lib/branding";
+import { getLogoPath, getSystemName } from "@/lib/branding";
 import { AppLogo } from "@/components/Logo";
 import { NavLinks, type NavItem } from "@/components/NavLinks";
 import { AdminMenu } from "@/components/AdminMenu";
@@ -23,7 +23,7 @@ function roleLabel(role: string): string {
 }
 
 export async function Header() {
-  const [current, customLogo] = await Promise.all([getSessionUserOrNull(), getLogoPath()]);
+  const [current, customLogo, systemName] = await Promise.all([getSessionUserOrNull(), getLogoPath(), getSystemName()]);
 
   // signed out (e.g. on /login): brand strip only
   if (!current) {
@@ -31,7 +31,7 @@ export async function Header() {
       <header className="bg-brand-900">
         <div className="mx-auto flex max-w-5xl items-center gap-3 px-6 py-3">
           <AppLogo customLogo={!!customLogo} size={30} />
-          <span className="text-lg font-bold text-white">ניהול קריירה</span>
+          <span className="text-lg font-bold text-white">{systemName}</span>
         </div>
       </header>
     );
@@ -46,7 +46,7 @@ export async function Header() {
         <div className="flex items-center gap-5">
           <Link href="/" className="flex items-center gap-2.5">
             <AppLogo customLogo={!!customLogo} size={32} />
-            <span className="text-lg font-bold text-white">ניהול קריירה</span>
+            <span className="text-lg font-bold text-white">{systemName}</span>
           </Link>
           <NavLinks items={NAV_ITEMS} />
         </div>

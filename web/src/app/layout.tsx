@@ -2,16 +2,20 @@ import type { Metadata } from "next";
 import { Rubik } from "next/font/google";
 import "./globals.css";
 import { Header } from "@/components/Header";
+import { getSystemName } from "@/lib/branding";
 
 const rubik = Rubik({
   variable: "--font-rubik",
   subsets: ["hebrew", "latin"],
 });
 
-export const metadata: Metadata = {
-  title: "ניהול קריירה",
-  description: "מערכת לניהול קריירה של חוקרים, מהנדסים ומפתחים",
-};
+// Evaluated per request — a rename shows in the browser tab without a rebuild.
+export async function generateMetadata(): Promise<Metadata> {
+  return {
+    title: await getSystemName(),
+    description: "מערכת לניהול קריירה של חוקרים, מהנדסים ומפתחים",
+  };
+}
 
 export default function RootLayout({
   children,

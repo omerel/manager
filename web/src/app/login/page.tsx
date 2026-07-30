@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { getSessionUserOrNull } from "@/lib/session";
-import { getLogoPath } from "@/lib/branding";
+import { getLogoPath, getSystemName } from "@/lib/branding";
 import { login } from "@/lib/auth-actions";
 import { PendingButton } from "@/components/PendingButton";
 import { AppLogo } from "@/components/Logo";
@@ -9,13 +9,13 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   const { error } = await searchParams;
   // already signed in → straight to the dashboard
   if (await getSessionUserOrNull()) redirect("/");
-  const customLogo = !!(await getLogoPath());
+  const [customLogo, systemName] = await Promise.all([getLogoPath().then(Boolean), getSystemName()]);
 
   return (
     <div className="mx-auto mt-16 w-full max-w-sm space-y-6">
       <div className="flex flex-col items-center text-center">
         <AppLogo customLogo={customLogo} size={64} />
-        <h1 className="mt-3 text-2xl font-bold text-brand-900">ניהול קריירה</h1>
+        <h1 className="mt-3 text-2xl font-bold text-brand-900">{systemName}</h1>
         <p className="mt-1 text-muted">התחברות למערכת</p>
       </div>
 
