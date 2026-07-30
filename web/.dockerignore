@@ -1,0 +1,16 @@
+node_modules
+.next
+uploads
+.home
+.pw-browsers
+.env
+.env.*
+!.env.example
+src/generated
+test-*.mjs
+Dockerfile
+.dockerignore
+.claude
+.agents
+.windsurf
+.gemini

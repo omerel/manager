@@ -19,14 +19,19 @@ const RULE_INSTRUCTIONS = `אתה מריץ "חוק" של מערכת ניהול �
 
 החוק להרצה:`;
 
+// The current Node binary. Kept behind indirection so Turbopack's child-process
+// tracer doesn't try to statically bundle the (runtime-generated) target script.
+const NODE_BIN: string = process.execPath;
+
 /** Run a Node script (a pinned SCRIPT realization) inside the snapshot dir. */
 function runNodeScript(scriptSource: string, cwd: string, todayIso: string): Promise<{ output: string }> {
   return new Promise((resolve, reject) => {
     const file = path.join(cwd, "__rule-script.mjs");
+    const args: string[] = ["--no-warnings", file];
     writeFile(file, scriptSource, "utf8").then(() => {
       execFile(
-        "node",
-        ["--no-warnings", file],
+        NODE_BIN,
+        args,
         { cwd, timeout: SCRIPT_TIMEOUT_MS, maxBuffer: 16 * 1024 * 1024, env: { ...process.env, TODAY: todayIso } },
         (err, stdout, stderr) => {
           if (err) reject(new Error((stderr || err.message).slice(0, 2000)));

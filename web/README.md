@@ -59,6 +59,45 @@ user-switcher (impersonation). Leave it unset in any real deployment.
 | `npm run db:seed` | re-seed demo data                             |
 | `npm run dev`     | dev server                                    |
 
+## Deployment (air-gapped, Docker / OpenShift)
+
+The app ships as a self-contained Ubuntu 24.04 image — Node, the built app,
+Prisma CLI, Chromium + Hebrew fonts (PDF), and the Claude CLI are all baked in.
+**Zero network fetches at runtime.**
+
+```bash
+# On a connected machine — builds the full delivery package into ./dist:
+sudo deploy/build-dist.sh
+# dist/ contains the image gzipped + split into 100MB parts, a loader script,
+# an env template and a Hebrew install guide. Carry dist/ into the air-gapped
+# network and follow dist/README.md (load-image.sh → app.env → run).
+```
+
+The app listens on **0.0.0.0** — reachable from remote machines on the mapped port.
+
+**Every container start runs the same self-init sequence:** wait for
+`DATABASE_URL` → `prisma migrate deploy` (empty DB → full schema; older DB →
+only new migrations) → **bootstrap admin** (only when the user table is empty,
+from `ADMIN_USERNAME`/`ADMIN_PASSWORD`/`ADMIN_EMAIL`) → serve. First boot and
+version upgrades are the same path; failures exit loudly.
+
+**First-run checklist:** log in as the bootstrap admin → change its password →
+(optional) הגדרות מערכת → import a configuration bundle or a full backup to
+populate the system.
+
+**Operational notes:**
+- `/healthz` (public) returns 200 when app+DB are healthy — wire it to
+  liveness/readiness probes.
+- `/app/uploads` must be a persistent volume.
+- Keep `APP_SECRET` stable across upgrades.
+- Single instance only (in-process scheduler + background jobs).
+- OpenShift restricted SCC (arbitrary UID) is supported — all writable paths
+  are group-0 writable, including the CLI home.
+- The Claude CLI is baked in and agent runs inherit the container env — if your
+  CLI setup needs anything, provide it to the pod as you do elsewhere; to use
+  your org's own CLI build, bind-mount it over `/usr/bin/claude`.
+- Serving through a route/proxy? set `ALLOWED_ORIGINS` to its hostname(s).
+
 ## Not yet built (next phases)
 
 Career plans (point / cumulative / recurring events), progress recording, evaluations &

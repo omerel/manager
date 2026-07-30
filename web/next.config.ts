@@ -1,8 +1,13 @@
 import type { NextConfig } from "next";
 
-// Allow access through the Tailscale hostname (dev resources + Server Action CSRF check),
-// so the app and its mutations work when opened via the proxied host, not just localhost.
-const PROXY_HOSTS = ["srv-elgrably.tail3b0882.ts.net"];
+// Allow access through proxied hostnames (dev resources + Server Action CSRF check).
+// In production (e.g. an OpenShift route), add hostnames via ALLOWED_ORIGINS
+// (comma-separated) — the config file is evaluated at server start, so runtime
+// env works.
+const PROXY_HOSTS = [
+  "srv-elgrably.tail3b0882.ts.net",
+  ...(process.env.ALLOWED_ORIGINS?.split(",").map((s) => s.trim()).filter(Boolean) ?? []),
+];
 
 const nextConfig: NextConfig = {
   allowedDevOrigins: PROXY_HOSTS,
