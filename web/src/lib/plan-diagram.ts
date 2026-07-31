@@ -271,40 +271,52 @@ export function buildPlanDiagramSvg(plan: PlanWithEvents): string {
   if (recurring.length > 0) {
     const clipped =
       firstCard != null && recurring.some((r) => r.offsets.some((o) => !inCardSpan(o)));
-    const lh = 26 + recurring.length * 20 + (clipped ? 20 : 0);
+    // Fixed row metrics, because the swatches beside each row are drawn as SVG
+    // and have to line up with text laid out by the browser.
+    const ROW_H = 20;
+    const lh = ROW_H * (1 + recurring.length) + (clipped ? 20 : 0) + 6;
     const legendX = 16;
     const legendW = 330; // narrower would wrap a row and push the closing note out of the box
     const legendY = H - lh - 14;
-    const badgeCx = legendX + legendW - 12; // sits over the header's reserved padding, clear of the גיוס chip
+    const markX = legendX + legendW - 11; // leading edge in RTL, clear of the גיוס chip
 
-    // The recurring icon belongs here: point events and checkpoints carry their
-    // icon on their card, but a recurrence is only ever a diamond on the spine,
-    // so the legend is the one place its symbol can appear.
-    //
-    // Drawn as a real SVG element rather than nested inside the foreignObject:
-    // Chromium's PDF print resolves an inline <svg> in a flex container to an
-    // enormous intrinsic size, which on the printed page blew the badge up to
-    // fill the corner and pushed the legend text out entirely. On screen it
-    // looked fine, so this only shows up in the export.
+    // Every graphic in the legend is a real SVG element; the foreignObject
+    // carries text only. HTML inside a foreignObject cannot be relied on to
+    // draw: a nested <svg> ballooned to fill the corner in Chromium's PDF
+    // print, and a rotated <span> swatch simply did not render in another
+    // browser. Text is what foreignObject is genuinely good at (Hebrew bidi),
+    // so that is all it is asked to do.
+    const rowCy = (i: number) => legendY + ROW_H * (1 + i) + ROW_H / 2;
+
+    // category badge, on the header line
     parts.push(
-      `<g><circle cx="${badgeCx}" cy="${legendY + 8}" r="9" fill="${C.deep}"/>` +
-        `<g transform="translate(${badgeCx - 6.2},${legendY + 8 - 6.2}) scale(0.52)">${ICON.repeat}</g></g>`,
+      `<g><circle cx="${markX - 1}" cy="${legendY + ROW_H / 2}" r="9" fill="${C.deep}"/>` +
+        `<g transform="translate(${markX - 7.2},${legendY + ROW_H / 2 - 6.2}) scale(0.52)">${ICON.repeat}</g></g>`,
     );
+    // one diamond per event, in its own colour — the key that maps a legend row
+    // to its markers on the spine
+    recurring.forEach((r, i) => {
+      const cy = rowCy(i);
+      parts.push(
+        `<rect x="${markX - 5}" y="${cy - 5}" width="10" height="10" rx="2" ` +
+          `transform="rotate(45 ${markX} ${cy})" fill="${r.accent}" stroke="white" stroke-width="2"/>`,
+      );
+    });
+
     parts.push(
       `<foreignObject x="${legendX}" y="${legendY}" width="${legendW}" height="${lh}">
          <div xmlns="http://www.w3.org/1999/xhtml" dir="rtl" style="font-family:Rubik,'Noto Sans Hebrew',sans-serif;font-size:12px">
-           <div style="font-weight:600;color:${C.ink};padding-right:24px">אירועים מחזוריים לאורך המסלול:</div>
+           <div style="font-weight:600;color:${C.ink};height:${ROW_H}px;line-height:${ROW_H}px;padding-right:22px">אירועים מחזוריים לאורך המסלול:</div>
            ${recurring
              .map(
                (r) =>
-                 `<div style="color:${C.muted};margin-top:4px">` +
-                 `<span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${r.accent};border:2px solid white;outline:1px solid ${C.border};transform:rotate(45deg);vertical-align:-2px;margin-left:8px"></span>` +
+                 `<div style="color:${C.muted};height:${ROW_H}px;line-height:${ROW_H}px;padding-right:22px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">` +
                  `${esc(r.label)} — כל ${r.interval} חודשים, ${esc(r.stop)}</div>`,
              )
              .join("")}
            ${
              clipped
-               ? `<div style="color:${C.muted};margin-top:6px;font-size:11px">הסימונים מוצגים בטווח האירועים: חודש ${firstCard} עד ${lastCard}.</div>`
+               ? `<div style="color:${C.muted};height:20px;line-height:20px;font-size:11px">הסימונים מוצגים בטווח האירועים: חודש ${firstCard} עד ${lastCard}.</div>`
                : ""
            }
          </div>
