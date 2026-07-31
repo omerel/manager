@@ -1,6 +1,5 @@
 import { prisma } from "@/lib/prisma";
 import { addMonths, monthsBetween } from "@/lib/dates";
-import type { RecurringStopMode } from "@/generated/prisma/client";
 
 export async function getPersonFull(id: string) {
   return prisma.person.findUnique({
@@ -50,24 +49,24 @@ export type RecurrenceRow = {
   filledByEntryId: string | null;
 };
 
-/** Unroll a recurring event for a specific person, clipping at end-of-service. */
+/**
+ * Unroll a recurring event for a specific person.
+ *
+ * The plan's stop month decides the schedule — identically for everyone
+ * assigned to it. A known end-of-service date then clips it, for every
+ * recurring event: someone who has left should not keep accruing overdue
+ * occurrences. That clip is a fact about the person, not an authoring choice.
+ */
 export function unrollForPerson(
   intervalMonths: number,
-  stopMode: RecurringStopMode,
   stopOffsetMonths: number | null,
   recruitmentDate: Date,
   endOfServiceDate: Date | null,
-  previewHorizonMonths = 36,
 ): number[] {
-  if (intervalMonths <= 0) return [];
-  let cap: number;
-  if (stopMode === "UNTIL_OFFSET") {
-    cap = stopOffsetMonths ?? 0;
-  } else if (endOfServiceDate) {
-    cap = monthsBetween(recruitmentDate, endOfServiceDate);
-  } else {
-    cap = previewHorizonMonths;
-  }
+  if (intervalMonths <= 0 || stopOffsetMonths == null) return [];
+  const cap = endOfServiceDate
+    ? Math.min(stopOffsetMonths, monthsBetween(recruitmentDate, endOfServiceDate))
+    : stopOffsetMonths;
   const out: number[] = [];
   for (let m = intervalMonths; m <= cap; m += intervalMonths) out.push(m);
   return out;
@@ -113,7 +112,7 @@ export function buildPersonTimeline(person: PersonFull) {
   }
 
   const recurrences: RecurrenceRow[] = (plan?.recurringEvents ?? []).flatMap((r) =>
-    unrollForPerson(r.intervalMonths, r.stopMode, r.stopOffsetMonths, rec, person.endOfServiceDate).map((off) => ({
+    unrollForPerson(r.intervalMonths, r.stopOffsetMonths, rec, person.endOfServiceDate).map((off) => ({
       recurringEventId: r.id,
       label: r.label,
       offsetMonths: off,

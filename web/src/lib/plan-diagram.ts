@@ -14,7 +14,6 @@ const CX = W / 2;
 const CARD_W = 292;
 const CARD_H = 58;
 const ROW_GAP = 74;
-const RECURRING_HORIZON = 36;
 
 // brand palette (matches globals.css tokens)
 const C = {
@@ -90,24 +89,61 @@ export function buildPlanDiagramSvg(plan: PlanWithEvents): string {
   const recurring = plan.recurringEvents.map((r, ri) => ({
     label: r.label,
     interval: r.intervalMonths,
-    stop: r.stopMode === "UNTIL_OFFSET" ? `עד חודש ${r.stopOffsetMonths} מהגיוס` : "עד סוף השירות",
-    offsets: unrollRecurring(r.intervalMonths, r.stopMode, r.stopOffsetMonths, RECURRING_HORIZON),
+    stop: `עד חודש ${r.stopOffsetMonths} מהגיוס`,
+    offsets: unrollRecurring(r.intervalMonths, r.stopOffsetMonths),
     accent: softColorFor(r.color, ri).accent,
   }));
 
-  const maxOffset = Math.max(
-    1,
-    ...cards.map((c) => c.offset),
-    ...recurring.flatMap((r) => r.offsets),
-  );
+  // ---- event-ordinal axis ----
+  // Positions come from the *sequence* of months in which something happens,
+  // not from calendar distance: a plan running to 72 months must not be twice
+  // as tall as one running to 36. Each slot is labelled with its month; only
+  // the jump from recruitment to the first one is marked, since the labels
+  // already tell the reader the spacing is not proportional.
+  const cardsByMonth = new Map<number, EventCard[]>();
+  for (const c of cards) {
+    const list = cardsByMonth.get(c.offset) ?? [];
+    list.push(c);
+    cardsByMonth.set(c.offset, list);
+  }
 
-  // ---- vertical scale ----
-  const perSide = Math.ceil(cards.length / 2);
-  const H = Math.max(520, 210 + Math.max(maxOffset * 24, perSide * ROW_GAP + 120));
+  // Recurring cadence is drawn only across the span the plan's concrete events
+  // occupy — first point/checkpoint to last. A recurrence that runs for years
+  // past the final milestone would otherwise stretch the drawing with markers
+  // that say nothing about the path itself. A plan with no cards at all is the
+  // exception: then the recurrences are the whole story, so all are shown.
+  const cardMonths = cards.map((c) => c.offset).filter((m) => m > 0);
+  const firstCard = cardMonths.length ? Math.min(...cardMonths) : null;
+  const lastCard = cardMonths.length ? Math.max(...cardMonths) : null;
+  const inCardSpan = (m: number) => firstCard == null || (m >= firstCard && m <= lastCard!);
+  const shownRecurrences = recurring.flatMap((r) => r.offsets).filter(inCardSpan);
+
+  const slotMonths = [...new Set([...cardMonths, ...shownRecurrences])]
+    .filter((m) => m > 0) // month 0 coincides with the recruitment chip itself
+    .sort((a, b) => a - b);
+
+  const BREAK_GAP = 52; // room between the recruitment chip and the first slot
+  const TOP_ZONE = 190; // title, arrowhead and breathing room above the last slot
+  // a slot only grows when more than two cards share a month, which is rare;
+  // in the normal case every slot is one row and the ticks are evenly spaced
+  const rowsIn = (m: number) => Math.max(1, Math.ceil((cardsByMonth.get(m)?.length ?? 0) / 2));
+  const slotH = (m: number) => rowsIn(m) * ROW_GAP;
+
+  const stack = slotMonths.reduce((s, m) => s + slotH(m), 0);
+  const H = Math.max(520, 96 + BREAK_GAP + stack + TOP_ZONE);
   const baseY = H - 96; // recruitment
   const tipY = 96; // arrowhead tip
   const shaftTop = tipY + 46;
-  const y = (off: number) => baseY - (off / (maxOffset + 1.5)) * (baseY - shaftTop - 10);
+
+  // lay the slots out upward from the base, and remember each one's centre
+  const slotY = new Map<number, number>();
+  let cursor = baseY - BREAK_GAP;
+  for (const m of slotMonths) {
+    const h = slotH(m);
+    cursor -= h;
+    slotY.set(m, cursor + h / 2);
+  }
+  const y = (off: number) => slotY.get(off) ?? baseY;
 
   const parts: string[] = [];
   // NOTE: no direction="rtl" on the root — it inverts text-anchor semantics.
@@ -123,7 +159,7 @@ export function buildPlanDiagramSvg(plan: PlanWithEvents): string {
     `<rect width="${W}" height="${H}" fill="white"/>`,
     // title
     `<text x="${CX}" y="44" text-anchor="middle" font-size="22" font-weight="700" fill="${C.deep}">${esc(plan.name)}</text>`,
-    `<text x="${CX}" y="66" text-anchor="middle" font-size="12" fill="${C.muted}">מסלול קריירה · ציר יחסי לתאריך הגיוס</text>`,
+    `<text x="${CX}" y="66" text-anchor="middle" font-size="12" fill="${C.muted}">מסלול קריירה · ציר לפי אירועים, במספר חודשים מהגיוס (המרווחים אינם פרופורציוניים)</text>`,
   );
 
   // ---- spine arrow ----
@@ -139,28 +175,45 @@ export function buildPlanDiagramSvg(plan: PlanWithEvents): string {
     `<text x="${CX - 10}" y="${baseY + 23}" text-anchor="middle" font-size="16" font-weight="700" fill="white">גיוס</text>`,
   );
 
-  // ---- month tick lines on the shaft (labels drawn later, above connectors) ----
-  for (let off = 0; off <= maxOffset; off += 6) {
-    const yy = y(off);
-    parts.push(
-      `<line x1="${CX - 22}" y1="${yy}" x2="${CX + 22}" y2="${yy}" stroke="white" stroke-width="1.5" opacity="0.8"/>`,
-    );
+  // ---- slot ticks, and the one break marker ----
+  // Only the jump from recruitment to the first event month is marked. A notch
+  // between every pair of slots was noise: with labelled ticks it repeated on
+  // nearly every boundary and read as texture rather than information.
+  const breakMark = (yy: number, w: number) =>
+    `<path d="M ${CX - w} ${yy + 5} l ${w * 0.8} -10 M ${CX - w * 0.1} ${yy + 5} l ${w * 0.8} -10" ` +
+    `fill="none" stroke="white" stroke-width="3" stroke-linecap="round" opacity="0.95"/>`;
+
+  if (slotMonths.length > 0) {
+    parts.push(breakMark(baseY - BREAK_GAP / 2 - 4, 20));
+    for (const m of slotMonths) {
+      const yy = y(m);
+      parts.push(
+        `<line x1="${CX - 22}" y1="${yy}" x2="${CX + 22}" y2="${yy}" stroke="white" stroke-width="1.5" opacity="0.8"/>`,
+      );
+    }
   }
 
-  // ---- event cards, alternating sides, collision-nudged ----
+  // ---- event cards: one row per slot, alternating sides within the slot ----
   // Card-internal layout is identical on both sides (Hebrew reads right→left):
   // icon disc at the card's RIGHT edge, text right-aligned beside it.
-  const lastY: Record<"R" | "L", number> = { R: baseY - 26, L: baseY - 26 };
-  cards.forEach((card, i) => {
-    const side: "R" | "L" = i % 2 === 0 ? "R" : "L";
-    const anchorY = y(card.offset);
-    const cardCy = Math.min(anchorY, lastY[side] - ROW_GAP);
-    lastY[side] = cardCy;
+  const placed = slotMonths.flatMap((m) => {
+    const list = cardsByMonth.get(m) ?? [];
+    const centre = y(m);
+    const h = slotH(m);
+    return list.map((card, i) => ({
+      card,
+      side: (i % 2 === 0 ? "R" : "L") as "R" | "L",
+      anchorY: centre,
+      // rows only appear when >2 cards share a month; the first row sits at the
+      // bottom of the slot, so a single card lands exactly on its tick
+      cardCy: centre + h / 2 - ROW_GAP / 2 - Math.floor(i / 2) * ROW_GAP,
+    }));
+  });
 
+  placed.forEach(({ card, side, anchorY, cardCy }) => {
     const cardX = side === "R" ? CX + 80 : CX - 80 - CARD_W;
     const innerEdge = side === "R" ? cardX : cardX + CARD_W;
     const discX = cardX + CARD_W - 30;
-    const textX = cardX + CARD_W - 56;
 
     // text as real HTML (foreignObject): proper Hebrew bidi + ellipsis,
     // rendered identically by browsers and by Chromium's PDF print.
@@ -180,14 +233,14 @@ export function buildPlanDiagramSvg(plan: PlanWithEvents): string {
     );
   });
 
-  // ---- month tick labels, on top of connectors, with a white halo so
-  // crossing lines never obscure them (0 skipped — the base chip says it) ----
+  // ---- month labels, on top of connectors, with a white halo so crossing
+  // lines never obscure them (0 skipped — the base chip says it) ----
   let topTickY = baseY;
-  for (let off = 6; off <= maxOffset; off += 6) {
-    const yy = y(off);
+  for (const m of slotMonths) {
+    const yy = y(m);
     topTickY = yy;
     parts.push(
-      `<text x="${CX - 30}" y="${yy + 4}" text-anchor="end" font-size="11" fill="${C.muted}" stroke="white" stroke-width="4" paint-order="stroke">${off}</text>`,
+      `<text x="${CX - 30}" y="${yy + 4}" text-anchor="end" font-size="11" fill="${C.muted}" stroke="white" stroke-width="4" paint-order="stroke">${m}</text>`,
     );
   }
   parts.push(
@@ -203,7 +256,7 @@ export function buildPlanDiagramSvg(plan: PlanWithEvents): string {
   recurring.forEach((r, ri) => {
     const mx = CX + fanBase + ri * fanStep;
     for (const off of r.offsets) {
-      if (off > maxOffset) continue;
+      if (!slotY.has(off)) continue; // every occurrence has a slot; guards month 0
       const yy = y(off);
       parts.push(
         `<rect x="${mx - 6}" y="${yy - 6}" width="12" height="12" rx="2.5" transform="rotate(45 ${mx} ${yy})" fill="${r.accent}" stroke="white" stroke-width="2"/>`,
@@ -212,8 +265,13 @@ export function buildPlanDiagramSvg(plan: PlanWithEvents): string {
   });
 
   // ---- recurring legend (bottom corner, HTML for clean bidi) ----
+  // Each entry states the event's real definition; when the drawing shows only
+  // part of it, the legend says so rather than letting the diagram imply that
+  // the recurrence ends where the markers do.
   if (recurring.length > 0) {
-    const lh = 26 + recurring.length * 20;
+    const clipped =
+      firstCard != null && recurring.some((r) => r.offsets.some((o) => !inCardSpan(o)));
+    const lh = 26 + recurring.length * 20 + (clipped ? 20 : 0);
     parts.push(
       `<foreignObject x="16" y="${H - lh - 14}" width="330" height="${lh}">
          <div xmlns="http://www.w3.org/1999/xhtml" dir="rtl" style="font-family:Rubik,'Noto Sans Hebrew',sans-serif;font-size:12px">
@@ -226,6 +284,11 @@ export function buildPlanDiagramSvg(plan: PlanWithEvents): string {
                  `${esc(r.label)} — כל ${r.interval} חודשים, ${esc(r.stop)}</div>`,
              )
              .join("")}
+           ${
+             clipped
+               ? `<div style="color:${C.muted};margin-top:6px;font-size:11px">הסימונים באיור מוצגים בין האירוע הראשון (חודש ${firstCard}) לאחרון (חודש ${lastCard}).</div>`
+               : ""
+           }
          </div>
        </foreignObject>`,
     );

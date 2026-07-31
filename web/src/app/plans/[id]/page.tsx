@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getPlan, formatOffset, unrollRecurring, type PlanWithEvents } from "@/lib/plans";
+import { getPlan, formatOffset, unrollRecurring, DEFAULT_STOP_MONTHS, type PlanWithEvents } from "@/lib/plans";
 import { buildPlanDiagramSvg } from "@/lib/plan-diagram";
 import { Route, FileDown } from "lucide-react";
 import { isAdmin } from "@/lib/authz";
@@ -19,8 +19,6 @@ import {
 } from "@/lib/plan-actions";
 import { InlineEdit } from "@/components/InlineEdit";
 import { softColorFor } from "@/lib/palette";
-
-const RECURRING_PREVIEW_HORIZON = 36;
 
 export default async function PlanDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -265,17 +263,22 @@ function RecurringSection({ plan, admin }: { plan: PlanWithEvents; admin: boolea
         <ul className="space-y-2">
           {plan.recurringEvents.map((r, ri) => {
             const c = softColorFor(r.color, ri);
-            const stop =
-              r.stopMode === "UNTIL_OFFSET" ? `עד ${formatOffset(r.stopOffsetMonths ?? 0)}` : "עד סוף השירות";
-            const preview = unrollRecurring(r.intervalMonths, r.stopMode, r.stopOffsetMonths, RECURRING_PREVIEW_HORIZON);
+            const stop = r.stopOffsetMonths == null ? null : `עד ${formatOffset(r.stopOffsetMonths)}`;
+            const preview = unrollRecurring(r.intervalMonths, r.stopOffsetMonths);
             const summary = (
               <span>
                 <span className="font-medium" style={{ color: c.accent }}>
                   {r.label}
                 </span>{" "}
-                <span className="text-sm text-muted">
-                  · כל {r.intervalMonths} חודשים · {stop} · מופעים: {preview.map((o) => `+${o}`).join(", ") || "—"}
-                </span>
+                {stop ? (
+                  <span className="text-sm text-muted">
+                    · כל {r.intervalMonths} חודשים · {stop} · מופעים: {preview.map((o) => `+${o}`).join(", ") || "—"}
+                  </span>
+                ) : (
+                  <span className="text-sm font-medium text-red-700">
+                    · כל {r.intervalMonths} חודשים · חסר חודש עצירה — לא ייווצרו מופעים. יש לערוך ולהשלים.
+                  </span>
+                )}
               </span>
             );
             return (
@@ -290,25 +293,12 @@ function RecurringSection({ plan, admin }: { plan: PlanWithEvents; admin: boolea
                     <input type="hidden" name="id" value={r.id} />
                     <TextField name={`rlabel-${r.id}`} field="label" label="שם האירוע" defaultValue={r.label} required />
                     <NumField name={`rint-${r.id}`} field="intervalMonths" label="כל כמה חודשים" defaultValue={r.intervalMonths} />
-                    <div className="flex flex-col">
-                      <label htmlFor={`rstop-${r.id}`} className="mb-1 text-sm text-muted">
-                        תנאי עצירה
-                      </label>
-                      <select
-                        id={`rstop-${r.id}`}
-                        name="stopMode"
-                        defaultValue={r.stopMode}
-                        className="rounded-md border border-border px-2 py-1.5 text-sm"
-                      >
-                        <option value="END_OF_SERVICE">עד סוף השירות</option>
-                        <option value="UNTIL_OFFSET">עד חודש מסוים</option>
-                      </select>
-                    </div>
                     <NumField
                       name={`rstopoff-${r.id}`}
                       field="stopOffsetMonths"
-                      label="עד חודש (אם נבחר)"
-                      defaultValue={r.stopOffsetMonths ?? 24}
+                      label="עד חודש מהגיוס"
+                      defaultValue={r.stopOffsetMonths ?? DEFAULT_STOP_MONTHS}
+                      required
                     />
                   </InlineEdit>
                 ) : (
@@ -325,14 +315,7 @@ function RecurringSection({ plan, admin }: { plan: PlanWithEvents; admin: boolea
           <input type="hidden" name="planId" value={plan.id} />
           <TextField name="label" label="שם האירוע" placeholder="חוות דעת" />
           <NumField name="intervalMonths" label="כל כמה חודשים" defaultValue={6} />
-          <div className="flex flex-col">
-            <label className="mb-1 text-sm text-muted">תנאי עצירה</label>
-            <select name="stopMode" defaultValue="END_OF_SERVICE" className="rounded-md border border-border px-2 py-1.5 text-sm">
-              <option value="END_OF_SERVICE">עד סוף השירות</option>
-              <option value="UNTIL_OFFSET">עד חודש מסוים</option>
-            </select>
-          </div>
-          <NumField name="stopOffsetMonths" label="עד חודש (אם נבחר)" defaultValue={24} />
+          <NumField name="stopOffsetMonths" label="עד חודש מהגיוס" defaultValue={DEFAULT_STOP_MONTHS} required />
           <AddButton>הוסף כרוני</AddButton>
         </form>
       )}
@@ -378,12 +361,14 @@ function NumField({
   label,
   defaultValue,
   step,
+  required,
 }: {
   name: string;
   field?: string;
   label: string;
   defaultValue: number;
   step?: string;
+  required?: boolean;
 }) {
   return (
     <div className="flex flex-col">
@@ -396,6 +381,7 @@ function NumField({
         type="number"
         step={step ?? "1"}
         defaultValue={defaultValue}
+        required={required}
         className="w-32 rounded-md border border-border px-3 py-1.5 text-sm"
       />
     </div>

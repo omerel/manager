@@ -1,5 +1,4 @@
 import { prisma } from "@/lib/prisma";
-import type { RecurringStopMode } from "@/generated/prisma/client";
 import type { Visibility } from "@/lib/access";
 
 /** For each template, how many people within the user's scope are assigned a copy of it. */
@@ -16,6 +15,13 @@ export async function countAssignmentsByTemplate(visibility: Visibility): Promis
   return counts;
 }
 
+/**
+ * Default stop month offered for a new recurring event. A realistic service
+ * span, chosen deliberately: the previous behaviour substituted a 36-month
+ * preview constant when no stop was given, which silently became policy.
+ */
+export const DEFAULT_STOP_MONTHS = 72;
+
 /** Human label for a month offset relative to recruitment. */
 export function formatOffset(months: number): string {
   if (months === 0) return "מרגע הגיוס";
@@ -24,20 +30,14 @@ export function formatOffset(months: number): string {
 
 /**
  * Unroll a recurring event into occurrence offsets (months from recruitment).
- * UNTIL_OFFSET stops at the relative cap; END_OF_SERVICE has no template-level
- * bound, so a preview horizon is used (real per-person unrolling clips at the
- * person's end-of-service — a later phase).
+ * The cap always comes from the plan. A missing cap yields nothing rather than
+ * a default: substituting a horizon here is what once turned a preview constant
+ * into the rule the gap engine measured against, invisibly.
  */
-export function unrollRecurring(
-  intervalMonths: number,
-  stopMode: RecurringStopMode,
-  stopOffsetMonths: number | null,
-  previewHorizonMonths = 36,
-): number[] {
-  if (intervalMonths <= 0) return [];
-  const cap = stopMode === "UNTIL_OFFSET" ? stopOffsetMonths ?? 0 : previewHorizonMonths;
+export function unrollRecurring(intervalMonths: number, stopOffsetMonths: number | null): number[] {
+  if (intervalMonths <= 0 || stopOffsetMonths == null) return [];
   const out: number[] = [];
-  for (let m = intervalMonths; m <= cap; m += intervalMonths) out.push(m);
+  for (let m = intervalMonths; m <= stopOffsetMonths; m += intervalMonths) out.push(m);
   return out;
 }
 

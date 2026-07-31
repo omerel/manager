@@ -240,8 +240,9 @@ export async function assignPlan(formData: FormData) {
         create: tpl.recurringEvents.map((r) => ({
           label: r.label,
           intervalMonths: r.intervalMonths,
-          stopMode: r.stopMode,
+          stopMode: "UNTIL_OFFSET",
           stopOffsetMonths: r.stopOffsetMonths,
+          color: r.color, // keep the person's copy coloured like the template
         })),
       },
       cumulativeMetrics: {

@@ -1,6 +1,5 @@
 import { addMonths } from "@/lib/dates";
 import { unrollForPerson } from "@/lib/person-view";
-import type { RecurringStopMode } from "@/generated/prisma/client";
 
 /** Minimal shape needed to compute gaps (satisfied by the full person query). */
 export type PersonForGaps = {
@@ -12,7 +11,7 @@ export type PersonForGaps = {
   assignedPlan: {
     pointEvents: { id: string; label: string; offsetMonths: number }[];
     cumulativeMetrics: { id: string; name: string; unit: string; checkpoints: { offsetMonths: number; target: number }[] }[];
-    recurringEvents: { id: string; label: string; intervalMonths: number; stopMode: RecurringStopMode; stopOffsetMonths: number | null }[];
+    recurringEvents: { id: string; label: string; intervalMonths: number; stopOffsetMonths: number | null }[];
   } | null;
 };
 
@@ -127,7 +126,7 @@ export function computePersonGaps(person: PersonForGaps, today: Date): { items: 
   }
 
   for (const r of plan.recurringEvents) {
-    const offsets = unrollForPerson(r.intervalMonths, r.stopMode, r.stopOffsetMonths, rec, person.endOfServiceDate);
+    const offsets = unrollForPerson(r.intervalMonths, r.stopOffsetMonths, rec, person.endOfServiceDate);
     const filled = filledByEvent.get(r.id) ?? new Set<number>();
     // A past-due occurrence with no filed content → 🔴.
     const overdue = offsets.filter((o) => !filled.has(o) && addMonths(rec, o).getTime() < today.getTime());

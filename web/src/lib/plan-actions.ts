@@ -5,7 +5,6 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/authz";
 import { nextColorKey } from "@/lib/palette";
-import type { RecurringStopMode } from "@/generated/prisma/client";
 
 function int(v: FormDataEntryValue | null, fallback = 0): number {
   const n = Number(String(v ?? "").trim());
@@ -57,7 +56,7 @@ export async function copyPlan(formData: FormData) {
         create: src.recurringEvents.map((r) => ({
           label: r.label,
           intervalMonths: r.intervalMonths,
-          stopMode: r.stopMode,
+          stopMode: "UNTIL_OFFSET",
           stopOffsetMonths: r.stopOffsetMonths,
           color: r.color,
         })),
@@ -113,11 +112,22 @@ export async function addCheckpoint(formData: FormData) {
   revalidatePath(`/plans/${planId}`);
 }
 
+/**
+ * A recurring event always stops at an explicit month offset. "Until end of
+ * service" is not an authoring option: that date is unknown for most people,
+ * and a plan must schedule everyone assigned to it identically.
+ */
+function stopOffsetFrom(formData: FormData): number {
+  const raw = str(formData.get("stopOffsetMonths"));
+  const months = int(formData.get("stopOffsetMonths"), 0);
+  if (!raw || months <= 0) throw new Error("יש להזין עד איזה חודש מהגיוס האירוע חוזר.");
+  return months;
+}
+
 export async function addRecurringEvent(formData: FormData) {
   await requireAdmin();
   const planId = str(formData.get("planId"));
-  const stopMode = str(formData.get("stopMode")) as RecurringStopMode;
-  const stopOffsetMonths = stopMode === "UNTIL_OFFSET" ? int(formData.get("stopOffsetMonths")) : null;
+  const stopOffsetMonths = stopOffsetFrom(formData);
   // each recurring event gets its own soft colour so its occurrences are
   // distinguishable from the other recurring events on the diagram
   const existing = await prisma.recurringEvent.count({ where: { planId } });
@@ -126,7 +136,7 @@ export async function addRecurringEvent(formData: FormData) {
       planId,
       label: str(formData.get("label")) || "אירוע כרוני",
       intervalMonths: Math.max(1, int(formData.get("intervalMonths"), 6)),
-      stopMode: stopMode === "UNTIL_OFFSET" ? "UNTIL_OFFSET" : "END_OF_SERVICE",
+      stopMode: "UNTIL_OFFSET",
       stopOffsetMonths,
       color: nextColorKey(existing),
     },
@@ -175,14 +185,13 @@ export async function updateRecurringEvent(formData: FormData) {
   const planId = str(formData.get("planId"));
   const label = str(formData.get("label"));
   if (!label) throw new Error("שם האירוע לא יכול להיות ריק.");
-  const stopMode = str(formData.get("stopMode")) === "UNTIL_OFFSET" ? "UNTIL_OFFSET" : "END_OF_SERVICE";
   await prisma.recurringEvent.update({
     where: { id: str(formData.get("id")) },
     data: {
       label,
       intervalMonths: Math.max(1, int(formData.get("intervalMonths"), 6)),
-      stopMode,
-      stopOffsetMonths: stopMode === "UNTIL_OFFSET" ? int(formData.get("stopOffsetMonths")) : null,
+      stopMode: "UNTIL_OFFSET",
+      stopOffsetMonths: stopOffsetFrom(formData),
     },
   });
   revalidatePath(`/plans/${planId}`);
