@@ -78,7 +78,7 @@ A career plan SHALL support **recurring events** (אירוע כרוני): an eve
 
 ### Requirement: Visual career-path diagram with PDF export
 
-The plan detail page SHALL present the plan as a schematic career-path diagram: a large upward arrow from recruitment (base) toward end of service (tip), with **recruitment at the base and, above it, one evenly spaced tick per month in which the plan has an event** — point events and metric checkpoints as labeled, iconed cards alternating sides of the arrow, and recurring events as cadence markers with a legend. Each tick SHALL be labeled with its month offset, and a single break marker SHALL mark the jump from recruitment to the first event month. Recurring cadence markers SHALL be drawn only across the span occupied by the plan's point events and metric checkpoints — from the earliest to the latest — while the legend continues to state each recurring event's real definition. The diagram's height SHALL depend on how many event months are drawn, not on how far into the future the plan extends. The user SHALL be able to export the diagram as a PDF suitable for presentations.
+The plan detail page SHALL present the plan as a schematic career-path diagram: a large upward arrow from recruitment (base) toward end of service (tip), with **recruitment at the base and, above it, one evenly spaced tick per month in which the plan has an event** — point events and metric checkpoints as labeled, iconed cards alternating sides of the arrow, and recurring events as cadence markers with a legend carrying the recurring icon and, per event, its own colour marker matching the markers on the arrow. Each tick SHALL be labeled with its month offset, and a single break marker SHALL mark the jump from recruitment to the first event month. Recurring cadence markers SHALL be drawn only across the span occupied by the plan's point events and metric checkpoints — from the earliest to the latest — while the legend continues to state each recurring event's real definition. The diagram's height SHALL depend on how many event months are drawn, not on how far into the future the plan extends. The user SHALL be able to export the diagram as a PDF suitable for presentations.
 
 #### Scenario: Viewing the diagram
 
@@ -109,6 +109,11 @@ The plan detail page SHALL present the plan as a schematic career-path diagram: 
 
 - **WHEN** the user clicks the PDF export button
 - **THEN** a PDF of the same diagram downloads, rendered locally (no external services)
+
+#### Scenario: The export matches what was on screen
+
+- **WHEN** the diagram is exported, or viewed in a different browser
+- **THEN** every element of it renders — including the legend's icon and per-event colour markers — with no part missing, resized or displaced relative to the on-screen view
 
 #### Scenario: Air-gap safety
 
