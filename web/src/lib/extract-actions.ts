@@ -11,7 +11,7 @@ import { getSessionUser } from "@/lib/session";
 import { computeVisibility } from "@/lib/access";
 import { stageUpload, materializeDocument } from "@/lib/doc-extract";
 import { runExtraction } from "@/lib/agent";
-import { saveUpload } from "@/lib/storage";
+import { saveUpload, deleteUpload } from "@/lib/storage";
 import { runInBackground, hasLiveRun } from "@/lib/jobs";
 import { composeFullName } from "@/lib/person-name";
 
@@ -34,9 +34,14 @@ export async function setProfilePhoto(formData: FormData) {
   const file = formData.get("photo");
   if (!(file instanceof File) || file.size === 0) throw new Error("לא נבחרה תמונה.");
   if (!file.type.startsWith("image/")) throw new Error("יש להעלות קובץ תמונה.");
+
+  const previous = await prisma.person.findUnique({ where: { id: personId }, select: { photoPath: true } });
   const { storagePath } = await saveUpload(personId, file);
   await prisma.person.update({ where: { id: personId }, data: { photoPath: storagePath } });
+  await deleteUpload(previous?.photoPath); // the replaced file is unreferenced from here on
+
   revalidatePath(`/people/${personId}`);
+  revalidatePath("/people"); // the avatar in the list must change too
   redirect(`/people/${personId}?edit=1`);
 }
 

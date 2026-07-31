@@ -9,12 +9,12 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   const { error } = await searchParams;
   // already signed in → straight to the dashboard
   if (await getSessionUserOrNull()) redirect("/");
-  const [customLogo, systemName] = await Promise.all([getLogoPath().then(Boolean), getSystemName()]);
+  const [logoPath, systemName] = await Promise.all([getLogoPath(), getSystemName()]);
 
   return (
     <div className="mx-auto mt-16 w-full max-w-sm space-y-6">
       <div className="flex flex-col items-center text-center">
-        <AppLogo customLogo={customLogo} size={64} />
+        <AppLogo logoPath={logoPath} size={64} />
         <h1 className="mt-3 text-2xl font-bold text-brand-900">{systemName}</h1>
         <p className="mt-1 text-muted">התחברות למערכת</p>
       </div>

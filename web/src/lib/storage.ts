@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from "fs/promises";
+import { mkdir, writeFile, unlink } from "fs/promises";
 import { createReadStream, existsSync } from "fs";
 import path from "path";
 import { randomBytes } from "crypto";
@@ -19,6 +19,24 @@ export async function saveUpload(personId: string, file: File): Promise<{ storag
   const buf = Buffer.from(await file.arrayBuffer());
   await writeFile(abs, buf);
   return { storagePath: rel, size: buf.length };
+}
+
+export { versionOf } from "@/lib/upload-version";
+
+/**
+ * Remove a stored file when it is replaced. Best-effort: the database is the
+ * source of truth, and a file left behind is harmless — failing the upload
+ * because a stale file could not be unlinked would not be.
+ */
+export async function deleteUpload(storagePath: string | null | undefined): Promise<void> {
+  if (!storagePath) return;
+  const abs = resolveUpload(storagePath); // also enforces the uploads-root guard
+  if (!abs) return;
+  try {
+    await unlink(abs);
+  } catch {
+    /* ignore — see doc comment */
+  }
 }
 
 /** Absolute path for a stored file, or null if missing/outside the root. */

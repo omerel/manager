@@ -1,5 +1,7 @@
 /* eslint-disable @next/next/no-img-element */
 
+import { versionedUrl } from "@/lib/upload-version";
+
 /**
  * Default logomark: "growth steps" — three ascending stems with leaves,
  * drawn in brand greens. Crisp at any size; the revert target for custom logos.
@@ -28,12 +30,16 @@ export function LogoMark({ size = 32, className }: { size?: number; className?: 
   );
 }
 
-/** The system logo: custom upload when configured, otherwise the default mark. */
-export function AppLogo({ customLogo, size = 32 }: { customLogo: boolean; size?: number }) {
-  if (customLogo) {
+/**
+ * The system logo: custom upload when configured, otherwise the default mark.
+ * Takes the stored path rather than a boolean so the URL can carry the file's
+ * version — a replaced logo must not be served from a stale cache.
+ */
+export function AppLogo({ logoPath, size = 32 }: { logoPath: string | null; size?: number }) {
+  if (logoPath) {
     return (
       <img
-        src="/logo"
+        src={versionedUrl("/logo", logoPath)}
         alt="לוגו"
         style={{ height: size, width: "auto", maxWidth: size * 3 }}
         className="rounded-md object-contain"

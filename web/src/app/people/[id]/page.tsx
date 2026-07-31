@@ -18,6 +18,7 @@ import { FileDrop } from "@/components/FileDrop";
 import { PhotoLightbox } from "@/components/PhotoLightbox";
 import { setProfilePhoto, type ProposalItem } from "@/lib/extract-actions";
 import { effectiveStatus, staleError, STALE_MS } from "@/lib/jobs";
+import { versionedUrl } from "@/lib/upload-version";
 import {
   updatePerson,
   assignPlan,
@@ -100,7 +101,7 @@ export default async function PersonPage({
           <div className="flex items-center gap-3">
             {person.photoPath ? (
               <PhotoLightbox
-                src={`/photo/${person.id}`}
+                src={versionedUrl(`/photo/${person.id}`, person.photoPath)}
                 alt={person.fullName}
                 className="h-14 w-14 rounded-full border border-border object-cover"
               />

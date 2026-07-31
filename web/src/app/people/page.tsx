@@ -3,6 +3,7 @@ import { computeVisibility } from "@/lib/access";
 import { getSessionUser } from "@/lib/session";
 import { isAdmin } from "@/lib/authz";
 import { getVisiblePeople, STATUS_LABEL, formatDate } from "@/lib/people";
+import { versionedUrl } from "@/lib/upload-version";
 
 export default async function PeoplePage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
   const { q } = await searchParams;
@@ -77,7 +78,7 @@ export default async function PeoplePage({ searchParams }: { searchParams: Promi
                     <Link href={`/people/${p.id}`} className="flex items-center gap-2.5 font-medium text-brand-800 hover:underline">
                       {p.photoPath ? (
                         // eslint-disable-next-line @next/next/no-img-element
-                        <img src={`/photo/${p.id}`} alt="" className="h-8 w-8 rounded-full border border-border object-cover" />
+                        <img src={versionedUrl(`/photo/${p.id}`, p.photoPath)} alt="" className="h-8 w-8 rounded-full border border-border object-cover" />
                       ) : (
                         <span className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-100 text-sm font-bold text-brand-800">
                           {p.fullName.slice(0, 1)}

@@ -23,14 +23,14 @@ function roleLabel(role: string): string {
 }
 
 export async function Header() {
-  const [current, customLogo, systemName] = await Promise.all([getSessionUserOrNull(), getLogoPath(), getSystemName()]);
+  const [current, logoPath, systemName] = await Promise.all([getSessionUserOrNull(), getLogoPath(), getSystemName()]);
 
   // signed out (e.g. on /login): brand strip only
   if (!current) {
     return (
       <header className="bg-brand-900">
         <div className="mx-auto flex max-w-5xl items-center gap-3 px-6 py-3">
-          <AppLogo customLogo={!!customLogo} size={30} />
+          <AppLogo logoPath={logoPath} size={30} />
           <span className="text-lg font-bold text-white">{systemName}</span>
         </div>
       </header>
@@ -45,7 +45,7 @@ export async function Header() {
       <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-6 py-2.5">
         <div className="flex items-center gap-5">
           <Link href="/" className="flex items-center gap-2.5">
-            <AppLogo customLogo={!!customLogo} size={32} />
+            <AppLogo logoPath={logoPath} size={32} />
             <span className="text-lg font-bold text-white">{systemName}</span>
           </Link>
           <NavLinks items={NAV_ITEMS} />

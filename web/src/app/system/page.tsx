@@ -15,7 +15,8 @@ export default async function SystemSettingsPage({
   const { imported, importError } = await searchParams;
   const me = await getSessionUser();
   if (me.role !== "ADMIN") redirect("/");
-  const customLogo = !!(await getLogoPath());
+  const logoPath = await getLogoPath();
+  const customLogo = !!logoPath;
   const systemName = await getSystemName();
 
   return (
@@ -50,7 +51,7 @@ export default async function SystemSettingsPage({
           <p className="w-full text-xs text-muted">{`ניקוי השדה מחזיר לברירת המחדל "${DEFAULT_SYSTEM_NAME}".`}</p>
         </form>
         <div className="flex items-center gap-4">
-          <AppLogo customLogo={customLogo} size={48} />
+          <AppLogo logoPath={logoPath} size={48} />
           <div className="text-sm text-muted">
             {customLogo ? "לוגו מותאם-אישית פעיל." : "הלוגו המובנה (ברירת מחדל) פעיל."}
             <br />
