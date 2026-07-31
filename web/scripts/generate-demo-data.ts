@@ -141,7 +141,12 @@ const PLANS: PlanSpec[] = [
       { label: "קורס פיקוד בכיר", offsetMonths: 48 },
       { label: "סיום המסלול", offsetMonths: 72 },
     ],
-    metrics: [{ name: "שעות ניהול", unit: "שעות", checkpoints: [{ offsetMonths: 24, target: 150 }, { offsetMonths: 60, target: 500 }] }],
+    metrics: [
+      { name: "שעות ניהול", unit: "שעות", checkpoints: [{ offsetMonths: 24, target: 150 }, { offsetMonths: 60, target: 500 }] },
+      // deliberately shared with the technologist track: grant hours accrue
+      // whichever path a person is on, so a transfer has something to carry
+      { name: "שעות גמול השתלמות", unit: "שעות", checkpoints: [{ offsetMonths: 24, target: 200 }, { offsetMonths: 60, target: 600 }] },
+    ],
     recurring: [
       { label: "חוות דעת תקופתית", intervalMonths: 6, stopOffsetMonths: 72 },
       { label: "שיחת משוב מפקד", intervalMonths: 9, stopOffsetMonths: 72 },
@@ -337,6 +342,19 @@ async function main() {
 
     const elapsed = Math.max(0, Math.round((TODAY.getTime() - p.recruitmentDate.getTime()) / (30.44 * 864e5)));
 
+    // The assignment record. Most people were on this plan from the start, so
+    // their waiver line is 0 and everything is measured; transfers below get a
+    // real line and a previous assignment behind them.
+    await prisma.planAssignment.create({
+      data: {
+        personId: p.id,
+        planId: copy.id,
+        templateName: tpl.name,
+        assignedAt: p.recruitmentDate,
+        waiverOffsetMonths: 0,
+      },
+    });
+
     /* ---- 5. progress, arranged so the dashboard is not monochrome ---- */
     // "exemplary" and "approaching" complete everything already due; the
     // difference between them is only what happens to fall due next.
@@ -398,6 +416,117 @@ async function main() {
     }
   }
   console.log(`שויכו תכניות: ${created.filter((p) => p.planId).length} · ללא תכנית: ${created.filter((p) => !p.planId).length}`);
+
+  /* ---- 4b. transfers: a slice of people moved plans partway through ---- */
+  // Without these the transfer feature has no data to exercise it: no ended
+  // assignment, no waived items, no carried value.
+  const movable = created.filter((p) => p.planId && p.profile !== "unplanned").slice(0, 6);
+  let transfers = 0;
+  for (const p of movable) {
+    if (!chance(0.6)) continue;
+    const elapsed = Math.max(0, Math.round((TODAY.getTime() - p.recruitmentDate.getTime()) / (30.44 * 864e5)));
+    if (elapsed < 18) continue; // needs enough history behind them to be interesting
+    // prefer a target sharing a metric with the source: a transfer that can
+    // carry nothing exercises only half the feature
+    const others = allTemplates.filter((t) => t.id !== p.tpl!.id);
+    const sourceMetrics = new Set(p.tpl!.cumulativeMetrics.map((m) => `${m.name}|${m.unit}`));
+    const overlapping = others.filter((t) => t.cumulativeMetrics.some((m) => sourceMetrics.has(`${m.name}|${m.unit}`)));
+    const target = pick(overlapping.length ? overlapping : others);
+    if (!target) continue;
+
+    // end the current assignment
+    await prisma.planAssignment.updateMany({
+      where: { personId: p.id, planId: p.planId!, endedAt: null },
+      data: { endedAt: TODAY, reason: pick(["מעבר לתפקיד ניהולי", "שינוי התמחות", "מעבר בין מדורים", "בקשת העובד"]) },
+    });
+
+    // the new copy, as the application builds it
+    const copy = await prisma.careerPlan.create({
+      data: {
+        name: target.name,
+        isTemplate: false,
+        sourceTemplateId: target.id,
+        pointEvents: { create: target.pointEvents.map((e) => ({ label: e.label, offsetMonths: e.offsetMonths })) },
+        recurringEvents: {
+          create: target.recurringEvents.map((r) => ({
+            label: r.label,
+            intervalMonths: r.intervalMonths,
+            stopMode: "UNTIL_OFFSET" as const,
+            stopOffsetMonths: r.stopOffsetMonths ?? 72,
+            color: r.color,
+          })),
+        },
+        cumulativeMetrics: {
+          create: target.cumulativeMetrics.map((m) => ({
+            name: m.name,
+            unit: m.unit,
+            color: m.color,
+            checkpoints: { create: m.checkpoints.map((c) => ({ offsetMonths: c.offsetMonths, target: c.target })) },
+          })),
+        },
+      },
+      include: { pointEvents: true, cumulativeMetrics: true },
+    });
+    const assignment = await prisma.planAssignment.create({
+      data: {
+        personId: p.id,
+        planId: copy.id,
+        templateName: target.name,
+        assignedAt: TODAY,
+        waiverOffsetMonths: elapsed, // everything before the move was never asked of them
+      },
+    });
+    await prisma.person.update({ where: { id: p.id }, data: { assignedPlanId: copy.id } });
+
+    // Carry every accumulated value that has a counterpart, so the next
+    // checkpoint is not measured from zero. Checking only the first reading
+    // would skip a match whenever the person happens to have more than one.
+    const oldReadings = await prisma.metricReading.findMany({
+      where: { personId: p.id, metric: { planId: p.planId! } },
+      include: { metric: true },
+    });
+    for (const r of oldReadings) {
+      const toMetric = copy.cumulativeMetrics.find((m) => m.name === r.metric.name && m.unit === r.metric.unit);
+      if (!toMetric) continue;
+      await prisma.metricReading.create({
+        data: { personId: p.id, metricId: toMetric.id, value: r.value, asOf: r.asOf },
+      });
+      await prisma.planCarryOver.create({
+        data: {
+          assignmentId: assignment.id,
+          kind: "METRIC",
+          fromPlanName: p.tpl!.name,
+          fromLabel: `${r.metric.name} (${r.metric.unit})`,
+          toMetricId: toMetric.id,
+          value: r.value,
+          originalDate: r.asOf,
+        },
+      });
+    }
+
+    // and every completed milestone the new plan repeats
+    const oldDone = await prisma.pointProgress.findMany({
+      where: { personId: p.id, pointEvent: { planId: p.planId! } },
+      include: { pointEvent: true },
+    });
+    for (const d of oldDone) {
+      const toPoint = copy.pointEvents.find((e) => e.label === d.pointEvent.label);
+      if (!toPoint) continue;
+      await prisma.pointProgress.create({ data: { personId: p.id, pointEventId: toPoint.id, doneOn: d.doneOn } });
+      await prisma.planCarryOver.create({
+        data: {
+          assignmentId: assignment.id,
+          kind: "POINT",
+          fromPlanName: p.tpl!.name,
+          fromLabel: d.pointEvent.label,
+          toPointEventId: toPoint.id,
+          originalDate: d.doneOn,
+        },
+      });
+    }
+    transfers++;
+  }
+  console.log(`מעברים בין מסלולים: ${transfers}`);
 
   /* ---- 6. managers over parts of the tree, for judging scoped views ---- */
   const pw = hashPassword("password");

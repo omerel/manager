@@ -1,4 +1,12 @@
 import { prisma } from "@/lib/prisma";
+import {
+  NO_WAIVERS,
+  isCheckpointWaived,
+  isOccurrenceWaived,
+  isPointWaived,
+  type WaiverContext,
+  type WaiverOverride,
+} from "@/lib/waivers";
 import { addMonths, monthsBetween } from "@/lib/dates";
 
 export async function getPersonFull(id: string) {
@@ -15,10 +23,35 @@ export async function getPersonFull(id: string) {
           pointEvents: { orderBy: { offsetMonths: "asc" } },
           cumulativeMetrics: { include: { checkpoints: { orderBy: { offsetMonths: "asc" } } }, orderBy: { name: "asc" } },
           recurringEvents: { orderBy: { intervalMonths: "asc" } },
+          assignment: { include: { waivers: true, carryOvers: true } },
+        },
+      },
+      // ended assignments: the person's history, never measured
+      planAssignments: {
+        where: { endedAt: { not: null } },
+        orderBy: { assignedAt: "desc" },
+        include: {
+          carryOvers: true,
+          plan: {
+            include: {
+              pointEvents: { orderBy: { offsetMonths: "asc" } },
+              cumulativeMetrics: { include: { checkpoints: { orderBy: { offsetMonths: "asc" } } } },
+              recurringEvents: { orderBy: { intervalMonths: "asc" } },
+            },
+          },
         },
       },
     },
   });
+}
+
+/** The waiver rule in force for this person's active assignment. */
+export function waiverContextOf(person: {
+  assignedPlan?: { assignment?: { waiverOffsetMonths: number; waivers: WaiverOverride[] } | null } | null;
+}): WaiverContext {
+  const a = person.assignedPlan?.assignment;
+  if (!a) return NO_WAIVERS;
+  return { line: a.waiverOffsetMonths, overrides: a.waivers };
 }
 
 export type PersonFull = NonNullable<Awaited<ReturnType<typeof getPersonFull>>>;
@@ -31,15 +64,20 @@ export type PointRow = {
   done: boolean;
   doneOn: Date | null;
   note: string | null;
+  /** predates the assignment (or overridden): shown, marked, never counted */
+  waived: boolean;
+  /** credited from a previous plan rather than done under this one */
+  carriedFrom: string | null;
 };
 export type MetricRow = {
   id: string;
   name: string;
   unit: string;
-  checkpoints: { offsetMonths: number; target: number; dueDate: Date }[];
+  checkpoints: { offsetMonths: number; target: number; dueDate: Date; waived: boolean }[];
   value: number | null;
   asOf: Date | null;
   note: string | null;
+  carriedFrom: string | null;
 };
 export type RecurrenceRow = {
   recurringEventId: string;
@@ -47,6 +85,7 @@ export type RecurrenceRow = {
   offsetMonths: number;
   dueDate: Date;
   filledByEntryId: string | null;
+  waived: boolean;
 };
 
 /**
@@ -75,8 +114,13 @@ export function unrollForPerson(
 export function buildPersonTimeline(person: PersonFull) {
   const plan = person.assignedPlan;
   const rec = person.recruitmentDate;
+  const ctx = waiverContextOf(person);
   const doneByEvent = new Map(person.pointProgress.map((p) => [p.pointEventId, p]));
   const readingByMetric = new Map(person.metricReadings.map((r) => [r.metricId, r]));
+  // provenance for anything credited from a previous plan
+  const carried = plan?.assignment?.carryOvers ?? [];
+  const carriedPoint = new Map(carried.filter((c) => c.toPointEventId).map((c) => [c.toPointEventId!, c.fromPlanName]));
+  const carriedMetric = new Map(carried.filter((c) => c.toMetricId).map((c) => [c.toMetricId!, c.fromPlanName]));
 
   const points: PointRow[] = (plan?.pointEvents ?? []).map((e) => {
     const prog = doneByEvent.get(e.id);
@@ -88,6 +132,8 @@ export function buildPersonTimeline(person: PersonFull) {
       done: !!prog,
       doneOn: prog?.doneOn ?? null,
       note: prog?.note ?? null,
+      waived: isPointWaived(ctx, e.id, e.offsetMonths),
+      carriedFrom: carriedPoint.get(e.id) ?? null,
     };
   });
 
@@ -97,10 +143,16 @@ export function buildPersonTimeline(person: PersonFull) {
       id: m.id,
       name: m.name,
       unit: m.unit,
-      checkpoints: m.checkpoints.map((c) => ({ offsetMonths: c.offsetMonths, target: c.target, dueDate: addMonths(rec, c.offsetMonths) })),
+      checkpoints: m.checkpoints.map((c) => ({
+        offsetMonths: c.offsetMonths,
+        target: c.target,
+        dueDate: addMonths(rec, c.offsetMonths),
+        waived: isCheckpointWaived(ctx, c.id, c.offsetMonths),
+      })),
       value: reading?.value ?? null,
       asOf: reading?.asOf ?? null,
       note: reading?.note ?? null,
+      carriedFrom: carriedMetric.get(m.id) ?? null,
     };
   });
 
@@ -118,6 +170,7 @@ export function buildPersonTimeline(person: PersonFull) {
       offsetMonths: off,
       dueDate: addMonths(rec, off),
       filledByEntryId: entryBySlot.get(`${r.id}:${off}`) ?? null,
+      waived: isOccurrenceWaived(ctx, r.id, off),
     })),
   );
 

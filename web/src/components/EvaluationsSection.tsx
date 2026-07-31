@@ -23,6 +23,9 @@ export function EvaluationsSection({
   const slots = [...recurrences].sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime());
   const seenFutureOf = new Set<string>();
   const visibleSlots = slots.filter((s) => {
+    // waived occurrences predate the assignment: shown only when something was
+    // actually filed against them, never as an outstanding slot
+    if (s.waived) return !!s.filledByEntryId;
     if (s.filledByEntryId || s.dueDate.getTime() <= today.getTime()) return true;
     if (!seenFutureOf.has(s.recurringEventId)) {
       seenFutureOf.add(s.recurringEventId);
@@ -44,7 +47,7 @@ export function EvaluationsSection({
           <ul className="space-y-2">
             {visibleSlots.map((s) => {
               const entry = s.filledByEntryId ? entryById.get(s.filledByEntryId) : undefined;
-              const pastDue = !entry && s.dueDate.getTime() < today.getTime();
+              const pastDue = !entry && !s.waived && s.dueDate.getTime() < today.getTime();
               return (
                 <li
                   key={`${s.recurringEventId}:${s.offsetMonths}`}
@@ -54,10 +57,11 @@ export function EvaluationsSection({
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <span>
-                      {entry ? "✅" : pastDue ? "🔴" : "⬜"}{" "}
+                      {entry ? "✅" : pastDue ? "🔴" : s.waived ? "⊘" : "⬜"}{" "}
                       <span className="font-medium">{s.label}</span>{" "}
                       <span className="text-muted">· יעד {fmtDate(s.dueDate)}</span>
                       {pastDue && <span className="text-red-700"> · טרם מולא</span>}
+                      {s.waived && <span className="text-muted"> · פטור</span>}
                     </span>
                     {editing && entry && (
                       <form action={deleteEntry}>

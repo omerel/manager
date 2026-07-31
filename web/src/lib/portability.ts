@@ -65,6 +65,10 @@ export async function dumpTables(scope: BundleScope): Promise<Tables> {
     tables.evalEntry = await prisma.evalEntry.findMany();
     tables.attachment = await prisma.attachment.findMany();
     tables.rule = await prisma.rule.findMany();
+    // plan history: ended assignments and the decisions taken when they changed
+    tables.planAssignment = await prisma.planAssignment.findMany();
+    tables.planWaiver = await prisma.planWaiver.findMany();
+    tables.planCarryOver = await prisma.planCarryOver.findMany();
   }
   return tables;
 }
@@ -134,6 +138,9 @@ async function restoreDb(bundle: Bundle): Promise<Record<string, number>> {
     prisma.personDraft.deleteMany(),
     prisma.extractionProposal.deleteMany(),
     // reverse dependency order
+    prisma.planCarryOver.deleteMany(),
+    prisma.planWaiver.deleteMany(),
+    prisma.planAssignment.deleteMany(),
     prisma.attachment.deleteMany(),
     prisma.evalEntry.deleteMany(),
     prisma.metricReading.deleteMany(),
@@ -171,6 +178,9 @@ async function restoreDb(bundle: Bundle): Promise<Record<string, number>> {
           prisma.evalEntry.createMany({ data: rows(t, "evalEntry") }),
           prisma.attachment.createMany({ data: rows(t, "attachment") }),
           prisma.rule.createMany({ data: rows(t, "rule") }),
+          prisma.planAssignment.createMany({ data: rows(t, "planAssignment") }),
+          prisma.planWaiver.createMany({ data: rows(t, "planWaiver") }),
+          prisma.planCarryOver.createMany({ data: rows(t, "planCarryOver") }),
         ]
       : []),
   ];

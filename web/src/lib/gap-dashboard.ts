@@ -12,6 +12,8 @@ const personGapInclude = {
       pointEvents: true,
       cumulativeMetrics: { include: { checkpoints: true } },
       recurringEvents: true,
+      // without this the rollup would count items the person was never asked for
+      assignment: { select: { waiverOffsetMonths: true, waivers: true } },
     },
   },
 } as const;

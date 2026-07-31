@@ -1,5 +1,13 @@
 import { addMonths } from "@/lib/dates";
 import { unrollForPerson } from "@/lib/person-view";
+import {
+  NO_WAIVERS,
+  isCheckpointWaived,
+  isOccurrenceWaived,
+  isPointWaived,
+  type WaiverContext,
+  type WaiverOverride,
+} from "@/lib/waivers";
 
 /** Minimal shape needed to compute gaps (satisfied by the full person query). */
 export type PersonForGaps = {
@@ -10,8 +18,15 @@ export type PersonForGaps = {
   evalEntries: { recurringEventId: string | null; occurrenceOffset: number | null }[];
   assignedPlan: {
     pointEvents: { id: string; label: string; offsetMonths: number }[];
-    cumulativeMetrics: { id: string; name: string; unit: string; checkpoints: { offsetMonths: number; target: number }[] }[];
+    cumulativeMetrics: {
+      id: string;
+      name: string;
+      unit: string;
+      checkpoints: { id: string; offsetMonths: number; target: number }[];
+    }[];
     recurringEvents: { id: string; label: string; intervalMonths: number; stopOffsetMonths: number | null }[];
+    /** the active assignment: its waiver line and any per-item overrides */
+    assignment?: { waiverOffsetMonths: number; waivers: WaiverOverride[] } | null;
   } | null;
 };
 
@@ -81,11 +96,17 @@ export function computePersonGaps(person: PersonForGaps, today: Date): { items: 
   if (!plan) return { items: [], status: null };
 
   const rec = person.recruitmentDate;
+  // Items that predate the assignment were never required of this person;
+  // reporting them would be a wall of red for things nobody asked of them.
+  const ctx: WaiverContext = plan.assignment
+    ? { line: plan.assignment.waiverOffsetMonths, overrides: plan.assignment.waivers }
+    : NO_WAIVERS;
   const doneByEvent = new Map(person.pointProgress.map((p) => [p.pointEventId, p]));
   const readingByMetric = new Map(person.metricReadings.map((r) => [r.metricId, r]));
   const items: GapItem[] = [];
 
   for (const e of plan.pointEvents) {
+    if (isPointWaived(ctx, e.id, e.offsetMonths)) continue;
     const prog = doneByEvent.get(e.id);
     const due = addMonths(rec, e.offsetMonths);
     const pt: Pointish = { label: e.label, offsetMonths: e.offsetMonths, done: !!prog, doneOn: prog?.doneOn ?? null };
@@ -100,9 +121,11 @@ export function computePersonGaps(person: PersonForGaps, today: Date): { items: 
   }
 
   for (const m of plan.cumulativeMetrics) {
+    const live = m.checkpoints.filter((c) => !isCheckpointWaived(ctx, c.id, c.offsetMonths));
+    if (live.length === 0) continue; // every target predates the assignment
     const reading = readingByMetric.get(m.id);
     const ev = evalMetric(
-      { name: m.name, unit: m.unit, checkpoints: m.checkpoints, value: reading?.value ?? null },
+      { name: m.name, unit: m.unit, checkpoints: live, value: reading?.value ?? null },
       rec,
       today,
     );
@@ -126,7 +149,9 @@ export function computePersonGaps(person: PersonForGaps, today: Date): { items: 
   }
 
   for (const r of plan.recurringEvents) {
-    const offsets = unrollForPerson(r.intervalMonths, r.stopOffsetMonths, rec, person.endOfServiceDate);
+    const offsets = unrollForPerson(r.intervalMonths, r.stopOffsetMonths, rec, person.endOfServiceDate).filter(
+      (off) => !isOccurrenceWaived(ctx, r.id, off),
+    );
     const filled = filledByEvent.get(r.id) ?? new Set<number>();
     // A past-due occurrence with no filed content → 🔴.
     const overdue = offsets.filter((o) => !filled.has(o) && addMonths(rec, o).getTime() < today.getTime());

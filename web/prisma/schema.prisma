@@ -148,6 +148,72 @@ model CareerPlan {
   sourceTemplateId  String?
   sourceTemplate    CareerPlan?        @relation("PlanCopies", fields: [sourceTemplateId], references: [id], onDelete: SetNull)
   copies            CareerPlan[]       @relation("PlanCopies")
+  // A copy is the subject of exactly one assignment; templates have none.
+  assignment        PlanAssignment?    @relation("AssignmentPlan")
+}
+
+/// A period during which a person was measured against one plan copy.
+/// Assignments are never deleted: ending one is how a person leaves a plan, and
+/// keeping it is what preserves their milestones, readings and evaluations —
+/// those records are children of the copy's items and would cascade away with it.
+model PlanAssignment {
+  id                 String          @id @default(cuid())
+  person             Person          @relation(fields: [personId], references: [id], onDelete: Cascade)
+  personId           String
+  plan               CareerPlan      @relation("AssignmentPlan", fields: [planId], references: [id], onDelete: Cascade)
+  planId             String          @unique
+  templateName       String // snapshot: readable history even if the template is later deleted
+  assignedAt         DateTime        @default(now())
+  endedAt            DateTime? // null = active; a person has at most one active assignment
+  /// Months from recruitment at the moment of assignment. Items at or before it
+  /// are waived: they were never required of this person.
+  waiverOffsetMonths Int             @default(0)
+  reason             String? // why the person moved off the previous plan
+  waivers            PlanWaiver[]
+  carryOvers         PlanCarryOver[]
+
+  @@index([personId, endedAt])
+}
+
+/// A deviation from the assignment's waiver line for one item. Only overrides
+/// are stored, so the common case stores nothing.
+model PlanWaiver {
+  id               String          @id @default(cuid())
+  assignment       PlanAssignment  @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  assignmentId     String
+  /// exactly one of the three identifies the item
+  pointEvent       PointEvent?     @relation(fields: [pointEventId], references: [id], onDelete: Cascade)
+  pointEventId     String?
+  checkpoint       MetricCheckpoint? @relation(fields: [checkpointId], references: [id], onDelete: Cascade)
+  checkpointId     String?
+  recurringEvent   RecurringEvent? @relation(fields: [recurringEventId], references: [id], onDelete: Cascade)
+  recurringEventId String?
+  /// with recurringEventId: a single occurrence rather than the whole event
+  occurrenceOffset Int?
+  /// true = waived although it falls after the line; false = required although it falls before
+  waived           Boolean
+}
+
+enum CarryOverKind {
+  METRIC // an accumulated value follows the person
+  POINT // a milestone already completed is not demanded again
+}
+
+/// Provenance for something credited from a previous plan. The credit itself is
+/// an ordinary PointProgress or MetricReading on the new copy; this row is what
+/// lets the card say where it came from, instead of presenting carried work as
+/// work done under the current plan.
+model PlanCarryOver {
+  id             String            @id @default(cuid())
+  assignment     PlanAssignment    @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  assignmentId   String
+  kind           CarryOverKind
+  fromPlanName   String // snapshots, so the origin survives whatever happens upstream
+  fromLabel      String
+  toMetricId     String?
+  toPointEventId String?
+  value          Float? // METRIC
+  originalDate   DateTime? // completion date, or the reading's as-of date
 }
 
 // One-time, binary milestone at a month offset from recruitment.
@@ -158,6 +224,7 @@ model PointEvent {
   label        String
   offsetMonths Int
   progress     PointProgress[]
+  waivers      PlanWaiver[]
 }
 
 // A live accumulating measure (e.g. grant hours, grant money) with timed targets.
@@ -178,6 +245,7 @@ model MetricCheckpoint {
   metricId     String
   offsetMonths Int
   target       Float
+  waivers      PlanWaiver[]
 }
 
 enum RecurringStopMode {
@@ -196,6 +264,7 @@ model RecurringEvent {
   stopOffsetMonths Int? // required when stopMode = UNTIL_OFFSET
   color            String? // soft-palette color assigned at creation (stable)
   evalEntries      EvalEntry[]
+  waivers          PlanWaiver[]
 }
 
 // --- Evaluations & events page (חוות דעת ואירועים) ---
@@ -241,7 +310,8 @@ model Person {
   team             OrgNode?           @relation(fields: [teamId], references: [id])
   teamId           String? // null = unassigned (e.g. after its framework was deleted)
   assignedPlan     CareerPlan?        @relation("AssignedPlan", fields: [assignedPlanId], references: [id])
-  assignedPlanId   String?
+  assignedPlanId   String? // the active assignment's copy; history lives in planAssignments
+  planAssignments  PlanAssignment[]
   fieldValues      PersonFieldValue[]
   pointProgress    PointProgress[]
   metricReadings   MetricReading[]

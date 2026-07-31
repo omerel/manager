@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAdmin, requireEditForNode, requireEditForPerson } from "@/lib/authz";
 import type { EmploymentStatus, FieldType } from "@/generated/prisma/client";
 import { composeFullName } from "@/lib/person-name";
+import { monthsSince } from "@/lib/waivers";
 
 function str(v: FormDataEntryValue | null): string {
   return String(v ?? "").trim();
@@ -216,6 +217,16 @@ export async function updatePerson(formData: FormData) {
 
 /* ---------- Plan assignment (Editor on the team) ---------- */
 
+/**
+ * Assign a plan. The person's previous assignment is ENDED, never deleted:
+ * milestones, readings and evaluations are children of the copy's items and
+ * would cascade away with it, which is how reassignment used to erase a
+ * person's record.
+ *
+ * The form carries the review decisions — which items to require despite
+ * predating the assignment, which to waive despite falling after it, and what
+ * to carry over from the plan being left.
+ */
 export async function assignPlan(formData: FormData) {
   const personId = str(formData.get("personId"));
   const templateId = str(formData.get("templateId"));
@@ -223,50 +234,185 @@ export async function assignPlan(formData: FormData) {
 
   const tpl = await prisma.careerPlan.findUnique({
     where: { id: templateId },
-    include: { pointEvents: true, recurringEvents: true, cumulativeMetrics: { include: { checkpoints: true } } },
+    include: {
+      pointEvents: true,
+      recurringEvents: true,
+      cumulativeMetrics: { include: { checkpoints: true } },
+    },
   });
   if (!tpl || !tpl.isTemplate) throw new Error("תבנית לא נמצאה.");
 
-  // Remove any previous assigned copy so a person has exactly one.
-  const prev = await prisma.person.findUnique({ where: { id: personId }, select: { assignedPlanId: true } });
-
-  const copy = await prisma.careerPlan.create({
-    data: {
-      name: tpl.name,
-      isTemplate: false,
-      sourceTemplateId: tpl.id,
-      pointEvents: { create: tpl.pointEvents.map((e) => ({ label: e.label, offsetMonths: e.offsetMonths })) },
-      recurringEvents: {
-        create: tpl.recurringEvents.map((r) => ({
-          label: r.label,
-          intervalMonths: r.intervalMonths,
-          stopMode: "UNTIL_OFFSET",
-          stopOffsetMonths: r.stopOffsetMonths,
-          color: r.color, // keep the person's copy coloured like the template
-        })),
-      },
-      cumulativeMetrics: {
-        create: tpl.cumulativeMetrics.map((m) => ({
-          name: m.name,
-          unit: m.unit,
-          checkpoints: { create: m.checkpoints.map((c) => ({ offsetMonths: c.offsetMonths, target: c.target })) },
-        })),
-      },
-    },
+  const person = await prisma.person.findUniqueOrThrow({
+    where: { id: personId },
+    select: { recruitmentDate: true, assignedPlanId: true },
   });
 
+  const now = new Date();
+  const waiverOffsetMonths = monthsSince(person.recruitmentDate, now);
+  const reason = str(formData.get("reason")) || null;
+
+  // Build the copy item by item so every template id maps to its copy id —
+  // the review screen's decisions are keyed by template item.
+  const copy = await prisma.careerPlan.create({
+    data: { name: tpl.name, isTemplate: false, sourceTemplateId: tpl.id },
+  });
+  const pointIdOf = new Map<string, string>();
+  for (const e of tpl.pointEvents) {
+    const c = await prisma.pointEvent.create({
+      data: { planId: copy.id, label: e.label, offsetMonths: e.offsetMonths },
+    });
+    pointIdOf.set(e.id, c.id);
+  }
+  const metricIdOf = new Map<string, string>();
+  const checkpointIdOf = new Map<string, string>();
+  for (const m of tpl.cumulativeMetrics) {
+    const c = await prisma.cumulativeMetric.create({
+      data: { planId: copy.id, name: m.name, unit: m.unit, color: m.color },
+    });
+    metricIdOf.set(m.id, c.id);
+    for (const cp of m.checkpoints) {
+      const ccp = await prisma.metricCheckpoint.create({
+        data: { metricId: c.id, offsetMonths: cp.offsetMonths, target: cp.target },
+      });
+      checkpointIdOf.set(cp.id, ccp.id);
+    }
+  }
+  const recurringIdOf = new Map<string, string>();
+  for (const r of tpl.recurringEvents) {
+    const c = await prisma.recurringEvent.create({
+      data: {
+        planId: copy.id,
+        label: r.label,
+        intervalMonths: r.intervalMonths,
+        stopMode: "UNTIL_OFFSET",
+        stopOffsetMonths: r.stopOffsetMonths,
+        color: r.color,
+      },
+    });
+    recurringIdOf.set(r.id, c.id);
+  }
+
+  // end the outgoing assignment, open the new one
+  if (person.assignedPlanId) {
+    await prisma.planAssignment.updateMany({
+      where: { personId, planId: person.assignedPlanId, endedAt: null },
+      data: { endedAt: now, reason },
+    });
+  }
+  const assignment = await prisma.planAssignment.create({
+    data: {
+      personId,
+      planId: copy.id,
+      templateName: tpl.name,
+      assignedAt: now,
+      waiverOffsetMonths,
+    },
+  });
   await prisma.person.update({ where: { id: personId }, data: { assignedPlanId: copy.id } });
-  if (prev?.assignedPlanId) await prisma.careerPlan.delete({ where: { id: prev.assignedPlanId } });
+
+  // Overrides: only deviations from the line are stored. An unchecked checkbox
+  // submits nothing, so the form sends every item's ref plus the checked ones;
+  // an item present in the list but not checked is one the Admin waived.
+  const allRefs = str(formData.get("items")).split(",").filter(Boolean);
+  const required = new Set(formData.getAll("require").map(String));
+  const offsetOfPoint = new Map(tpl.pointEvents.map((e) => [e.id, e.offsetMonths]));
+  const offsetOfCheckpoint = new Map(
+    tpl.cumulativeMetrics.flatMap((m) => m.checkpoints.map((c) => [c.id, c.offsetMonths] as const)),
+  );
+
+  for (const ref of allRefs) {
+    const [kind, id, occ] = ref.split("|");
+    const waived = !required.has(ref);
+
+    if (kind === "point" && pointIdOf.has(id)) {
+      if (waived === ((offsetOfPoint.get(id) ?? 0) <= waiverOffsetMonths)) continue; // agrees with the line
+      await prisma.planWaiver.create({
+        data: { assignmentId: assignment.id, pointEventId: pointIdOf.get(id)!, waived },
+      });
+    } else if (kind === "checkpoint" && checkpointIdOf.has(id)) {
+      if (waived === ((offsetOfCheckpoint.get(id) ?? 0) <= waiverOffsetMonths)) continue;
+      await prisma.planWaiver.create({
+        data: { assignmentId: assignment.id, checkpointId: checkpointIdOf.get(id)!, waived },
+      });
+    } else if (kind === "recurring" && recurringIdOf.has(id)) {
+      const occurrenceOffset = Number(occ);
+      if (!Number.isFinite(occurrenceOffset)) continue;
+      if (waived === (occurrenceOffset <= waiverOffsetMonths)) continue;
+      await prisma.planWaiver.create({
+        data: {
+          assignmentId: assignment.id,
+          recurringEventId: recurringIdOf.get(id)!,
+          occurrenceOffset,
+          waived,
+        },
+      });
+    }
+  }
+
+  // Carry-over: the credit itself is an ordinary progress record on the new
+  // copy; the PlanCarryOver row is what lets the card say where it came from.
+  const previousPlanName = str(formData.get("previousPlanName")) || "מסלול קודם";
+  for (const carry of formData.getAll("carry").map(String)) {
+    const [kind, fromId, toId] = carry.split("|");
+
+    if (kind === "METRIC") {
+      const reading = await prisma.metricReading.findFirst({ where: { personId, metricId: fromId } });
+      const toMetricId = metricIdOf.get(toId);
+      if (!reading || !toMetricId) continue;
+      await prisma.metricReading.create({
+        data: { personId, metricId: toMetricId, value: reading.value, asOf: reading.asOf, note: reading.note },
+      });
+      const src = tpl.cumulativeMetrics.find((m) => m.id === toId);
+      await prisma.planCarryOver.create({
+        data: {
+          assignmentId: assignment.id,
+          kind: "METRIC",
+          fromPlanName: previousPlanName,
+          fromLabel: src ? `${src.name} (${src.unit})` : "מדד",
+          toMetricId,
+          value: reading.value,
+          originalDate: reading.asOf,
+        },
+      });
+    } else if (kind === "POINT") {
+      const prog = await prisma.pointProgress.findFirst({ where: { personId, pointEventId: fromId } });
+      const toPointEventId = pointIdOf.get(toId);
+      if (!prog || !toPointEventId) continue;
+      await prisma.pointProgress.create({
+        data: { personId, pointEventId: toPointEventId, doneOn: prog.doneOn, note: prog.note },
+      });
+      await prisma.planCarryOver.create({
+        data: {
+          assignmentId: assignment.id,
+          kind: "POINT",
+          fromPlanName: previousPlanName,
+          fromLabel: tpl.pointEvents.find((e) => e.id === toId)?.label ?? "אירוע",
+          toPointEventId,
+          originalDate: prog.doneOn,
+        },
+      });
+    }
+  }
+
   revalidatePath(`/people/${personId}`);
+  revalidatePath("/");
+  redirect(`/people/${personId}?edit=1`);
 }
 
+/** Ends the assignment; the copy and everything recorded against it are kept. */
 export async function unassignPlan(formData: FormData) {
   const personId = str(formData.get("personId"));
   await requireEditForPerson(personId);
   const prev = await prisma.person.findUnique({ where: { id: personId }, select: { assignedPlanId: true } });
+  if (prev?.assignedPlanId) {
+    await prisma.planAssignment.updateMany({
+      where: { personId, planId: prev.assignedPlanId, endedAt: null },
+      data: { endedAt: new Date(), reason: str(formData.get("reason")) || null },
+    });
+  }
   await prisma.person.update({ where: { id: personId }, data: { assignedPlanId: null } });
-  if (prev?.assignedPlanId) await prisma.careerPlan.delete({ where: { id: prev.assignedPlanId } });
   revalidatePath(`/people/${personId}`);
+  revalidatePath("/");
 }
 
 /* ---------- Progress recording (Editor on the team) ---------- */

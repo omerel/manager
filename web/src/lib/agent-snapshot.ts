@@ -33,7 +33,14 @@ export async function exportScopedSnapshot(visibility: Visibility, today: Date):
             pointEvents: true,
             cumulativeMetrics: { include: { checkpoints: true } },
             recurringEvents: true,
+            assignment: { select: { waiverOffsetMonths: true, waivers: true, assignedAt: true } },
           },
+        },
+        // so the agent can answer questions about plans a person used to be on
+        planAssignments: {
+          where: { endedAt: { not: null } },
+          orderBy: { assignedAt: "desc" },
+          select: { templateName: true, assignedAt: true, endedAt: true, reason: true },
         },
       },
     }),
@@ -97,9 +104,16 @@ export async function exportScopedSnapshot(visibility: Visibility, today: Date):
       סטטוס: STATUS_LABEL[p.status],
       סיום_שירות: p.endOfServiceDate?.toISOString().slice(0, 10) ?? null,
       פרטים_נוספים: Object.fromEntries(p.fieldValues.map((fv) => [fv.field.label, fv.value])),
+      מסלולים_קודמים: p.planAssignments.map((a) => ({
+        שם_תכנית: a.templateName,
+        משויך_מ: a.assignedAt.toISOString().slice(0, 10),
+        עד: a.endedAt?.toISOString().slice(0, 10) ?? null,
+        סיבת_מעבר: a.reason,
+      })),
       תכנית: p.assignedPlan
         ? {
             שם_תכנית: p.assignedPlan.name,
+            פטור_עד_חודש: p.assignedPlan.assignment?.waiverOffsetMonths ?? 0,
             אירועים_נקודתיים: p.assignedPlan.pointEvents.map((e) => {
               const prog = p.pointProgress.find((x) => x.pointEventId === e.id);
               return {
