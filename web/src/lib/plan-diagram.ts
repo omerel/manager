@@ -272,10 +272,28 @@ export function buildPlanDiagramSvg(plan: PlanWithEvents): string {
     const clipped =
       firstCard != null && recurring.some((r) => r.offsets.some((o) => !inCardSpan(o)));
     const lh = 26 + recurring.length * 20 + (clipped ? 20 : 0);
+    const legendX = 16;
+    const legendW = 330; // narrower would wrap a row and push the closing note out of the box
+    const legendY = H - lh - 14;
+    const badgeCx = legendX + legendW - 12; // sits over the header's reserved padding, clear of the גיוס chip
+
+    // The recurring icon belongs here: point events and checkpoints carry their
+    // icon on their card, but a recurrence is only ever a diamond on the spine,
+    // so the legend is the one place its symbol can appear.
+    //
+    // Drawn as a real SVG element rather than nested inside the foreignObject:
+    // Chromium's PDF print resolves an inline <svg> in a flex container to an
+    // enormous intrinsic size, which on the printed page blew the badge up to
+    // fill the corner and pushed the legend text out entirely. On screen it
+    // looked fine, so this only shows up in the export.
     parts.push(
-      `<foreignObject x="16" y="${H - lh - 14}" width="330" height="${lh}">
+      `<g><circle cx="${badgeCx}" cy="${legendY + 8}" r="9" fill="${C.deep}"/>` +
+        `<g transform="translate(${badgeCx - 6.2},${legendY + 8 - 6.2}) scale(0.52)">${ICON.repeat}</g></g>`,
+    );
+    parts.push(
+      `<foreignObject x="${legendX}" y="${legendY}" width="${legendW}" height="${lh}">
          <div xmlns="http://www.w3.org/1999/xhtml" dir="rtl" style="font-family:Rubik,'Noto Sans Hebrew',sans-serif;font-size:12px">
-           <div style="font-weight:600;color:${C.ink}">אירועים מחזוריים לאורך המסלול:</div>
+           <div style="font-weight:600;color:${C.ink};padding-right:24px">אירועים מחזוריים לאורך המסלול:</div>
            ${recurring
              .map(
                (r) =>
@@ -286,7 +304,7 @@ export function buildPlanDiagramSvg(plan: PlanWithEvents): string {
              .join("")}
            ${
              clipped
-               ? `<div style="color:${C.muted};margin-top:6px;font-size:11px">הסימונים באיור מוצגים בין האירוע הראשון (חודש ${firstCard}) לאחרון (חודש ${lastCard}).</div>`
+               ? `<div style="color:${C.muted};margin-top:6px;font-size:11px">הסימונים מוצגים בטווח האירועים: חודש ${firstCard} עד ${lastCard}.</div>`
                : ""
            }
          </div>
