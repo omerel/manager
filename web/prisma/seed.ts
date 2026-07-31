@@ -56,7 +56,7 @@ async function main() {
         ],
       },
       recurringEvents: {
-        create: [{ label: "חוות דעת", intervalMonths: 6, stopMode: "END_OF_SERVICE" }],
+        create: [{ label: "חוות דעת", intervalMonths: 6, stopMode: "UNTIL_OFFSET", stopOffsetMonths: 72 }],
       },
     },
   });
@@ -89,18 +89,30 @@ async function main() {
   });
 
   // --- People (leaves under teams) ---
-  const people: { fullName: string; teamId: string; recruitmentDate: Date; status?: EmploymentStatus }[] = [
-    { fullName: "דנה כהן", teamId: teamAlpha.id, recruitmentDate: recruited(2026, 3) },
-    { fullName: "יוסי לוי", teamId: teamAlpha.id, recruitmentDate: recruited(2025, 11) },
-    { fullName: "מאיה בר", teamId: teamBeta.id, recruitmentDate: recruited(2024, 9) },
-    { fullName: "אורי שמש", teamId: teamBeta.id, recruitmentDate: recruited(2026, 1) },
-    { fullName: "נועה גל", teamId: teamBeta.id, recruitmentDate: recruited(2023, 6), status: EmploymentStatus.PLANNED_END },
-    { fullName: "איתי רון", teamId: teamGamma.id, recruitmentDate: recruited(2025, 4) },
+  // firstName/lastName are the source of truth; fullName is kept in step with
+  // them, as the application does on every write.
+  const people: {
+    firstName: string;
+    lastName: string;
+    birthDate: Date;
+    teamId: string;
+    recruitmentDate: Date;
+    status?: EmploymentStatus;
+  }[] = [
+    { firstName: "דנה", lastName: "כהן", birthDate: recruited(1996, 4, 12), teamId: teamAlpha.id, recruitmentDate: recruited(2026, 3) },
+    { firstName: "יוסי", lastName: "לוי", birthDate: recruited(1993, 11, 3), teamId: teamAlpha.id, recruitmentDate: recruited(2025, 11) },
+    { firstName: "מאיה", lastName: "בר", birthDate: recruited(1998, 1, 27), teamId: teamBeta.id, recruitmentDate: recruited(2024, 9) },
+    { firstName: "אורי", lastName: "שמש", birthDate: recruited(1991, 7, 8), teamId: teamBeta.id, recruitmentDate: recruited(2026, 1) },
+    { firstName: "נועה", lastName: "גל", birthDate: recruited(1989, 2, 19), teamId: teamBeta.id, recruitmentDate: recruited(2023, 6), status: EmploymentStatus.PLANNED_END },
+    { firstName: "איתי", lastName: "רון", birthDate: recruited(1995, 9, 30), teamId: teamGamma.id, recruitmentDate: recruited(2025, 4) },
   ];
   const idByName: Record<string, string> = {};
   for (const p of people) {
-    const created = await prisma.person.create({ data: { ...p, status: p.status ?? EmploymentStatus.ACTIVE } });
-    idByName[p.fullName] = created.id;
+    const fullName = `${p.firstName} ${p.lastName}`;
+    const created = await prisma.person.create({
+      data: { ...p, fullName, status: p.status ?? EmploymentStatus.ACTIVE },
+    });
+    idByName[fullName] = created.id;
   }
 
   // Assign an independent copy of the template to a person.

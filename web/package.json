@@ -12,6 +12,7 @@
     "db:down": "docker rm -f manager-db",
     "db:migrate": "prisma migrate dev",
     "db:seed": "prisma db seed",
+    "demo:data": "tsx --env-file=.env scripts/generate-demo-data.ts",
     "db:reset": "prisma migrate reset --force"
   },
   "dependencies": {
