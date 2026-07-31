@@ -35,6 +35,48 @@ echo "done. verify with: docker images manager-app"
 LOADER
 chmod +x "$DIST/load-image.sh"
 
+# Destroys the database so the next start rebuilds it from scratch. Shipped
+# because an upgrade can leave data the new schema no longer fits; run by hand,
+# never automatically.
+cat > "$DIST/reset-db.sh" <<'RESET'
+#!/bin/bash
+# מוחק את כל הטבלאות במסד הנתונים. ההפעלה הבאה של המערכת תיצור סכימה חדשה
+# וריקה, ותיצור מחדש את משתמש האדמין מתוך app.env.
+#
+# מה נמחק: אנשים, מסגרות, תכניות, חוות דעת, משתמשים, הגדרות — הכול.
+# מה לא נמחק: קבצים שהועלו (ה-volume). הם יישארו בלי שאיש מצביע עליהם.
+#
+# להורדת גיבוי מלא לפני כן: הגדרות מערכת ← גיבוי ונתונים ← הורד גיבוי מלא.
+#
+# החיבור למסד: DATABASE_URL מתוך app.env — אותו משתנה ואותו ערך שהאפליקציה
+# עצמה משתמשת בהם. אין כאן הגדרה נפרדת שאפשר לשכוח לעדכן.
+#
+# ב-OpenShift אין docker. שם מריצים את אותו סקריפט בתוך הפוד:
+#   oc rsh <pod> node /app/docker/reset-db.mjs        ← מציג מה יימחק
+#   oc rsh <pod> node /app/docker/reset-db.mjs --yes  ← מוחק
+set -euo pipefail
+cd "$(dirname "$0")"
+
+ENV_FILE="${1:-app.env}"
+IMAGE="${IMAGE:-manager-app:latest}"
+[ -f "$ENV_FILE" ] || { echo "לא נמצא קובץ סביבה: $ENV_FILE"; exit 1; }
+
+# --entrypoint node חובה: ל-image יש ENTRYPOINT שמריץ מיגרציות ומעלה את השרת,
+# ובלעדיו הארגומנטים כאן היו נבלעים והסקריפט לא היה רץ כלל.
+run() { docker run --rm --env-file "$ENV_FILE" ${DOCKER_NETWORK:+--network "$DOCKER_NETWORK"} \
+          --entrypoint node "$IMAGE" docker/reset-db.mjs "$@"; }
+
+echo "מסד הנתונים לפי DATABASE_URL שב-$ENV_FILE יימחק כולו."
+run || true
+
+read -r -p 'להמשיך? הקלד/י בדיוק MERGE-NOTHING-DELETE-ALL כדי לאשר: ' answer
+[ "$answer" = "MERGE-NOTHING-DELETE-ALL" ] || { echo "בוטל — לא נמחק דבר."; exit 1; }
+
+run --yes
+echo "בוצע. הפעל/י מחדש את הקונטיינר כדי לבנות סכימה נקייה."
+RESET
+chmod +x "$DIST/reset-db.sh"
+
 cat > "$DIST/README.md" <<'GUIDE'
 # התקנת מערכת ניהול קריירה — רשת סגורה
 
@@ -45,6 +87,7 @@ cat > "$DIST/README.md" <<'GUIDE'
 - `load-image.sh` — איחוד החלקים וטעינת הדימוי לדוקר
 - `app.env.example` — תבנית משתני הסביבה
 - `docker-compose.example.yml` — דוגמת הרצה
+- `reset-db.sh` — מחיקת כל מסד הנתונים (ידני בלבד, ראו למטה)
 - המדריך הזה
 
 ## שלב 1 — טעינת הדימוי
@@ -96,6 +139,11 @@ docker run -d --name manager --env-file app.env \
   `UPLOADS_DIR=/app/uploads` — התקינו PVC שם, או בנתיב אחר ואז הצביעו עליו
   ב-`UPLOADS_DIR`.
 - מופע יחיד בלבד (לא לשכפל pods).
+- **`reset-db.sh` מוחק את כל מסד הנתונים** (ב-OpenShift, שבו אין docker:
+  `oc rsh <pod> node /app/docker/reset-db.mjs --yes`) ומאפשר לבנות אותו מחדש נקי בהפעלה
+  הבאה. הוא מדפיס תחילה את כל הטבלאות ומספר השורות בכל אחת, ודורש אישור מפורש.
+  הקבצים שהועלו אינם נמחקים. כדאי להוריד גיבוי מלא לפני (הגדרות מערכת ←
+  גיבוי ונתונים).
 - סוכן ה-AI: ה-claude CLI כלול בדימוי ויורש את סביבת הקונטיינר —
   אם נדרשת אצלכם קונפיגורציה להפעלתו, ספקו אותה לפוד כרגיל.
 GUIDE
