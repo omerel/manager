@@ -20,8 +20,15 @@ export type PersonRow = {
   teamId: string | null;
   photoPath: string | null;
   orgPath: string; // "מרכז ▸ תחום ▸ מדור ▸ צוות" or "ללא שיוך"
+  /** the active plan copy's name, or null when the person has no plan */
+  planName: string | null;
+  /** the template that copy came from — null if it has since been deleted */
+  planTemplateId: string | null;
   canEdit: boolean;
 };
+
+/** Distinct from the framework column's "ללא שיוך": adjacent columns must not read alike. */
+export const NO_PLAN_LABEL = "ללא מסלול";
 
 /** Build "center ▸ domain ▸ section ▸ team" for a team node (or the unassigned label). */
 async function buildPathResolver() {
@@ -60,7 +67,12 @@ export async function getVisiblePeople(visibility: Visibility): Promise<PersonRo
     ? { OR: [{ teamId: { in: teamIds } }, { teamId: null }] }
     : { teamId: { in: teamIds } };
   const [people, resolvePath] = await Promise.all([
-    prisma.person.findMany({ where, orderBy: { fullName: "asc" } }),
+    // the plan comes along in this query rather than per row
+    prisma.person.findMany({
+      where,
+      orderBy: { fullName: "asc" },
+      include: { assignedPlan: { select: { name: true, sourceTemplateId: true } } },
+    }),
     buildPathResolver(),
   ]);
   return people.map((p) => ({
@@ -72,13 +84,18 @@ export async function getVisiblePeople(visibility: Visibility): Promise<PersonRo
     teamId: p.teamId,
     photoPath: p.photoPath,
     orgPath: resolvePath(p.teamId),
+    planName: p.assignedPlan?.name ?? null,
+    planTemplateId: p.assignedPlan?.sourceTemplateId ?? null,
     canEdit: canEditTeam(visibility, p.teamId),
   }));
 }
 
 /** A single person, only if the user may see them; otherwise null. */
 export async function getVisiblePerson(id: string, visibility: Visibility): Promise<PersonRow | null> {
-  const p = await prisma.person.findUnique({ where: { id } });
+  const p = await prisma.person.findUnique({
+    where: { id },
+    include: { assignedPlan: { select: { name: true, sourceTemplateId: true } } },
+  });
   if (!p) return null;
   const isVisible = p.teamId ? visibility.nodeIds.has(p.teamId) : visibility.isAdmin;
   if (!isVisible) return null;
@@ -92,6 +109,8 @@ export async function getVisiblePerson(id: string, visibility: Visibility): Prom
     teamId: p.teamId,
     photoPath: p.photoPath,
     orgPath: resolvePath(p.teamId),
+    planName: p.assignedPlan?.name ?? null,
+    planTemplateId: p.assignedPlan?.sourceTemplateId ?? null,
     canEdit: canEditTeam(visibility, p.teamId),
   };
 }

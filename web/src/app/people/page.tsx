@@ -3,34 +3,34 @@ import { computeVisibility } from "@/lib/access";
 import { getSessionUser } from "@/lib/session";
 import { isAdmin } from "@/lib/authz";
 import { getVisiblePeople, STATUS_LABEL, formatDate } from "@/lib/people";
-import { versionedUrl } from "@/lib/upload-version";
+import { PeopleTable, type PeopleRow } from "@/components/PeopleTable";
 
-export default async function PeoplePage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
-  const { q } = await searchParams;
-  const query = (q ?? "").trim();
-
+export default async function PeoplePage() {
   const user = await getSessionUser();
   const visibility = await computeVisibility(user);
-  const [allPeople, admin] = await Promise.all([getVisiblePeople(visibility), isAdmin()]);
+  const [people, admin] = await Promise.all([getVisiblePeople(visibility), isAdmin()]);
 
-  const people = query
-    ? allPeople.filter((p) => p.fullName.toLowerCase().includes(query.toLowerCase()))
-    : allPeople;
+  // The server loads and permission-clips; filtering happens in the table over
+  // exactly these rows, so it can only ever narrow them.
+  const rows: PeopleRow[] = people.map((p) => ({
+    id: p.id,
+    fullName: p.fullName,
+    orgPath: p.orgPath,
+    recruitmentDateLabel: formatDate(p.recruitmentDate),
+    status: p.status,
+    statusLabel: STATUS_LABEL[p.status],
+    planName: p.planName,
+    planTemplateId: p.planTemplateId,
+    photoPath: p.photoPath,
+  }));
 
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold">אנשים</h1>
-          <p className="mt-1 text-muted">
-            {query
-              ? `${people.length} מתוך ${allPeople.length} אנשים · סינון לפי "${query}"`
-              : `${allPeople.length} אנשים בראות שלך. הרשימה חתוכה אוטומטית לפי ההרשאות.`}
-          </p>
-        </div>
+        <h1 className="text-2xl font-bold">אנשים</h1>
         <div className="flex gap-2">
           {admin && (
-            <Link href="/people/card-schema" className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-slate-50">
+            <Link href="/people/card-schema" className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-stone-50">
               שדות כרטיס
             </Link>
           )}
@@ -40,66 +40,11 @@ export default async function PeoplePage({ searchParams }: { searchParams: Promi
         </div>
       </div>
 
-      <form method="get" action="/people" className="flex flex-wrap items-center gap-2">
-        <input
-          type="search"
-          name="q"
-          defaultValue={query}
-          placeholder="חיפוש לפי שם…"
-          className="w-64 rounded-md border border-border bg-card px-3 py-1.5 text-sm"
-        />
-        <button className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-slate-50">חפש</button>
-        {query && (
-          <Link href="/people" className="rounded-md px-3 py-1.5 text-sm text-muted hover:underline">
-            נקה
-          </Link>
-        )}
-      </form>
-
-      {allPeople.length === 0 ? (
+      {rows.length === 0 ? (
         <p className="text-muted">אין אנשים בהרשאה שלך.</p>
-      ) : people.length === 0 ? (
-        <p className="text-muted">לא נמצאו אנשים התואמים ל״{query}״.</p>
       ) : (
-        <div className="overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm">
-          <table className="w-full text-start text-sm">
-            <thead className="bg-slate-50 text-muted">
-              <tr>
-                <Th>שם</Th>
-                <Th>מסגרת</Th>
-                <Th>תאריך גיוס</Th>
-                <Th>סטטוס</Th>
-              </tr>
-            </thead>
-            <tbody>
-              {people.map((p) => (
-                <tr key={p.id} className="border-t border-border hover:bg-slate-50">
-                  <td className="px-4 py-2.5">
-                    <Link href={`/people/${p.id}`} className="flex items-center gap-2.5 font-medium text-brand-800 hover:underline">
-                      {p.photoPath ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={versionedUrl(`/photo/${p.id}`, p.photoPath)} alt="" className="h-8 w-8 rounded-full border border-border object-cover" />
-                      ) : (
-                        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-100 text-sm font-bold text-brand-800">
-                          {p.fullName.slice(0, 1)}
-                        </span>
-                      )}
-                      {p.fullName}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-2.5 text-muted">{p.orgPath}</td>
-                  <td className="px-4 py-2.5">{formatDate(p.recruitmentDate)}</td>
-                  <td className="px-4 py-2.5">{STATUS_LABEL[p.status]}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <PeopleTable rows={rows} />
       )}
     </div>
   );
-}
-
-function Th({ children }: { children: React.ReactNode }) {
-  return <th className="px-4 py-2.5 text-start font-medium">{children}</th>;
 }
