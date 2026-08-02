@@ -4,6 +4,7 @@ import { getSessionUser } from "@/lib/session";
 import { isAdmin } from "@/lib/authz";
 import { getVisiblePeople, STATUS_LABEL, formatDate } from "@/lib/people";
 import { PeopleTable, type PeopleRow } from "@/components/PeopleTable";
+import { IntakeSection } from "@/components/IntakeSection";
 
 export default async function PeoplePage() {
   const user = await getSessionUser();
@@ -40,6 +41,8 @@ export default async function PeoplePage() {
           </Link>
         </div>
       </div>
+
+      {admin && <IntakeSection userId={user.id} />}
 
       {rows.length === 0 ? (
         <p className="text-muted">אין אנשים בהרשאה שלך.</p>

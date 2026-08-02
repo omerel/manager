@@ -1,6 +1,7 @@
 import path from "path";
 import { writeFile } from "fs/promises";
 import { extractTextFromFile } from "@/lib/doc-text";
+import { prisma } from "@/lib/prisma";
 
 /**
  * Two-step by design: staging the upload is instant and happens in the request;
@@ -33,4 +34,26 @@ export async function materializeDocument(
   ].join("\n");
   await writeFile(path.join(dir, name), header + text, "utf8");
   return { name, method, note };
+}
+
+/**
+ * The card schema handed to the agent (core fields + admin-defined fields).
+ * Shared by the single-document flows and bulk intake, so a field added to the
+ * card is extracted everywhere at once.
+ */
+export async function extractionFields() {
+  const defs = await prisma.personFieldDef.findMany({ orderBy: { order: "asc" } });
+  return [
+    { key: "firstName", label: "שם פרטי", type: "טקסט" },
+    { key: "lastName", label: "שם משפחה", type: "טקסט" },
+    { key: "birthDate", label: "תאריך לידה", type: "תאריך" },
+    { key: "recruitmentDate", label: "תאריך גיוס", type: "תאריך" },
+    { key: "endOfServiceDate", label: "תאריך סיום שירות", type: "תאריך" },
+    ...defs.map((d) => ({
+      key: `field:${d.id}`,
+      label: d.label,
+      type: d.type === "DATE" ? "תאריך" : d.type === "NUMBER" ? "מספר" : "טקסט",
+      options: d.type === "ENUM" ? d.options : undefined,
+    })),
+  ];
 }

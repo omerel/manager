@@ -5,19 +5,33 @@ import { UploadCloud, FileCheck2 } from "lucide-react";
 
 /**
  * Drag-and-drop file field that still behaves like a plain <input type=file>
- * inside a server-action form: the dropped file is written onto the hidden
- * input, so the form submits exactly as before.
+ * inside a server-action form: the dropped file is written onto the input, so
+ * the form submits exactly as before.
+ *
+ * The visible area is a <label> WRAPPING the input, not a div with a
+ * programmatic `.click()`. That is load-bearing twice over:
+ *
+ *  - Opening the chooser is native browser behavior — it works with zero
+ *    JavaScript, so a page whose hydration broke (or a browser that refuses
+ *    synthetic clicks on invisible file inputs, as Safari has) still opens it.
+ *  - The input is visually hidden with `sr-only`, not `display:none`. A
+ *    `required` input under display:none cannot be focused, so submitting the
+ *    form empty died silently with "not focusable" instead of showing the
+ *    browser's validation message.
  */
 export function FileDrop({
   name,
   accept,
   required,
+  multiple,
   label = "גרור/י קובץ לכאן או לחץ/י לבחירה",
   className,
 }: {
   name: string;
   accept?: string;
   required?: boolean;
+  /** accept several files at once; the display becomes a name list */
+  multiple?: boolean;
   label?: string;
   className?: string;
 }) {
@@ -26,22 +40,30 @@ export function FileDrop({
   const [over, setOver] = useState(false);
 
   return (
-    <div
-      onClick={() => inputRef.current?.click()}
+    <label
+      // BOTH dragenter and dragover must be cancelled for the element to be a
+      // valid drop target. That is the spec, not a nicety: Chrome accepts the
+      // drop with dragover alone, Safari silently refuses it — dragging just
+      // does nothing, with no error anywhere.
+      onDragEnter={(e) => {
+        e.preventDefault();
+        setOver(true);
+      }}
       onDragOver={(e) => {
         e.preventDefault();
+        e.dataTransfer.dropEffect = "copy"; // show the copy cursor, not the refuse one
         setOver(true);
       }}
       onDragLeave={() => setOver(false)}
       onDrop={(e) => {
         e.preventDefault();
         setOver(false);
-        const file = e.dataTransfer.files?.[0];
-        if (!file || !inputRef.current) return;
+        const dropped = multiple ? [...e.dataTransfer.files] : [...e.dataTransfer.files].slice(0, 1);
+        if (dropped.length === 0 || !inputRef.current) return;
         const dt = new DataTransfer();
-        dt.items.add(file);
+        for (const f of dropped) dt.items.add(f);
         inputRef.current.files = dt.files;
-        setFileName(file.name);
+        setFileName(dropped.map((f) => f.name).join(", "));
       }}
       className={`flex cursor-pointer items-center gap-2 rounded-lg border-2 border-dashed px-3 py-2.5 text-sm transition-colors ${
         over ? "border-brand-500 bg-brand-50" : fileName ? "border-brand-200 bg-brand-50/50" : "border-border hover:bg-stone-50"
@@ -53,8 +75,12 @@ export function FileDrop({
         name={name}
         accept={accept}
         required={required}
-        className="hidden"
-        onChange={(e) => setFileName(e.target.files?.[0]?.name ?? null)}
+        multiple={multiple}
+        className="sr-only"
+        onChange={(e) => {
+          const names = [...(e.target.files ?? [])].map((f) => f.name);
+          setFileName(names.length ? names.join(", ") : null);
+        }}
       />
       {fileName ? (
         <>
@@ -68,6 +94,6 @@ export function FileDrop({
           <span className="text-muted">{label}</span>
         </>
       )}
-    </div>
+    </label>
   );
 }

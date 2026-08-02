@@ -9,22 +9,18 @@ import { prisma } from "@/lib/prisma";
 import { requireEditForPerson } from "@/lib/authz";
 import { getSessionUser } from "@/lib/session";
 import { computeVisibility } from "@/lib/access";
-import { stageUpload, materializeDocument } from "@/lib/doc-extract";
+import { stageUpload, materializeDocument, extractionFields } from "@/lib/doc-extract";
 import { runExtraction } from "@/lib/agent";
 import { saveUpload, deleteUpload } from "@/lib/storage";
 import { runInBackground, hasLiveRun } from "@/lib/jobs";
 import { composeFullName } from "@/lib/person-name";
+import { proposeFieldUpdates } from "@/lib/proposals";
+export type { ProposalItem } from "@/lib/proposals";
+import type { ProposalItem } from "@/lib/proposals";
 
 function str(v: FormDataEntryValue | null): string {
   return String(v ?? "").trim();
 }
-
-export type ProposalItem = {
-  key: string; // "firstName" | "lastName" | "birthDate" | "recruitmentDate" | "endOfServiceDate" | "field:<fieldDefId>"
-  label: string;
-  current: string;
-  proposed: string;
-};
 
 /* ---------- Profile photo ---------- */
 
@@ -47,24 +43,6 @@ export async function setProfilePhoto(formData: FormData) {
 
 /* ---------- Document extraction (agent proposes, human approves per field) ---------- */
 
-/** The card schema handed to the agent (core fields + admin-defined fields). */
-async function extractionFields() {
-  const defs = await prisma.personFieldDef.findMany({ orderBy: { order: "asc" } });
-  return [
-    { key: "firstName", label: "שם פרטי", type: "טקסט" },
-    { key: "lastName", label: "שם משפחה", type: "טקסט" },
-    { key: "birthDate", label: "תאריך לידה", type: "תאריך" },
-    { key: "recruitmentDate", label: "תאריך גיוס", type: "תאריך" },
-    { key: "endOfServiceDate", label: "תאריך סיום שירות", type: "תאריך" },
-    ...defs.map((d) => ({
-      key: `field:${d.id}`,
-      label: d.label,
-      type: d.type === "DATE" ? "תאריך" : d.type === "NUMBER" ? "מספר" : "טקסט",
-      options: d.type === "ENUM" ? d.options : undefined,
-    })),
-  ];
-}
-
 export async function extractFromDocument(formData: FormData) {
   const personId = str(formData.get("personId"));
   const me = await requireEditForPerson(personId);
@@ -85,32 +63,7 @@ export async function extractFromDocument(formData: FormData) {
         const doc = await materializeDocument(dir, staged);
         if (!doc) throw new Error("לא ניתן לחלץ טקסט מהמסמך (גם לא באמצעות OCR).");
         const raw = await runExtraction(dir, doc.name, fields);
-        const person = await prisma.person.findUniqueOrThrow({
-          where: { id: personId },
-          include: { fieldValues: { include: { field: true } } },
-        });
-        // merge with current values; keep only real differences
-        const valueByDef = new Map(person.fieldValues.map((fv) => [fv.fieldDefId, fv.value]));
-        const currentOf = (key: string): string => {
-          if (key === "firstName") return person.firstName;
-          if (key === "lastName") return person.lastName;
-          if (key === "birthDate") return person.birthDate?.toISOString().slice(0, 10) ?? "";
-          if (key === "recruitmentDate") return person.recruitmentDate.toISOString().slice(0, 10);
-          if (key === "endOfServiceDate") return person.endOfServiceDate?.toISOString().slice(0, 10) ?? "";
-          if (key.startsWith("field:")) return valueByDef.get(key.slice(6)) ?? "";
-          return "";
-        };
-        const labelOf = new Map(fields.map((f) => [f.key, f.label]));
-        const items: ProposalItem[] = raw
-          .filter((r) => labelOf.has(r.key))
-          .map((r) => ({ key: r.key, label: labelOf.get(r.key)!, current: currentOf(r.key), proposed: r.proposed }))
-          .filter((it) => it.proposed !== it.current);
-
-        // one open proposal per person — replace any previous one
-        await prisma.extractionProposal.deleteMany({ where: { personId } });
-        if (items.length > 0) {
-          await prisma.extractionProposal.create({ data: { personId, createdBy: me.id, items } });
-        }
+        const items = await proposeFieldUpdates(me.id, personId, raw, fields);
         await prisma.agentRun.update({ where: { id }, data: { status: "SUCCEEDED", output: String(items.length) } });
       } catch (e) {
         await prisma.agentRun.update({
