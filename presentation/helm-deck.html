@@ -1,0 +1,821 @@
+<title>Helm — מצגת פיילוט</title>
+
+<style>
+  :root {
+    --ground: #022c22;
+    --ground-2: #06342a;
+    --paper: #faf9f7;
+    --ink: #1c1917;
+    --muted: #78716c;
+    --line: #e3e0dc;
+    --accent: #047857;
+    --accent-lit: #34d399;
+    --mist: #ecfdf5;
+    --critical: #b91c1c;
+    --warn: #b45309;
+    --ok: #047857;
+
+    --fs-display: clamp(2.4rem, 5.2vw, 4.2rem);
+    --fs-h2: clamp(1.5rem, 2.6vw, 2.1rem);
+    --fs-body: clamp(1rem, 1.25vw, 1.18rem);
+    --fs-small: 0.86rem;
+    --fs-label: 0.72rem;
+
+    --pad: clamp(2rem, 5vw, 5.5rem);
+    --maxw: 1400px;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #14120f;
+      --ink: #f5f2ee;
+      --muted: #a8a29d;
+      --line: #2e2a26;
+      --accent: #34d399;
+      --mist: #0d2a22;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #14120f;
+    --ink: #f5f2ee;
+    --muted: #a8a29d;
+    --line: #2e2a26;
+    --accent: #34d399;
+    --mist: #0d2a22;
+  }
+  :root[data-theme="light"] {
+    --paper: #faf9f7;
+    --ink: #1c1917;
+    --muted: #78716c;
+    --line: #e3e0dc;
+    --accent: #047857;
+    --mist: #ecfdf5;
+  }
+
+  html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    * { animation: none !important; transition: none !important; }
+  }
+
+  body {
+    margin: 0;
+    direction: rtl;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "Segoe UI", "Noto Sans Hebrew", "Arial Hebrew", "Helvetica Neue", system-ui, sans-serif;
+    font-size: var(--fs-body);
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ---------- slide frame ---------- */
+  .slide {
+    min-height: 100svh;
+    padding: calc(var(--pad) * 0.7) var(--pad) var(--pad);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 1.6rem;
+    position: relative;
+    scroll-snap-align: start;
+    border-bottom: 1px solid var(--line);
+  }
+  .slide > * { max-width: var(--maxw); width: 100%; margin-inline: auto; }
+  .slide.dark {
+    background: var(--ground);
+    color: #eef6f2;
+    border-bottom-color: var(--ground);
+  }
+  .slide.dark .eyebrow { color: var(--accent-lit); }
+  .slide.dark .lede,
+  .slide.dark .muted { color: #b9cdc5; }
+
+  /* ---------- heading strip: where you are in the argument ---------- */
+  .strip {
+    position: absolute;
+    inset-block-start: calc(var(--pad) * 0.42);
+    inset-inline: var(--pad);
+    max-width: none;
+    display: flex;
+    flex-direction: row-reverse;
+    align-items: flex-end;
+    gap: 5px;
+    height: 16px;
+    opacity: 0.9;
+  }
+  .strip i { display: block; width: 100%; height: 5px; background: currentColor; opacity: 0.18; }
+  .strip i.major { height: 10px; opacity: 0.3; }
+  .strip i.here { height: 16px; opacity: 1; background: var(--accent); }
+  .slide.dark .strip i.here { background: var(--accent-lit); }
+
+  .chapno {
+    position: absolute;
+    inset-block-start: calc(var(--pad) * 0.42);
+    inset-inline-start: var(--pad);
+    max-width: none;
+    width: auto;
+    margin: 0;
+    font-size: var(--fs-label);
+    letter-spacing: 0.2em;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .slide.dark .chapno { color: #7fa79a; }
+
+  /* ---------- type roles ---------- */
+  .eyebrow {
+    font-size: var(--fs-label);
+    letter-spacing: 0.2em;
+    color: var(--accent);
+    font-weight: 600;
+    margin: 0;
+  }
+  h1 {
+    font-size: var(--fs-display);
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    line-height: 1.02;
+    margin: 0;
+    text-wrap: balance;
+  }
+  h2 {
+    font-size: var(--fs-h2);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1.15;
+    margin: 0;
+    text-wrap: balance;
+  }
+  h3 { font-size: 1.05rem; font-weight: 700; margin: 0; letter-spacing: -0.01em; }
+  p { margin: 0; }
+  .lede { font-size: clamp(1.05rem, 1.5vw, 1.35rem); color: var(--muted); max-width: 62ch; }
+  .muted { color: var(--muted); }
+  .small { font-size: var(--fs-small); }
+  strong { font-weight: 700; }
+  b { font-weight: 700; }
+
+  /* ---------- layout helpers ---------- */
+  .cols { display: grid; gap: clamp(1.5rem, 3vw, 3rem); align-items: start; }
+  .cols.two { grid-template-columns: 1fr 1fr; }
+  .cols.wide-right { grid-template-columns: 1.35fr 1fr; }
+  .stack { display: flex; flex-direction: column; gap: 1rem; }
+  .stack.tight { gap: 0.5rem; }
+  .stack.loose { gap: 1.8rem; }
+  @media (max-width: 900px) {
+    .cols.two, .cols.wide-right { grid-template-columns: 1fr; }
+  }
+
+  /* ---------- devices ---------- */
+  .facts { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); }
+  .facts > div { background: var(--paper); padding: 1.4rem 1.5rem; display: flex; flex-direction: column; gap: 0.45rem; }
+  .slide.dark .facts { background: rgba(255,255,255,0.13); border-color: rgba(255,255,255,0.13); }
+  .slide.dark .facts > div { background: var(--ground); }
+  @media (max-width: 800px) { .facts { grid-template-columns: 1fr; } }
+
+  .compare { width: 100%; border-collapse: collapse; font-size: 1rem; }
+  .compare th, .compare td { text-align: start; padding: 0.85rem 1rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+  .compare thead th { font-size: var(--fs-label); letter-spacing: 0.15em; color: var(--muted); font-weight: 600; border-bottom-width: 2px; }
+  .compare td:last-child { font-weight: 600; }
+  .tablewrap { overflow-x: auto; }
+
+  .rail { border-inline-start: 3px solid var(--accent); padding-inline-start: 1.2rem; }
+
+  .quote {
+    font-size: clamp(1.3rem, 2.4vw, 2rem);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1.3;
+    text-wrap: balance;
+  }
+  .attrib { font-size: var(--fs-small); color: var(--muted); letter-spacing: 0.06em; }
+
+  .flow { display: flex; align-items: stretch; gap: 0; flex-wrap: wrap; }
+  .flow > div { flex: 1 1 180px; padding: 1.1rem 1.2rem; border: 1px solid var(--line); border-inline-start: none; }
+  .flow > div:first-child { border-inline-start: 1px solid var(--line); }
+  .flow .step { font-size: var(--fs-label); letter-spacing: 0.15em; color: var(--muted); }
+  .flow .what { font-weight: 700; margin-block-start: 0.3rem; }
+  .flow > div.lit { background: var(--mist); border-color: var(--accent); }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+  .chip { font-size: var(--fs-small); padding: 0.25rem 0.7rem; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); }
+  .chip.on { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+
+  /* ---------- schematic UI ---------- */
+  .screen {
+    border: 1px solid var(--line);
+    background: var(--paper);
+    box-shadow: 0 18px 40px -28px rgba(2,44,34,0.55);
+    overflow: hidden;
+    font-size: 0.8rem;
+  }
+  .screen .bar { background: var(--ground); color: #cfe6dd; padding: 0.5rem 0.9rem; font-size: 0.72rem; letter-spacing: 0.06em; display: flex; gap: 1rem; }
+  .screen .bar b { color: #fff; }
+  .screen .body { padding: 0.9rem; display: flex; flex-direction: column; gap: 0.7rem; }
+  .gauge { display: flex; align-items: baseline; gap: 0.5rem; }
+  .gauge .num { font-size: 2.4rem; font-weight: 800; letter-spacing: -0.04em; color: var(--accent); font-variant-numeric: tabular-nums; }
+  .kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; }
+  .kpi { border: 1px solid var(--line); padding: 0.5rem 0.6rem; }
+  .kpi .n { font-size: 1.3rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .kpi .l { font-size: 0.68rem; color: var(--muted); }
+  .tree { display: flex; flex-direction: column; gap: 0.3rem; }
+  .node { display: flex; align-items: center; gap: 0.5rem; padding: 0.25rem 0.4rem; border-bottom: 1px solid var(--line); }
+  .node .nm { font-weight: 600; }
+  .node .sp { flex: 1; }
+  .pill { font-size: 0.68rem; padding: 0.1rem 0.45rem; border-radius: 3px; font-variant-numeric: tabular-nums; }
+  .pill.red { background: #fee2e2; color: var(--critical); }
+  .pill.amb { background: #fef3c7; color: var(--warn); }
+  .pill.ok { background: #d1fae5; color: var(--ok); }
+  :root[data-theme="dark"] .pill.red, :root[data-theme="dark"] .pill.amb, :root[data-theme="dark"] .pill.ok { filter: brightness(0.8); }
+
+  .rows { display: flex; flex-direction: column; }
+  .row { display: grid; grid-template-columns: 1.4fr 1.8fr 1.2fr 0.8fr; gap: 0.6rem; padding: 0.4rem 0.3rem; border-bottom: 1px solid var(--line); align-items: center; }
+  .row.head { font-size: 0.68rem; color: var(--muted); letter-spacing: 0.1em; border-bottom-width: 2px; }
+  .row .plan { color: var(--accent); font-weight: 600; }
+  .row .none { color: var(--muted); }
+
+  .track { display: flex; flex-direction: column; gap: 0.35rem; }
+  .tick { display: grid; grid-template-columns: 3rem 1fr; gap: 0.7rem; align-items: center; }
+  .tick .mo { font-size: 0.7rem; color: var(--muted); text-align: end; font-variant-numeric: tabular-nums; }
+  .tick .ev { border: 1px solid var(--line); padding: 0.3rem 0.55rem; display: flex; gap: 0.5rem; align-items: center; }
+  .tick .ev.metric { background: var(--mist); }
+  .dot { width: 9px; height: 9px; flex: none; border-radius: 50%; background: var(--accent); }
+  .dia { width: 9px; height: 9px; flex: none; background: #2563eb; transform: rotate(45deg); }
+  .waived { opacity: 0.55; }
+
+  .ask { display: grid; grid-template-columns: auto 1fr; gap: 0.6rem 0.9rem; align-items: start; }
+  .ask .who { font-size: var(--fs-label); letter-spacing: 0.15em; color: var(--muted); padding-block-start: 0.35rem; }
+  .ask .said { border: 1px solid var(--line); padding: 0.7rem 0.9rem; }
+  .ask .said.answer { background: var(--mist); border-color: var(--accent); }
+
+  .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); }
+  .metrics > div { background: var(--paper); padding: 1.2rem 1.3rem; }
+  .metrics .n { font-size: 2rem; font-weight: 800; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; color: var(--accent); }
+  .slide.dark .metrics { background: rgba(255,255,255,0.13); border-color: rgba(255,255,255,0.13); }
+  .slide.dark .metrics > div { background: var(--ground); }
+  .slide.dark .metrics .n { color: var(--accent-lit); }
+
+  ul.plain { margin: 0; padding-inline-start: 1.1rem; display: flex; flex-direction: column; gap: 0.55rem; }
+  ul.plain li::marker { color: var(--accent); }
+
+  /* ---------- nav ---------- */
+  .nav {
+    position: fixed;
+    inset-block-end: 1rem;
+    inset-inline-start: 1rem;
+    display: flex;
+    gap: 0.4rem;
+    z-index: 20;
+    font-variant-numeric: tabular-nums;
+  }
+  .nav button {
+    font: inherit;
+    font-size: 0.8rem;
+    padding: 0.3rem 0.75rem;
+    border: 1px solid var(--line);
+    background: var(--paper);
+    color: var(--ink);
+    cursor: pointer;
+  }
+  .nav button:hover { border-color: var(--accent); color: var(--accent); }
+  .nav button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .counter { font-size: 0.8rem; padding: 0.3rem 0.6rem; color: var(--muted); }
+
+  @media print {
+    .nav { display: none; }
+    .slide { min-height: auto; page-break-after: always; border: none; padding: 2rem; }
+    body { font-size: 11pt; }
+  }
+</style>
+
+<nav class="nav" aria-label="ניווט בין שקפים">
+  <button type="button" data-go="prev" aria-label="השקף הקודם">▶</button>
+  <span class="counter" id="counter">1</span>
+  <button type="button" data-go="next" aria-label="השקף הבא">◀</button>
+</nav>
+
+<!-- ═══════════ 1 · title ═══════════ -->
+<section class="slide dark">
+  <div class="strip" aria-hidden="true"></div>
+  <div class="stack loose">
+    <p class="eyebrow">מערכת לניהול תכניות קריירה</p>
+    <h1>Helm</h1>
+    <p class="lede" style="font-size: clamp(1.2rem, 2vw, 1.6rem); max-width: 46ch;">
+      ההנהלה הבכירה מגדירה את החוזה. המפקד מקבל את ההגה — ואת הידיעה
+      האם הוא עומד בו, לכל פקוד, בכל רגע.
+    </p>
+    <p class="small muted">הצעה לפיילוט · תחום אחד · במשותף עם HR</p>
+  </div>
+</section>
+
+<!-- ═══════════ 2 · chapter ═══════════ -->
+<section class="slide dark">
+  <div class="strip" aria-hidden="true"></div>
+  <p class="chapno">חלק ראשון</p>
+  <div class="stack">
+    <p class="eyebrow">המצב היום</p>
+    <h1 style="max-width: 18ch;">כל מפקד מנהל בשיטה שלו</h1>
+  </div>
+</section>
+
+<!-- ═══════════ 3 · today ═══════════ -->
+<section class="slide">
+  <div class="strip" aria-hidden="true"></div>
+  <div class="stack loose">
+    <div class="stack tight">
+      <p class="eyebrow">ארבע עובדות</p>
+      <h2>מה שקורה בפועל</h2>
+    </div>
+    <div class="facts">
+      <div>
+        <h3>מעקב אישי, לא ארגוני</h3>
+        <p class="muted small">לכל מפקד שיטה משלו. אין דרך יעילה לעקוב אחרי האנשים,
+        ואין דרך לדעת מה קורה אצל השכן.</p>
+      </div>
+      <div>
+        <h3>תכניות שנכתבו ודעכו</h3>
+        <p class="muted small">היו ניסיונות חוזרים להגדיר תכנית קבועה. הן לא נאכפו
+        לאורך זמן — לא בגלל התוכן, אלא בגלל שלא היה מי שיישא אותן.</p>
+      </div>
+      <div>
+        <h3>HR קטן ובירוקרטי</h3>
+        <p class="muted small">הצוות נותן מענה מנהלתי. מעטפת עשירה למפקדים
+        דורשת מעקב שאין לו זמן אליו.</p>
+      </div>
+      <div>
+        <h3>תסכול למטה</h3>
+        <p class="muted small">אין שקיפות להמשך הדרך, אין עקביות, ואין מעטפת
+        קבועה שמאפשרת לאדם לדעת איך הוא צומח כאן.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ 4 · the proof ═══════════ -->
+<section class="slide">
+  <div class="strip" aria-hidden="true"></div>
+  <div class="cols wide-right">
+    <div class="stack loose">
+      <div class="stack tight">
+        <p class="eyebrow">ההוכחה כבר אצלכם</p>
+        <h2>דבר אחד כן קורה כמו שצריך</h2>
+      </div>
+      <p class="quote rail">
+        חוות הדעת השנתיות מתבצעות במלואן — כי יש להן אכיפה מערכתית.
+      </p>
+      <p class="lede">
+        זה לא צירוף מקרים, וזו לא שאלה של מוטיבציה. מה שיש לו נשא מערכתי — קורה.
+        מה שאין לו — לא קורה, שוב ושוב.
+      </p>
+    </div>
+    <div class="stack">
+      <div class="facts" style="grid-template-columns: 1fr;">
+        <div>
+          <h3 style="color: var(--ok);">✓ חוות דעת שנתית</h3>
+          <p class="small muted">מחזור מוגדר · מישהו נשאל · יש מחיר לאי-ביצוע</p>
+        </div>
+        <div>
+          <h3 style="color: var(--critical);">✕ תכנית קריירה</h3>
+          <p class="small muted">מסמך · אף אחד לא נשאל · אין מחיר להתעלמות</p>
+        </div>
+      </div>
+      <p class="small muted">ההבדל אינו בחשיבות. הוא בנשא.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ 5 · chapter ═══════════ -->
+<section class="slide dark">
+  <div class="strip" aria-hidden="true"></div>
+  <p class="chapno">חלק שני</p>
+  <div class="stack">
+    <p class="eyebrow">הרעיון</p>
+    <h1 style="max-width: 20ch;">תכנית קריירה היא חוזה</h1>
+  </div>
+</section>
+
+<!-- ═══════════ 6 · the contract ═══════════ -->
+<section class="slide">
+  <div class="strip" aria-hidden="true"></div>
+  <div class="stack loose">
+    <div class="stack tight">
+      <p class="eyebrow">שני צדדים</p>
+      <h2>לחוזה יש מי שמבטיח ומי שאחראי לספק</h2>
+    </div>
+    <div class="cols two">
+      <div class="stack rail">
+        <h3>הארגון מבטיח</h3>
+        <p class="muted">מסלול מוגדר, זהה לכל מי שנמצא בו: אבני דרך, יעדים
+        מצטברים, ומופעים תקופתיים — הכול ביחס לתאריך הגיוס של האדם.</p>
+        <p class="small muted">מי שכותב את החוזה: ההנהלה הבכירה. במערכת, רק אדמין
+        מגדיר תבניות מסלול.</p>
+      </div>
+      <div class="stack rail">
+        <h3>המפקד אחראי לספק</h3>
+        <p class="muted">לוודא שכל פקוד עומד ביעדים שלו, לתעד את מה שקרה,
+        ולהיות מסוגל לומר בכל רגע איפה הוא עומד.</p>
+        <p class="small muted">היום זה נשען על זיכרון. Helm הופך את זה לנמדד.</p>
+      </div>
+    </div>
+    <div class="tablewrap">
+      <table class="compare">
+        <thead>
+          <tr><th>השאלה שהחוזה מעורר</th><th>מה עונה עליה</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>מה בדיוק הבטחנו?</td><td>מסלול קריירה — תבנית אחת, זהה לכולם</td></tr>
+          <tr><td>האם הפקוד עומד בו?</td><td>מנוע פערים שמחשב מחדש בכל צפייה</td></tr>
+          <tr><td>איפה אני נופל, על פני כל אנשיי?</td><td>דשבורד ועץ מסגרות</td></tr>
+          <tr><td>איפה הארגון נופל?</td><td>אותו דשבורד, בהיקף רחב יותר</td></tr>
+          <tr><td>איך אני מוכיח מה נעשה?</td><td>חוות דעת ומופעים, עם הקבצים המצורפים</td></tr>
+          <tr><td>ומה עם שאלה שלא חשבנו עליה?</td><td>הסוכן</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ 7 · why now ═══════════ -->
+<section class="slide">
+  <div class="strip" aria-hidden="true"></div>
+  <div class="stack loose">
+    <div class="stack tight">
+      <p class="eyebrow">השאלה הראשונה שתישאל</p>
+      <h2>במה זה שונה מהפעמים הקודמות?</h2>
+      <p class="lede">התשובה חייבת להיות מכנית. לא מוטיבציה — מנגנון.</p>
+    </div>
+    <div class="tablewrap">
+      <table class="compare">
+        <thead>
+          <tr><th>למה תכניות קודמות דעכו</th><th>מה נושא את זה ב-Helm</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>אף אחד לא נשאל ״אתה עומד בזה?״ ברגע שבו זה עוד ניתן לתיקון</td>
+            <td>מנוע הפערים מסמן מה מתקרב, מה חלף, ומה חסר — לכל אדם, כל הזמן</td>
+          </tr>
+          <tr>
+            <td>אין מחיר להתעלמות</td>
+            <td>המצב גלוי כלפי מעלה, בעץ המסגרות, בלי דוח שצריך להכין</td>
+          </tr>
+          <tr>
+            <td>המפקד מתחלף — והתכנית נעלמת איתו</td>
+            <td>התכנית עוגנת בתאריך הגיוס של <b>האיש</b>, לא בקדנציה של המפקד</td>
+          </tr>
+          <tr>
+            <td>שינוי מסלול מאפס את מה שהיה</td>
+            <td>מעבר בין מסלולים שומר את ההיסטוריה, ומבחין בין ״לא נדרש ממנו״
+            ל״נדרש ולא בוצע״</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="small muted">השורה השלישית היא המכרעת: ״לאורך זמן״ פירושו כמעט תמיד תחלופת מפקדים.</p>
+  </div>
+</section>
+
+<!-- ═══════════ 8 · chapter ═══════════ -->
+<section class="slide dark">
+  <div class="strip" aria-hidden="true"></div>
+  <p class="chapno">חלק שלישי</p>
+  <div class="stack">
+    <p class="eyebrow">המערכת</p>
+    <h1 style="max-width: 22ch;">שלושה מסכים, ושאלה פתוחה</h1>
+  </div>
+</section>
+
+<!-- ═══════════ 9 · dashboard ═══════════ -->
+<section class="slide">
+  <div class="strip" aria-hidden="true"></div>
+  <div class="cols wide-right">
+    <div class="stack loose">
+      <div class="stack tight">
+        <p class="eyebrow">מסך ראשון</p>
+        <h2>דשבורד — איפה אני נופל</h2>
+      </div>
+      <ul class="plain muted">
+        <li><b>עמידה ביחס לפקודים</b> כמספר אחד, ולידו כמה אירועים באי-עמידה וכמה מתקרבים.</li>
+        <li><b>עץ המסגרות</b> מתגלגל כלפי מעלה: מרכז ▸ תחום ▸ מדור ▸ צוות. כל רמה רואה את מה שתחתיה.</li>
+        <li><b>חתוך אוטומטית להרשאות</b> — מפקד רואה את אנשיו, ראש תחום את התחום, ואף אחד לא רואה מעבר לזה.</li>
+        <li>אפשר לכווץ את כל הצוותים בלחיצה, כשרוצים לראות מבנה ולא אנשים.</li>
+      </ul>
+      <p class="small muted">אין דוח להכין. המספר קיים כי הנתונים קיימים.</p>
+    </div>
+    <div class="screen" role="img" aria-label="המחשה סכמטית של הדשבורד">
+      <div class="bar"><b>Helm</b><span>דשבורד</span><span>אנשים</span><span>תכניות קריירה</span></div>
+      <div class="body">
+        <div class="gauge"><span class="num">69%</span><span class="muted small">עמידה ביחס לפקודים</span></div>
+        <div class="kpis">
+          <div class="kpi"><div class="n" style="color: var(--critical)">17</div><div class="l">אירועים באי-עמידה</div></div>
+          <div class="kpi"><div class="n" style="color: var(--warn)">4</div><div class="l">אירועים מתקרבים</div></div>
+          <div class="kpi"><div class="n">13</div><div class="l">אנשים תחת ניהולי</div></div>
+        </div>
+        <div class="tree">
+          <div class="node"><span class="muted">תחום</span><span class="nm">אלגוריתמיקה</span><span class="sp"></span><span class="pill red">🔴 6</span><span class="pill amb">🟡 2</span></div>
+          <div class="node" style="padding-inline-start: 1.2rem"><span class="muted">מדור</span><span class="nm">ראייה</span><span class="sp"></span><span class="pill red">🔴 4</span></div>
+          <div class="node" style="padding-inline-start: 2.4rem"><span class="muted">צוות</span><span class="nm">פיקסל</span><span class="sp"></span><span class="pill red">🔴 3</span><span class="pill ok">5 אנשים</span></div>
+          <div class="node" style="padding-inline-start: 2.4rem"><span class="muted">צוות</span><span class="nm">עדשה</span><span class="sp"></span><span class="pill amb">🟡 1</span><span class="pill ok">3 אנשים</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ 10 · people ═══════════ -->
+<section class="slide">
+  <div class="strip" aria-hidden="true"></div>
+  <div class="cols wide-right">
+    <div class="stack loose">
+      <div class="stack tight">
+        <p class="eyebrow">מסך שני</p>
+        <h2>אנשים — מי, באיזה מסלול, ובאיזה מצב</h2>
+      </div>
+      <ul class="plain muted">
+        <li>עמודת <b>מסלול קריירה</b> לכל אדם — לחיצה פותחת את המסלול הגנרי שההנהלה הגדירה.</li>
+        <li><b>פילטר לכל עמודה</b>, תוך כדי הקלדה: מי בתחום הזה, מי במסלול ההוא, מי עומד לסיים.</li>
+        <li>הכניסה לכרטיס אישי: פרטים, תכנית, התקדמות, וכל חוות הדעת שנכתבו.</li>
+      </ul>
+      <p class="small muted">״מי מהאנשים שלי בכלל בלי מסלול?״ — שאלה של שתי לחיצות.</p>
+    </div>
+    <div class="screen" role="img" aria-label="המחשה סכמטית של עמוד אנשים">
+      <div class="bar"><b>Helm</b><span>אנשים</span></div>
+      <div class="body">
+        <div class="rows">
+          <div class="row head"><span>שם</span><span>מסגרת</span><span>מסלול קריירה</span><span>סטטוס</span></div>
+          <div class="row"><span>נועם אזולאי</span><span class="muted">ראייה ▸ פיקסל</span><span class="plan">מסלול מומחה</span><span class="muted">פעיל</span></div>
+          <div class="row"><span>שירה דגן</span><span class="muted">ראייה ▸ עדשה</span><span class="plan">מסלול פיקוד</span><span class="muted">פעיל</span></div>
+          <div class="row"><span>איתמר גולן</span><span class="muted">שפה ▸ סמנטיקה</span><span class="none">ללא מסלול</span><span class="muted">פעיל</span></div>
+          <div class="row"><span>רותם קפלן</span><span class="muted">ראייה ▸ פיקסל</span><span class="plan">מסלול קליטה</span><span class="muted">סיום מתוכנן</span></div>
+        </div>
+        <div class="chips">
+          <span class="chip on">מסלול: הכול</span><span class="chip">סטטוס: הכול</span><span class="chip">סנן מסגרת…</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ 11 · career ═══════════ -->
+<section class="slide">
+  <div class="strip" aria-hidden="true"></div>
+  <div class="cols wide-right">
+    <div class="stack loose">
+      <div class="stack tight">
+        <p class="eyebrow">מסך שלישי</p>
+        <h2>ניהול קריירה — כתיבת החוזה</h2>
+      </div>
+      <ul class="plain muted">
+        <li><b>אבני דרך</b> בחודש מוגדר מהגיוס, <b>יעדים מצטברים</b> עם נקודות ביקורת, ו<b>מופעים תקופתיים</b> שנפרסים לבד.</li>
+        <li>הכול <b>יחסי לתאריך הגיוס</b> — תבנית אחת משרתת את כולם, ומתורגמת לתאריכים אמיתיים לכל אדם.</li>
+        <li>שיוך לאדם יוצר <b>עותק עצמאי</b>: עדכון התבנית לא משנה למפרע את מי שכבר במסלול.</li>
+        <li>איור המסלול ניתן להפקה כ-PDF למצגות ולשיחות אישיות.</li>
+      </ul>
+    </div>
+    <div class="screen" role="img" aria-label="המחשה סכמטית של מסלול קריירה">
+      <div class="bar"><b>Helm</b><span>מסלול פיקוד וניהול</span></div>
+      <div class="body">
+        <div class="track">
+          <div class="tick"><span class="mo">חודש 72</span><span class="ev"><i class="dot"></i>סיום המסלול</span></div>
+          <div class="tick"><span class="mo">60</span><span class="ev metric"><i class="dot"></i>שעות ניהול · יעד 500</span></div>
+          <div class="tick"><span class="mo">48</span><span class="ev"><i class="dot"></i>קורס פיקוד בכיר</span></div>
+          <div class="tick"><span class="mo">36</span><span class="ev"><i class="dia"></i>חוות דעת תקופתית</span></div>
+          <div class="tick"><span class="mo">24</span><span class="ev"><i class="dot"></i>ניהול צוות ראשון</span></div>
+          <div class="tick waived"><span class="mo">9</span><span class="ev"><i class="dot"></i>קורס ניהול בסיסי · פטור</span></div>
+          <div class="tick"><span class="mo">גיוס</span><span class="ev" style="background: var(--ground); color: #fff; border-color: var(--ground);">תחילת הדרך</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ 12 · evidence ═══════════ -->
+<section class="slide">
+  <div class="strip" aria-hidden="true"></div>
+  <div class="stack loose">
+    <div class="stack tight">
+      <p class="eyebrow">תיעוד</p>
+      <h2>מה שקרה בפועל — עם ראיות</h2>
+    </div>
+    <div class="cols two">
+      <div class="stack">
+        <p class="muted">כל מופע תקופתי הוא משבצת שממתינה לתוכן: מי מילא, מתי, ומה נכתב.
+        אפשר לצרף מסמכים — והם נשמרים עם הרשומה, לא בתיקייה אצל מישהו.</p>
+        <ul class="plain muted">
+          <li>מופע שחלף ולא מולא נצבע כפער, ולא נעלם.</li>
+          <li>רשומות חופשיות לאירועים שאינם בתכנית — כנס, צל״ש, קורס חיצוני.</li>
+          <li>מעבר בין מסלולים שומר את הכול, ומתעד גם את סיבת המעבר.</li>
+        </ul>
+      </div>
+      <div class="stack">
+        <div class="facts" style="grid-template-columns: 1fr;">
+          <div>
+            <h3>⊘ פטור</h3>
+            <p class="small muted">האירוע מוקדם ממועד שיוך העובד למסלול — מעולם לא נדרש ממנו.
+            אין כאן כישלון.</p>
+          </div>
+          <div>
+            <h3>✕ נדרש ולא בוצע</h3>
+            <p class="small muted">הגיע המועד, לא נעשה. מתועד לנצח, ואינו נספר כפער אחרי מעבר מסלול.</p>
+          </div>
+        </div>
+        <p class="small muted">שתי המילים האלה נראות דומה בדוח, ואומרות דברים הפוכים על אדם.
+        המערכת לא מערבבת אותן.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ 13 · the agent ═══════════ -->
+<section class="slide dark">
+  <div class="strip" aria-hidden="true"></div>
+  <div class="stack loose">
+    <div class="stack tight">
+      <p class="eyebrow">הלב של המערכת</p>
+      <h2 style="font-size: clamp(1.8rem, 3.4vw, 2.8rem);">שאלה חופשית, בשפה שלך, על האנשים שלך</h2>
+    </div>
+    <div class="ask">
+      <span class="who">המפקד</span>
+      <div class="said">מי מהאנשים שלי לא קיבל חוות דעת בשנה האחרונה, ומה מצב שעות הגמול שלהם?</div>
+      <span class="who">Helm</span>
+      <div class="said answer">
+        שלושה אנשים · לכל אחד מהם מפורטים המופעים שלא מולאו, שעות הגמול שנרשמו
+        מול היעד, וקישור לכרטיס. התשובה נשענת רק על מה שבראות שלך.
+      </div>
+    </div>
+    <div class="flow" style="margin-block-start: 0.5rem;">
+      <div><div class="step">שלב ראשון</div><div class="what">שואלים בשפה חופשית</div></div>
+      <div><div class="step">שלב שני</div><div class="what">מקבלים תשובה עם ראיות</div></div>
+      <div class="lit" style="color: var(--ink);"><div class="step">שלב שלישי</div><div class="what">שומרים אותה כחוק</div></div>
+      <div><div class="step">מכאן והלאה</div><div class="what">דוח קבוע, מיידי, זהה בכל הרצה</div></div>
+    </div>
+    <p class="lede" style="max-width: 70ch;">
+      זו לא ״יש לנו AI״. זו <b style="color: #fff;">חקירה שהופכת לתקן</b>: שאלה טובה שמפקד שאל פעם אחת
+      הופכת לדוח שכל הארגון מריץ מכאן והלאה — בלי מודל, בלי אי-ודאות, ובאותה תוצאה בדיוק.
+    </p>
+    <p class="small" style="color: #8fb3a8;">הסוכן קורא בלבד, ורק את מה שבהרשאות השואל. הוא אינו משנה דבר במערכת.</p>
+  </div>
+</section>
+
+<!-- ═══════════ 14 · HR ═══════════ -->
+<section class="slide">
+  <div class="strip" aria-hidden="true"></div>
+  <div class="cols wide-right">
+    <div class="stack loose">
+      <div class="stack tight">
+        <p class="eyebrow">הקהל השני</p>
+        <h2>צוות HR קטן יכול לתת מעטפת רחבה</h2>
+      </div>
+      <p class="lede">היום הזמן של HR נבלע במעקב, ולכן הוא לא מגיע לתמיכה.
+      כשהמעקב נעשה לבד, מה שנשאר הוא ההתערבות — וזה בדיוק החלק שדורש אדם.</p>
+      <div class="tablewrap">
+        <table class="compare">
+          <thead><tr><th>היום</th><th>עם Helm</th></tr></thead>
+          <tbody>
+            <tr><td>לאסוף מי בפיגור</td><td>הרשימה קיימת</td></tr>
+            <tr><td>להזכיר למפקדים</td><td>המפקד רואה לבד, לפני שזה הופך לפער</td></tr>
+            <tr><td>להכין דוח לכל בקשה</td><td>הדוח נשמר פעם אחת ורץ לבד</td></tr>
+            <tr><td>מענה בירוקרטי</td><td>ליווי ממוקד למי שבאמת צריך</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="stack rail">
+      <h3>למה HR שותף בפיילוט</h3>
+      <p class="muted small">הם היחידים שרואים את הרוחב, הם שיזהו איפה התכנית עצמה
+      לא מתאימה למציאות, והם שיישאו את ההטמעה מול המפקדים.</p>
+      <p class="muted small">פיילוט בלי HR בודק כלי. פיילוט עם HR בודק שיטה.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ 15 · honest scope ═══════════ -->
+<section class="slide">
+  <div class="strip" aria-hidden="true"></div>
+  <div class="stack loose">
+    <div class="stack tight">
+      <p class="eyebrow">גבולות</p>
+      <h2>מה שהמערכת עדיין לא עושה</h2>
+      <p class="lede">עדיף שתשמעו את זה כאן ולא בחודש השני.</p>
+    </div>
+    <div class="facts">
+      <div>
+        <h3>לפקוד אין משתמש</h3>
+        <p class="small muted">היום המערכת משרתת מפקדים ו-HR. השקיפות לאיש מגיעה מכך
+        שלמפקד יש סוף-סוף מה לומר לו — לא ממסך שהוא נכנס אליו.</p>
+      </div>
+      <div>
+        <h3>מסך אישי לפקוד — החלטה, לא פיצ׳ר</h3>
+        <p class="small muted">חוות הדעת נכתבות <b>עליו</b>. לחשוף אותן משנה את אופי
+        הכלי. זו החלטה שנרצה לקבל יחד, ולא להחליק.</p>
+      </div>
+      <div>
+        <h3>הנתונים לא מגיעים לבד</h3>
+        <p class="small muted">קליטה ראשונית של אנשים קיימים דורשת עבודה. יש לכך
+        כלים — קליטה ממסמכים בעזרת הסוכן, וייבוא תצורה — אבל זה מאמץ אמיתי.</p>
+      </div>
+      <div>
+        <h3>המערכת לא מחליטה</h3>
+        <p class="small muted">היא מודדת מול חוזה שאתם כתבתם. אם החוזה לא נכון,
+        המערכת תמדוד בנאמנות דבר לא נכון.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ 16 · the ask ═══════════ -->
+<section class="slide dark">
+  <div class="strip" aria-hidden="true"></div>
+  <p class="chapno">הבקשה</p>
+  <div class="stack loose">
+    <div class="stack tight">
+      <p class="eyebrow">מה אנחנו מבקשים</p>
+      <h1 style="font-size: clamp(2rem, 4vw, 3.2rem); max-width: 24ch;">תחום אחד. שלושה חודשים. יחד עם HR.</h1>
+    </div>
+    <div class="metrics">
+      <div><div class="n">1</div><p class="small">תחום — כל המדורים והצוותים שתחתיו</p></div>
+      <div><div class="n">3</div><p class="small">חודשים מרגע שהנתונים בפנים</p></div>
+      <div><div class="n">2</div><p class="small">מסלולים שההנהלה תגדיר לפיילוט</p></div>
+    </div>
+    <p class="lede" style="max-width: 62ch;">
+      לא פריסה ארגונית. תחום אחד שבו נבדוק אם החוזה מחזיק כשיש מי שנושא אותו —
+      ונחזור אליכם עם מספרים, לא עם התרשמות.
+    </p>
+  </div>
+</section>
+
+<!-- ═══════════ 17 · success ═══════════ -->
+<section class="slide">
+  <div class="strip" aria-hidden="true"></div>
+  <div class="cols wide-right">
+    <div class="stack loose">
+      <div class="stack tight">
+        <p class="eyebrow">איך נדע שהצליח</p>
+        <h2>מדדים שנסכים עליהם מראש</h2>
+      </div>
+      <ul class="plain">
+        <li><b>כיסוי</b> — איזה אחוז מאנשי התחום משויכים למסלול בסוף החודש הראשון.</li>
+        <li><b>סגירת פערים</b> — כמה אירועים באי-עמידה היו בתחילה, וכמה בסוף.</li>
+        <li><b>שימוש אמיתי</b> — כמה מפקדים נכנסו מיוזמתם, ולא כי התבקשו.</li>
+        <li><b>עומס HR</b> — כמה בקשות לדוחות ידניים הגיעו, לעומת התקופה שלפני.</li>
+        <li><b>מה האנשים אומרים</b> — שאלון קצר לפקודי התחום בתחילה ובסוף, על שקיפות ההמשך.</li>
+      </ul>
+      <p class="small muted">המדד האחרון הוא החשוב ביותר, והוא היחיד שלא מגיע מהמערכת.</p>
+    </div>
+    <div class="stack rail">
+      <h3>מה נדרש מכם</h3>
+      <p class="muted small">החלטה על התחום · שני מסלולים מוגדרים · איש קשר ב-HR ·
+      וגישה לנתוני האנשים הקיימים.</p>
+      <h3 style="margin-block-start: 0.8rem;">מה לא נדרש</h3>
+      <p class="muted small">שינוי בתהליכי העבודה, מערכת חדשה ללמוד, או התחייבות
+      מעבר לשלושת החודשים.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ 18 · close ═══════════ -->
+<section class="slide dark">
+  <div class="strip" aria-hidden="true"></div>
+  <div class="stack loose">
+    <h1 style="max-width: 20ch;">אתם כותבים את החוזה.<br>אנחנו נדאג שמישהו יישא אותו.</h1>
+    <p class="lede">Helm</p>
+  </div>
+</section>
+
+<script>
+  const slides = [...document.querySelectorAll(".slide")];
+  const counter = document.getElementById("counter");
+
+  // heading strip: ticks for every slide, the current one lit, reading right→left
+  slides.forEach((slide, i) => {
+    const strip = slide.querySelector(".strip");
+    if (!strip) return;
+    slides.forEach((_, j) => {
+      const tick = document.createElement("i");
+      if (j === i) tick.className = "here";
+      else if (slides[j].classList.contains("dark")) tick.className = "major";
+      strip.append(tick);
+    });
+  });
+
+  const current = () => {
+    const mid = window.scrollY + window.innerHeight / 2;
+    return slides.findIndex((s) => s.offsetTop <= mid && s.offsetTop + s.offsetHeight > mid);
+  };
+  const go = (dir) => {
+    const i = Math.min(slides.length - 1, Math.max(0, current() + dir));
+    slides[i].scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+  };
+
+  document.querySelectorAll("[data-go]").forEach((b) =>
+    b.addEventListener("click", () => go(b.dataset.go === "next" ? 1 : -1)),
+  );
+  addEventListener("keydown", (e) => {
+    if (["ArrowLeft", "PageDown", " "].includes(e.key)) { e.preventDefault(); go(1); }
+    if (["ArrowRight", "PageUp"].includes(e.key)) { e.preventDefault(); go(-1); }
+    if (e.key === "Home") slides[0].scrollIntoView();
+    if (e.key === "End") slides.at(-1).scrollIntoView();
+  });
+  const sync = () => { counter.textContent = `${current() + 1} / ${slides.length}`; };
+  addEventListener("scroll", sync, { passive: true });
+  sync();
+</script>
