@@ -24,7 +24,7 @@ export type PersonForGaps = {
       unit: string;
       checkpoints: { id: string; offsetMonths: number; target: number }[];
     }[];
-    recurringEvents: { id: string; label: string; intervalMonths: number; stopOffsetMonths: number | null }[];
+    recurringEvents: { id: string; label: string; intervalMonths: number; startOffsetMonths: number; stopOffsetMonths: number | null }[];
     /** the active assignment: its waiver line and any per-item overrides */
     assignment?: { waiverOffsetMonths: number; waivers: WaiverOverride[] } | null;
   } | null;
@@ -149,7 +149,7 @@ export function computePersonGaps(person: PersonForGaps, today: Date): { items: 
   }
 
   for (const r of plan.recurringEvents) {
-    const offsets = unrollForPerson(r.intervalMonths, r.stopOffsetMonths, rec, person.endOfServiceDate).filter(
+    const offsets = unrollForPerson(r.intervalMonths, r.stopOffsetMonths, r.startOffsetMonths, rec, person.endOfServiceDate).filter(
       (off) => !isOccurrenceWaived(ctx, r.id, off),
     );
     const filled = filledByEvent.get(r.id) ?? new Set<number>();

@@ -260,6 +260,10 @@ model RecurringEvent {
   planId           String
   label            String
   intervalMonths   Int
+  /// Months from recruitment of the FIRST occurrence; the cycle runs
+  /// start, start+interval, … ≤ stop. Backfilled = intervalMonths, which is
+  /// exactly the schedule events produced before the column existed.
+  startOffsetMonths Int
   stopMode         RecurringStopMode
   stopOffsetMonths Int? // required when stopMode = UNTIL_OFFSET
   color            String? // soft-palette color assigned at creation (stable)

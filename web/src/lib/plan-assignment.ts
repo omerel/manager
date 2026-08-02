@@ -101,7 +101,7 @@ export async function buildAssignmentPreview(
       })),
     ),
     ...tpl.recurringEvents.flatMap((r) =>
-      unrollRecurring(r.intervalMonths, r.stopOffsetMonths)
+      unrollRecurring(r.intervalMonths, r.stopOffsetMonths, r.startOffsetMonths)
         .slice(0, RECURRING_PREVIEW_CAP)
         .map((off) => ({
           id: r.id,

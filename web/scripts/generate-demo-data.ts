@@ -185,6 +185,7 @@ async function main() {
           create: spec.recurring.map((r, i) => ({
             label: r.label,
             intervalMonths: r.intervalMonths,
+            startOffsetMonths: r.intervalMonths, // first occurrence one interval in, as before the column
             stopMode: "UNTIL_OFFSET" as const,
             stopOffsetMonths: r.stopOffsetMonths,
             color: nextColorKey(i),
@@ -321,6 +322,7 @@ async function main() {
           create: tpl.recurringEvents.map((r) => ({
             label: r.label,
             intervalMonths: r.intervalMonths,
+            startOffsetMonths: r.startOffsetMonths,
             stopMode: "UNTIL_OFFSET" as const,
             stopOffsetMonths: r.stopOffsetMonths ?? 72,
             color: r.color,
@@ -451,6 +453,7 @@ async function main() {
           create: target.recurringEvents.map((r) => ({
             label: r.label,
             intervalMonths: r.intervalMonths,
+            startOffsetMonths: r.startOffsetMonths,
             stopMode: "UNTIL_OFFSET" as const,
             stopOffsetMonths: r.stopOffsetMonths ?? 72,
             color: r.color,

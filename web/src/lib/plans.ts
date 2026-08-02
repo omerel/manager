@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import type { Visibility } from "@/lib/access";
+import { formatYearsMonths, monthsAsWords } from "@/lib/years-months";
 
 /** For each template, how many people within the user's scope are assigned a copy of it. */
 export async function countAssignmentsByTemplate(visibility: Visibility): Promise<Map<string, number>> {
@@ -42,22 +43,30 @@ export async function countAllAssignmentsByTemplate(): Promise<Map<string, numbe
  */
 export const DEFAULT_STOP_MONTHS = 72;
 
-/** Human label for a month offset relative to recruitment. */
+/**
+ * Human label for a month offset relative to recruitment, in the years.months
+ * notation plus words — "גיוס +3.4 (3 שנים ו-4 חודשים)".
+ */
 export function formatOffset(months: number): string {
   if (months === 0) return "מרגע הגיוס";
-  return `גיוס +${months} ${months === 1 ? "חודש" : "חודשים"}`;
+  return `גיוס +${formatYearsMonths(months)} (${monthsAsWords(months)})`;
 }
 
 /**
- * Unroll a recurring event into occurrence offsets (months from recruitment).
- * The cap always comes from the plan. A missing cap yields nothing rather than
- * a default: substituting a horizon here is what once turned a preview constant
- * into the rule the gap engine measured against, invisibly.
+ * Unroll a recurring event into occurrence offsets (months from recruitment):
+ * start, start+interval, … up to and including the stop. The cap always comes
+ * from the plan. A missing cap yields nothing rather than a default:
+ * substituting a horizon here is what once turned a preview constant into the
+ * rule the gap engine measured against, invisibly.
  */
-export function unrollRecurring(intervalMonths: number, stopOffsetMonths: number | null): number[] {
-  if (intervalMonths <= 0 || stopOffsetMonths == null) return [];
+export function unrollRecurring(
+  intervalMonths: number,
+  stopOffsetMonths: number | null,
+  startOffsetMonths: number,
+): number[] {
+  if (intervalMonths <= 0 || stopOffsetMonths == null || startOffsetMonths < 0) return [];
   const out: number[] = [];
-  for (let m = intervalMonths; m <= stopOffsetMonths; m += intervalMonths) out.push(m);
+  for (let m = startOffsetMonths; m <= stopOffsetMonths; m += intervalMonths) out.push(m);
   return out;
 }
 

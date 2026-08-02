@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/authz";
 import { nextColorKey } from "@/lib/palette";
+import { parseYearsMonths } from "@/lib/years-months";
 
 function int(v: FormDataEntryValue | null, fallback = 0): number {
   const n = Number(String(v ?? "").trim());
@@ -16,6 +17,20 @@ function num(v: FormDataEntryValue | null, fallback = 0): number {
 }
 function str(v: FormDataEntryValue | null): string {
   return String(v ?? "").trim();
+}
+
+/**
+ * A recruitment-anchored offset entered in the years.months notation, parsed
+ * from the RAW string (`3.1` = one month, `3.10` = ten — the same float).
+ * Throws the field's Hebrew error instead of storing a guess.
+ */
+function offsetOf(formData: FormData, field: string, what: string): number {
+  const raw = str(formData.get(field));
+  const months = parseYearsMonths(raw);
+  if (months === null) {
+    throw new Error(`${what}: יש להזין שנים.חודשים (למשל 3.4 = שלוש שנים וארבעה חודשים; החודשים 0–11).`);
+  }
+  return months;
 }
 
 export async function createPlan(formData: FormData) {
@@ -56,6 +71,7 @@ export async function copyPlan(formData: FormData) {
         create: src.recurringEvents.map((r) => ({
           label: r.label,
           intervalMonths: r.intervalMonths,
+          startOffsetMonths: r.startOffsetMonths,
           stopMode: "UNTIL_OFFSET",
           stopOffsetMonths: r.stopOffsetMonths,
           color: r.color,
@@ -78,7 +94,7 @@ export async function addPointEvent(formData: FormData) {
   await requireAdmin();
   const planId = str(formData.get("planId"));
   await prisma.pointEvent.create({
-    data: { planId, label: str(formData.get("label")) || "אירוע", offsetMonths: int(formData.get("offsetMonths")) },
+    data: { planId, label: str(formData.get("label")) || "אירוע", offsetMonths: offsetOf(formData, "offsetMonths", "מועד האירוע") },
   });
   revalidatePath(`/plans/${planId}`);
 }
@@ -105,7 +121,7 @@ export async function addCheckpoint(formData: FormData) {
   await prisma.metricCheckpoint.create({
     data: {
       metricId: str(formData.get("metricId")),
-      offsetMonths: int(formData.get("offsetMonths")),
+      offsetMonths: offsetOf(formData, "offsetMonths", "מועד היעד"),
       target: num(formData.get("target")),
     },
   });
@@ -113,21 +129,24 @@ export async function addCheckpoint(formData: FormData) {
 }
 
 /**
- * A recurring event always stops at an explicit month offset. "Until end of
+ * A recurring event always begins and stops at explicit offsets. "Until end of
  * service" is not an authoring option: that date is unknown for most people,
- * and a plan must schedule everyone assigned to it identically.
+ * and a plan must schedule everyone assigned to it identically. The start is
+ * equally explicit — the system never decides on the admin's behalf that the
+ * cycle begins at recruitment.
  */
-function stopOffsetFrom(formData: FormData): number {
-  const raw = str(formData.get("stopOffsetMonths"));
-  const months = int(formData.get("stopOffsetMonths"), 0);
-  if (!raw || months <= 0) throw new Error("יש להזין עד איזה חודש מהגיוס האירוע חוזר.");
-  return months;
+function recurringSpanFrom(formData: FormData): { startOffsetMonths: number; stopOffsetMonths: number } {
+  const startOffsetMonths = offsetOf(formData, "startOffsetMonths", "תחילת האירוע");
+  const stopOffsetMonths = offsetOf(formData, "stopOffsetMonths", "סיום האירוע");
+  if (stopOffsetMonths <= 0) throw new Error("יש להזין עד מתי (שנים.חודשים מהגיוס) האירוע חוזר.");
+  if (startOffsetMonths > stopOffsetMonths) throw new Error("תחילת האירוע חייבת להיות לפני מועד הסיום שלו.");
+  return { startOffsetMonths, stopOffsetMonths };
 }
 
 export async function addRecurringEvent(formData: FormData) {
   await requireAdmin();
   const planId = str(formData.get("planId"));
-  const stopOffsetMonths = stopOffsetFrom(formData);
+  const span = recurringSpanFrom(formData);
   // each recurring event gets its own soft colour so its occurrences are
   // distinguishable from the other recurring events on the diagram
   const existing = await prisma.recurringEvent.count({ where: { planId } });
@@ -137,7 +156,7 @@ export async function addRecurringEvent(formData: FormData) {
       label: str(formData.get("label")) || "אירוע מחזורי",
       intervalMonths: Math.max(1, int(formData.get("intervalMonths"), 6)),
       stopMode: "UNTIL_OFFSET",
-      stopOffsetMonths,
+      ...span,
       color: nextColorKey(existing),
     },
   });
@@ -153,7 +172,7 @@ export async function updatePointEvent(formData: FormData) {
   if (!label) throw new Error("שם האירוע לא יכול להיות ריק.");
   await prisma.pointEvent.update({
     where: { id: str(formData.get("id")) },
-    data: { label, offsetMonths: int(formData.get("offsetMonths")) },
+    data: { label, offsetMonths: offsetOf(formData, "offsetMonths", "מועד האירוע") },
   });
   revalidatePath(`/plans/${planId}`);
 }
@@ -175,7 +194,7 @@ export async function updateCheckpoint(formData: FormData) {
   const planId = str(formData.get("planId"));
   await prisma.metricCheckpoint.update({
     where: { id: str(formData.get("id")) },
-    data: { offsetMonths: int(formData.get("offsetMonths")), target: num(formData.get("target")) },
+    data: { offsetMonths: offsetOf(formData, "offsetMonths", "מועד היעד"), target: num(formData.get("target")) },
   });
   revalidatePath(`/plans/${planId}`);
 }
@@ -191,7 +210,7 @@ export async function updateRecurringEvent(formData: FormData) {
       label,
       intervalMonths: Math.max(1, int(formData.get("intervalMonths"), 6)),
       stopMode: "UNTIL_OFFSET",
-      stopOffsetMonths: stopOffsetFrom(formData),
+      ...recurringSpanFrom(formData),
     },
   });
   revalidatePath(`/plans/${planId}`);
@@ -204,18 +223,21 @@ export async function deletePlanItem(formData: FormData) {
   const planId = str(formData.get("planId"));
   const kind = str(formData.get("kind")) as DeletableKind;
   const id = str(formData.get("id"));
+  // deleteMany, deliberately: a double-click submits twice, and the second
+  // delete finding nothing must be a no-op — not a P2025 crash page (observed
+  // in the dev log, twice).
   switch (kind) {
     case "point":
-      await prisma.pointEvent.delete({ where: { id } });
+      await prisma.pointEvent.deleteMany({ where: { id } });
       break;
     case "metric":
-      await prisma.cumulativeMetric.delete({ where: { id } });
+      await prisma.cumulativeMetric.deleteMany({ where: { id } });
       break;
     case "recurring":
-      await prisma.recurringEvent.delete({ where: { id } });
+      await prisma.recurringEvent.deleteMany({ where: { id } });
       break;
     case "checkpoint":
-      await prisma.metricCheckpoint.delete({ where: { id } });
+      await prisma.metricCheckpoint.deleteMany({ where: { id } });
       break;
   }
   revalidatePath(`/plans/${planId}`);

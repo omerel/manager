@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { formatYearsMonths } from "@/lib/years-months";
 import { requireEditForPerson } from "@/lib/authz";
 import { saveUpload } from "@/lib/storage";
 
@@ -65,7 +66,7 @@ export async function fillSlot(formData: FormData) {
       personId,
       recurringEventId,
       occurrenceOffset,
-      title: `${rec.label} · גיוס +${occurrenceOffset} חודשים`,
+      title: `${rec.label} · גיוס +${formatYearsMonths(occurrenceOffset)}`,
       content: content || null,
     },
     update: { content: content || null },

@@ -285,6 +285,7 @@ export async function assignPlan(formData: FormData) {
         planId: copy.id,
         label: r.label,
         intervalMonths: r.intervalMonths,
+        startOffsetMonths: r.startOffsetMonths,
         stopMode: "UNTIL_OFFSET",
         stopOffsetMonths: r.stopOffsetMonths,
         color: r.color,

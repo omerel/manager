@@ -1,5 +1,6 @@
 import type { PlanWithEvents } from "@/lib/plans";
 import { unrollRecurring } from "@/lib/plans";
+import { formatYearsMonths, monthsAsWords } from "@/lib/years-months";
 import { softColorFor } from "@/lib/palette";
 
 /**
@@ -68,7 +69,7 @@ export function buildPlanDiagramSvg(plan: PlanWithEvents): string {
   // ---- collect events ----
   const cards: EventCard[] = [];
   for (const e of plan.pointEvents) {
-    cards.push({ offset: e.offsetMonths, title: e.label, sub: `${e.offsetMonths} חודשים מהגיוס`, kind: "point" });
+    cards.push({ offset: e.offsetMonths, title: e.label, sub: `${formatYearsMonths(e.offsetMonths)} מהגיוס (${monthsAsWords(e.offsetMonths)})`, kind: "point" });
   }
   plan.cumulativeMetrics.forEach((m, mi) => {
     const col = softColorFor(m.color, mi); // one colour per metric, shared by all its checkpoints
@@ -76,7 +77,7 @@ export function buildPlanDiagramSvg(plan: PlanWithEvents): string {
       cards.push({
         offset: c.offsetMonths,
         title: `${m.name}: ${c.target} ${m.unit}`,
-        sub: `יעד עד ${c.offsetMonths} חודשים מהגיוס`,
+        sub: `יעד עד ${formatYearsMonths(c.offsetMonths)} מהגיוס`,
         kind: "metric",
         bg: col.bg,
         accent: col.accent,
@@ -89,8 +90,8 @@ export function buildPlanDiagramSvg(plan: PlanWithEvents): string {
   const recurring = plan.recurringEvents.map((r, ri) => ({
     label: r.label,
     interval: r.intervalMonths,
-    stop: `עד חודש ${r.stopOffsetMonths} מהגיוס`,
-    offsets: unrollRecurring(r.intervalMonths, r.stopOffsetMonths),
+    stop: `מ-${formatYearsMonths(r.startOffsetMonths)} עד ${formatYearsMonths(r.stopOffsetMonths ?? 0)} מהגיוס`,
+    offsets: unrollRecurring(r.intervalMonths, r.stopOffsetMonths, r.startOffsetMonths),
     accent: softColorFor(r.color, ri).accent,
   }));
 
@@ -159,7 +160,7 @@ export function buildPlanDiagramSvg(plan: PlanWithEvents): string {
     `<rect width="${W}" height="${H}" fill="white"/>`,
     // title
     `<text x="${CX}" y="44" text-anchor="middle" font-size="22" font-weight="700" fill="${C.deep}">${esc(plan.name)}</text>`,
-    `<text x="${CX}" y="66" text-anchor="middle" font-size="12" fill="${C.muted}">מסלול קריירה · ציר לפי אירועים, במספר חודשים מהגיוס (המרווחים אינם פרופורציוניים)</text>`,
+    `<text x="${CX}" y="66" text-anchor="middle" font-size="12" fill="${C.muted}">מסלול קריירה · ציר לפי אירועים, בשנים.חודשים מהגיוס (המרווחים אינם פרופורציוניים)</text>`,
   );
 
   // ---- spine arrow ----
@@ -233,6 +234,15 @@ export function buildPlanDiagramSvg(plan: PlanWithEvents): string {
     );
   });
 
+  // ---- recurring cadence markers fan out sideways around the axis; the time
+  // labels must clear the WHOLE fan, whose width grows with the number of
+  // recurring events — with a fixed label x, six events were enough for the
+  // leftmost diamonds (drawn later, i.e. on top) to swallow the text ----
+  const fanStep = 15;
+  const fanBase = -((recurring.length - 1) / 2) * fanStep;
+  const fanHalf = recurring.length > 0 ? ((recurring.length - 1) / 2) * fanStep + 9 : 0; // + half a diamond's diagonal
+  const tickX = CX - Math.max(30, fanHalf + 12);
+
   // ---- month labels, on top of connectors, with a white halo so crossing
   // lines never obscure them (0 skipped — the base chip says it) ----
   let topTickY = baseY;
@@ -240,19 +250,21 @@ export function buildPlanDiagramSvg(plan: PlanWithEvents): string {
     const yy = y(m);
     topTickY = yy;
     parts.push(
-      `<text x="${CX - 30}" y="${yy + 4}" text-anchor="end" font-size="11" fill="${C.muted}" stroke="white" stroke-width="4" paint-order="stroke">${m}</text>`,
+      // direction=ltr is load-bearing: the page is RTL, and an SVG <text> inherits
+      // it — under RTL, text-anchor="end" extends the text to the RIGHT of the
+      // anchor, straight into the diamond fan. This was the real cause of the
+      // swallowed labels; the fan-width clearance alone did not fix it.
+      `<text x="${tickX}" y="${yy + 4}" direction="ltr" text-anchor="end" font-size="11" fill="${C.muted}" stroke="white" stroke-width="4" paint-order="stroke">${formatYearsMonths(m)}</text>`,
     );
   }
   parts.push(
-    `<text x="${CX - 30}" y="${topTickY - 16}" text-anchor="end" font-size="10" fill="${C.muted}" stroke="white" stroke-width="4" paint-order="stroke">חודשים</text>`,
+    `<text x="${tickX}" y="${topTickY - 16}" direction="ltr" text-anchor="end" font-size="10" fill="${C.muted}" stroke="white" stroke-width="4" paint-order="stroke">שנים.חודשים</text>`,
   );
 
   // ---- recurring cadence markers ON TOP (diamonds — never hidden by the
   // cards' white connector dots at shared offsets). Each event keeps its own
   // colour, and several events are fanned out sideways so markers that land on
   // the same month stay visible side by side. ----
-  const fanStep = 15;
-  const fanBase = -((recurring.length - 1) / 2) * fanStep;
   recurring.forEach((r, ri) => {
     const mx = CX + fanBase + ri * fanStep;
     for (const off of r.offsets) {
@@ -316,7 +328,7 @@ export function buildPlanDiagramSvg(plan: PlanWithEvents): string {
              .join("")}
            ${
              clipped
-               ? `<div style="color:${C.muted};height:20px;line-height:20px;font-size:11px">הסימונים מוצגים בטווח האירועים: חודש ${firstCard} עד ${lastCard}.</div>`
+               ? `<div style="color:${C.muted};height:20px;line-height:20px;font-size:11px">הסימונים מוצגים בטווח האירועים: ${formatYearsMonths(firstCard!)} עד ${formatYearsMonths(lastCard!)}.</div>`
                : ""
            }
          </div>

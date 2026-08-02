@@ -56,7 +56,7 @@ async function main() {
         ],
       },
       recurringEvents: {
-        create: [{ label: "חוות דעת", intervalMonths: 6, stopMode: "UNTIL_OFFSET", stopOffsetMonths: 72 }],
+        create: [{ label: "חוות דעת", intervalMonths: 6, startOffsetMonths: 6, stopMode: "UNTIL_OFFSET", stopOffsetMonths: 72 }],
       },
     },
   });
@@ -131,6 +131,7 @@ async function main() {
           create: tpl.recurringEvents.map((r) => ({
             label: r.label,
             intervalMonths: r.intervalMonths,
+            startOffsetMonths: r.startOffsetMonths,
             stopMode: r.stopMode,
             stopOffsetMonths: r.stopOffsetMonths,
           })),

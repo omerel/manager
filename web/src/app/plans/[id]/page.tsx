@@ -1,6 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getPlan, formatOffset, unrollRecurring, DEFAULT_STOP_MONTHS, type PlanWithEvents } from "@/lib/plans";
+import { OffsetField } from "@/components/OffsetField";
+import { SubmitButton } from "@/components/SubmitButton";
+import { formatYearsMonths } from "@/lib/years-months";
 import { buildPlanDiagramSvg } from "@/lib/plan-diagram";
 import { Route, FileDown } from "lucide-react";
 import { isAdmin } from "@/lib/authz";
@@ -108,9 +111,9 @@ function DeleteButton({ planId, kind, id }: { planId: string; kind: string; id: 
       <input type="hidden" name="planId" value={planId} />
       <input type="hidden" name="kind" value={kind} />
       <input type="hidden" name="id" value={id} />
-      <button className="text-xs text-red-600 hover:underline" title="מחק">
+      <SubmitButton className="text-xs text-red-600 hover:underline disabled:opacity-50" pendingText="מוחק…">
         מחק
-      </button>
+      </SubmitButton>
     </form>
   );
 }
@@ -138,7 +141,7 @@ function PointEventsSection({ plan, admin }: { plan: PlanWithEvents; admin: bool
                     <input type="hidden" name="planId" value={plan.id} />
                     <input type="hidden" name="id" value={e.id} />
                     <TextField name={`label-${e.id}`} field="label" label="שם האירוע" defaultValue={e.label} required />
-                    <NumField name={`offset-${e.id}`} field="offsetMonths" label="חודשים מהגיוס" defaultValue={e.offsetMonths} />
+                    <OffsetField name={`offset-${e.id}`} field="offsetMonths" label="מועד (שנים.חודשים מהגיוס)" defaultMonths={e.offsetMonths} required />
                   </InlineEdit>
                 ) : (
                   summary
@@ -153,7 +156,7 @@ function PointEventsSection({ plan, admin }: { plan: PlanWithEvents; admin: bool
         <form action={addPointEvent} className="flex flex-wrap items-end gap-2 rounded-lg border border-dashed border-border p-3">
           <input type="hidden" name="planId" value={plan.id} />
           <TextField name="label" label="שם האירוע" placeholder="סיום הכשרה בסיסית" />
-          <NumField name="offsetMonths" label="חודשים מהגיוס" defaultValue={1} />
+          <OffsetField name="offsetMonths" label="מועד (שנים.חודשים מהגיוס)" defaultMonths={1} required />
           <AddButton>הוסף נקודתי</AddButton>
         </form>
       )}
@@ -215,7 +218,7 @@ function CumulativeSection({ plan, admin }: { plan: PlanWithEvents; admin: boole
                             <input type="hidden" name="planId" value={plan.id} />
                             <input type="hidden" name="id" value={cp.id} />
                             <NumField name={`cptarget-${cp.id}`} field="target" label={`יעד (${m.unit})`} defaultValue={cp.target} step="any" />
-                            <NumField name={`cpoffset-${cp.id}`} field="offsetMonths" label="חודשים מהגיוס" defaultValue={cp.offsetMonths} />
+                            <OffsetField name={`cpoffset-${cp.id}`} field="offsetMonths" label="מועד (שנים.חודשים מהגיוס)" defaultMonths={cp.offsetMonths} required />
                           </InlineEdit>
                         ) : (
                           cpSummary
@@ -231,7 +234,7 @@ function CumulativeSection({ plan, admin }: { plan: PlanWithEvents; admin: boole
                   <input type="hidden" name="planId" value={plan.id} />
                   <input type="hidden" name="metricId" value={m.id} />
                   <NumField name={`newtarget-${m.id}`} field="target" label={`יעד (${m.unit})`} defaultValue={100} step="any" />
-                  <NumField name={`newoffset-${m.id}`} field="offsetMonths" label="חודשים מהגיוס" defaultValue={6} />
+                  <OffsetField name={`newoffset-${m.id}`} field="offsetMonths" label="מועד (שנים.חודשים מהגיוס)" defaultMonths={6} required />
                   <AddButton>הוסף יעד-ביניים</AddButton>
                 </form>
               )}
@@ -263,8 +266,8 @@ function RecurringSection({ plan, admin }: { plan: PlanWithEvents; admin: boolea
         <ul className="space-y-2">
           {plan.recurringEvents.map((r, ri) => {
             const c = softColorFor(r.color, ri);
-            const stop = r.stopOffsetMonths == null ? null : `עד ${formatOffset(r.stopOffsetMonths)}`;
-            const preview = unrollRecurring(r.intervalMonths, r.stopOffsetMonths);
+            const stop = r.stopOffsetMonths == null ? null : `מ-${formatYearsMonths(r.startOffsetMonths)} עד ${formatYearsMonths(r.stopOffsetMonths)}`;
+            const preview = unrollRecurring(r.intervalMonths, r.stopOffsetMonths, r.startOffsetMonths);
             const summary = (
               <span>
                 <span className="font-medium" style={{ color: c.accent }}>
@@ -272,11 +275,11 @@ function RecurringSection({ plan, admin }: { plan: PlanWithEvents; admin: boolea
                 </span>{" "}
                 {stop ? (
                   <span className="text-sm text-muted">
-                    · כל {r.intervalMonths} חודשים · {stop} · מופעים: {preview.map((o) => `+${o}`).join(", ") || "—"}
+                    · כל {r.intervalMonths} חודשים · {stop} · מופעים: {preview.map((o) => `+${formatYearsMonths(o)}`).join(", ") || "—"}
                   </span>
                 ) : (
                   <span className="text-sm font-medium text-red-700">
-                    · כל {r.intervalMonths} חודשים · חסר חודש עצירה — לא ייווצרו מופעים. יש לערוך ולהשלים.
+                    · כל {r.intervalMonths} חודשים · חסר מועד עצירה — לא ייווצרו מופעים. יש לערוך ולהשלים.
                   </span>
                 )}
               </span>
@@ -293,11 +296,18 @@ function RecurringSection({ plan, admin }: { plan: PlanWithEvents; admin: boolea
                     <input type="hidden" name="id" value={r.id} />
                     <TextField name={`rlabel-${r.id}`} field="label" label="שם האירוע" defaultValue={r.label} required />
                     <NumField name={`rint-${r.id}`} field="intervalMonths" label="כל כמה חודשים" defaultValue={r.intervalMonths} />
-                    <NumField
+                    <OffsetField
+                      name={`rstart-${r.id}`}
+                      field="startOffsetMonths"
+                      label="התחלה (שנים.חודשים מהגיוס)"
+                      defaultMonths={r.startOffsetMonths}
+                      required
+                    />
+                    <OffsetField
                       name={`rstopoff-${r.id}`}
                       field="stopOffsetMonths"
-                      label="עד חודש מהגיוס"
-                      defaultValue={r.stopOffsetMonths ?? DEFAULT_STOP_MONTHS}
+                      label="עד (שנים.חודשים מהגיוס)"
+                      defaultMonths={r.stopOffsetMonths ?? DEFAULT_STOP_MONTHS}
                       required
                     />
                   </InlineEdit>
@@ -315,7 +325,9 @@ function RecurringSection({ plan, admin }: { plan: PlanWithEvents; admin: boolea
           <input type="hidden" name="planId" value={plan.id} />
           <TextField name="label" label="שם האירוע" placeholder="חוות דעת" />
           <NumField name="intervalMonths" label="כל כמה חודשים" defaultValue={6} />
-          <NumField name="stopOffsetMonths" label="עד חודש מהגיוס" defaultValue={DEFAULT_STOP_MONTHS} required />
+          {/* default start: one interval in — "not at recruitment" is the default posture, not a prohibition */}
+          <OffsetField name="startOffsetMonths" label="התחלה (שנים.חודשים מהגיוס)" defaultMonths={6} required />
+          <OffsetField name="stopOffsetMonths" label="עד (שנים.חודשים מהגיוס)" defaultMonths={DEFAULT_STOP_MONTHS} required />
           <AddButton>הוסף מחזורי</AddButton>
         </form>
       )}
@@ -388,7 +400,5 @@ function NumField({
   );
 }
 function AddButton({ children }: { children: React.ReactNode }) {
-  return (
-    <button className="rounded-md bg-brand-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-brand-700">{children}</button>
-  );
+  return <SubmitButton pendingText="מוסיף…">{children}</SubmitButton>;
 }

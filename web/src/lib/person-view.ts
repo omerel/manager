@@ -99,15 +99,16 @@ export type RecurrenceRow = {
 export function unrollForPerson(
   intervalMonths: number,
   stopOffsetMonths: number | null,
+  startOffsetMonths: number,
   recruitmentDate: Date,
   endOfServiceDate: Date | null,
 ): number[] {
-  if (intervalMonths <= 0 || stopOffsetMonths == null) return [];
+  if (intervalMonths <= 0 || stopOffsetMonths == null || startOffsetMonths < 0) return [];
   const cap = endOfServiceDate
     ? Math.min(stopOffsetMonths, monthsBetween(recruitmentDate, endOfServiceDate))
     : stopOffsetMonths;
   const out: number[] = [];
-  for (let m = intervalMonths; m <= cap; m += intervalMonths) out.push(m);
+  for (let m = startOffsetMonths; m <= cap; m += intervalMonths) out.push(m);
   return out;
 }
 
@@ -164,7 +165,7 @@ export function buildPersonTimeline(person: PersonFull) {
   }
 
   const recurrences: RecurrenceRow[] = (plan?.recurringEvents ?? []).flatMap((r) =>
-    unrollForPerson(r.intervalMonths, r.stopOffsetMonths, rec, person.endOfServiceDate).map((off) => ({
+    unrollForPerson(r.intervalMonths, r.stopOffsetMonths, r.startOffsetMonths, rec, person.endOfServiceDate).map((off) => ({
       recurringEventId: r.id,
       label: r.label,
       offsetMonths: off,
