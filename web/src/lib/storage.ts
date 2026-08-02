@@ -1,4 +1,4 @@
-import { mkdir, writeFile, unlink } from "fs/promises";
+import { mkdir, writeFile, unlink, rm } from "fs/promises";
 import { createReadStream, existsSync } from "fs";
 import path from "path";
 import { randomBytes } from "crypto";
@@ -34,6 +34,28 @@ export async function deleteUpload(storagePath: string | null | undefined): Prom
   if (!abs) return;
   try {
     await unlink(abs);
+  } catch {
+    /* ignore — see doc comment */
+  }
+}
+
+/**
+ * Remove everything stored for one person — every upload of theirs lives under
+ * `uploads/<personId>/` (see saveUpload). Called after their deletion has
+ * committed, and best-effort for the same reason deleteUpload is: the database
+ * is the source of truth, and files no row points at are unreachable through
+ * the app, whereas failing a committed deletion over a filesystem error would
+ * leave the caller believing the person is still there.
+ */
+export async function deleteUploadDir(personId: string): Promise<void> {
+  if (!personId) return;
+  const root = path.resolve(UPLOADS_ROOT);
+  const abs = path.resolve(root, personId);
+  // the same traversal guard resolveUpload applies, plus a refusal to take the
+  // root itself: a caller with an empty-ish id must not wipe every upload
+  if (!abs.startsWith(root + path.sep)) return;
+  try {
+    await rm(abs, { recursive: true, force: true });
   } catch {
     /* ignore — see doc comment */
   }

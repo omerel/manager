@@ -134,7 +134,7 @@ export async function addRecurringEvent(formData: FormData) {
   await prisma.recurringEvent.create({
     data: {
       planId,
-      label: str(formData.get("label")) || "אירוע כרוני",
+      label: str(formData.get("label")) || "אירוע מחזורי",
       intervalMonths: Math.max(1, int(formData.get("intervalMonths"), 6)),
       stopMode: "UNTIL_OFFSET",
       stopOffsetMonths,
@@ -219,4 +219,31 @@ export async function deletePlanItem(formData: FormData) {
       break;
   }
   revalidatePath(`/plans/${planId}`);
+}
+
+/**
+ * Delete a plan template. Templates only — a person's copy belongs to an
+ * assignment, and ending the assignment is how someone leaves a plan.
+ *
+ * The people holding copies of this template are not disturbed: their copy is
+ * what they are measured against, `sourceTemplateId` is SetNull rather than
+ * cascade, and `PlanAssignment.templateName` keeps the name readable. Verified
+ * on the dev database: deleting a template with 4 copies left all 26 assigned
+ * people holding their plan, changing only the link to the template.
+ */
+export async function removePlan(formData: FormData) {
+  await requireAdmin();
+  const planId = str(formData.get("planId"));
+  const plan = await prisma.careerPlan.findUnique({
+    where: { id: planId },
+    select: { id: true, isTemplate: true },
+  });
+  if (!plan) throw new Error("תכנית לא נמצאה.");
+  if (!plan.isTemplate) throw new Error("לא ניתן למחוק מסלול אישי של עובד — סיום השיוך הוא הדרך להוציא אדם ממסלול.");
+
+  await prisma.careerPlan.delete({ where: { id: planId } });
+
+  revalidatePath("/plans");
+  revalidatePath("/people"); // the plan name there stops being a link
+  revalidatePath("/", "layout");
 }

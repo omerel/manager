@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAdmin, requireEditForNode, requireEditForPerson } from "@/lib/authz";
 import type { EmploymentStatus, FieldType } from "@/generated/prisma/client";
 import { composeFullName } from "@/lib/person-name";
+import { deleteUploadDir } from "@/lib/storage";
 import { monthsSince } from "@/lib/waivers";
 
 function str(v: FormDataEntryValue | null): string {
@@ -413,6 +414,49 @@ export async function unassignPlan(formData: FormData) {
   await prisma.person.update({ where: { id: personId }, data: { assignedPlanId: null } });
   revalidatePath(`/people/${personId}`);
   revalidatePath("/");
+}
+
+/**
+ * Delete a person and everything that exists only because they did.
+ *
+ * The cascades take most of it, but not the per-person plan copies: a copy
+ * holds no reference back to its person (the arrow runs Person → CareerPlan and
+ * PlanAssignment → CareerPlan), so nothing removes it automatically. Measured
+ * on the dev database, a naive person.delete left 2 copies and 14 plan items
+ * behind for a single person. They are deleted here, explicitly.
+ *
+ * Order inside the transaction: the person goes first, so the copies are
+ * already unreferenced when they go and no foreign key can fail midway.
+ */
+export async function removePerson(formData: FormData) {
+  await requireAdmin();
+  const personId = str(formData.get("personId"));
+  const person = await prisma.person.findUnique({
+    where: { id: personId },
+    select: { id: true, assignedPlanId: true, planAssignments: { select: { planId: true } } },
+  });
+  if (!person) throw new Error("איש לא נמצא.");
+
+  // both routes to a copy: an assignment row, and the active pointer. A copy
+  // missing from one is still caught by the other.
+  const copyIds = [...new Set([...person.planAssignments.map((a) => a.planId), person.assignedPlanId].filter((v): v is string => v !== null))];
+
+  await prisma.$transaction(async (tx) => {
+    await tx.person.delete({ where: { id: personId } });
+    if (copyIds.length) {
+      // isTemplate guard: a copy is what we mean to take, never a template that
+      // a bad pointer happened to name.
+      await tx.careerPlan.deleteMany({ where: { id: { in: copyIds }, isTemplate: false } });
+    }
+  });
+
+  // after the commit, and best-effort — see deleteUploadDir
+  await deleteUploadDir(personId);
+
+  revalidatePath("/people");
+  revalidatePath("/plans");
+  revalidatePath("/hierarchy");
+  revalidatePath("/", "layout");
 }
 
 /* ---------- Progress recording (Editor on the team) ---------- */

@@ -256,9 +256,9 @@ function CumulativeSection({ plan, admin }: { plan: PlanWithEvents; admin: boole
 function RecurringSection({ plan, admin }: { plan: PlanWithEvents; admin: boolean }) {
   return (
     <section className="space-y-3">
-      <h2 className="text-lg font-semibold">🔁 אירועים כרוניים</h2>
+      <h2 className="text-lg font-semibold">🔁 אירועים מחזוריים</h2>
       {plan.recurringEvents.length === 0 ? (
-        <p className="text-sm text-muted">אין אירועים כרוניים.</p>
+        <p className="text-sm text-muted">אין אירועים מחזוריים.</p>
       ) : (
         <ul className="space-y-2">
           {plan.recurringEvents.map((r, ri) => {
@@ -288,7 +288,7 @@ function RecurringSection({ plan, admin }: { plan: PlanWithEvents; admin: boolea
                 style={{ backgroundColor: c.bg, borderColor: c.border }}
               >
                 {admin ? (
-                  <InlineEdit view={summary} action={updateRecurringEvent} title="ערוך אירוע כרוני">
+                  <InlineEdit view={summary} action={updateRecurringEvent} title="ערוך אירוע מחזורי">
                     <input type="hidden" name="planId" value={plan.id} />
                     <input type="hidden" name="id" value={r.id} />
                     <TextField name={`rlabel-${r.id}`} field="label" label="שם האירוע" defaultValue={r.label} required />
@@ -316,7 +316,7 @@ function RecurringSection({ plan, admin }: { plan: PlanWithEvents; admin: boolea
           <TextField name="label" label="שם האירוע" placeholder="חוות דעת" />
           <NumField name="intervalMonths" label="כל כמה חודשים" defaultValue={6} />
           <NumField name="stopOffsetMonths" label="עד חודש מהגיוס" defaultValue={DEFAULT_STOP_MONTHS} required />
-          <AddButton>הוסף כרוני</AddButton>
+          <AddButton>הוסף מחזורי</AddButton>
         </form>
       )}
     </section>

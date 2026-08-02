@@ -1,9 +1,10 @@
 "use client";
 
 import { useActionState, useEffect, useMemo, useState } from "react";
-import { Pencil, Trash2, AlertTriangle, X } from "lucide-react";
+import { Pencil, Trash2 } from "lucide-react";
 import { KIND_LABEL, type OrgKindStr } from "@/lib/org-kinds";
 import { updateOrgNode, removeOrgNode, type OrgEditState } from "@/lib/org-actions";
+import { ConfirmDelete, plural } from "@/components/ConfirmDelete";
 
 export type HierarchyNode = {
   id: string;
@@ -18,10 +19,6 @@ type ParentOption = { id: string; label: string };
 
 const inputCls = "rounded-md border border-border px-2 py-1 text-sm";
 const KINDS: OrgKindStr[] = ["CENTER", "DOMAIN", "SECTION", "TEAM"];
-
-function plural(n: number, one: string, many: string) {
-  return `${n} ${n === 1 ? one : many}`;
-}
 
 /** Edit form for one framework. Validation failures come back as text, not as a page error. */
 function EditRow({
@@ -190,72 +187,36 @@ export function HierarchyTree({ nodes }: { nodes: HierarchyNode[] }) {
       </div>
 
       {pendingDelete && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-6"
-          onClick={() => setPendingDelete(null)}
+        <ConfirmDelete
+          title={`מחיקת ${KIND_LABEL[pendingDelete.kind]} ״${pendingDelete.name}״`}
+          confirmLabel={doomed.length > 0 ? "מחק את המסגרת ואת כל שתחתיה" : "מחק את המסגרת"}
+          onCancel={() => setPendingDelete(null)}
+          action={removeOrgNode}
+          hidden={{ id: pendingDelete.id }}
         >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-md rounded-xl border border-border bg-card p-5 shadow-2xl"
-          >
-            <div className="flex items-start justify-between gap-3">
-              <h2 className="flex items-center gap-2 text-lg font-semibold text-red-800">
-                <AlertTriangle className="h-5 w-5" aria-hidden />
-                מחיקת {KIND_LABEL[pendingDelete.kind]} ״{pendingDelete.name}״
-              </h2>
-              <button
-                type="button"
-                onClick={() => setPendingDelete(null)}
-                className="rounded p-1 text-muted hover:bg-stone-100"
-                title="סגור"
-              >
-                <X className="h-4 w-4" aria-hidden />
-              </button>
-            </div>
-
-            <div className="mt-3 space-y-2 text-sm">
-              {doomed.length > 0 ? (
-                <>
-                  <p className="text-red-800">
-                    המחיקה תמחק גם את{" "}
-                    <b>{doomed.length === 1 ? "תת-המסגרת" : `${doomed.length} תתי-המסגרות`}</b> שתחתיה:
-                  </p>
-                  <ul className="max-h-40 space-y-0.5 overflow-y-auto rounded-md bg-red-50 px-3 py-2 text-red-900">
-                    {doomed.map((d) => (
-                      <li key={d.id}>
-                        {KIND_LABEL[d.kind]}: {d.name}
-                      </li>
-                    ))}
-                  </ul>
-                </>
-              ) : (
-                <p className="text-muted">אין תת-מסגרות תחת המסגרת הזו.</p>
-              )}
-              {doomedPeople > 0 && (
-                <p className="text-amber-800">
-                  {plural(doomedPeople, "איש", "אנשים")} שמשויכים למסגרות אלו יעברו ל״ללא שיוך״ — הכרטיסים והתכניות
-                  שלהם יישמרו.
-                </p>
-              )}
-            </div>
-
-            <div className="mt-5 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setPendingDelete(null)}
-                className="rounded-md border border-border px-4 py-1.5 text-sm hover:bg-stone-50"
-              >
-                ביטול
-              </button>
-              <form action={removeOrgNode} onSubmit={() => setPendingDelete(null)}>
-                <input type="hidden" name="id" value={pendingDelete.id} />
-                <button className="rounded-md bg-red-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-red-700">
-                  {doomed.length > 0 ? "מחק את המסגרת ואת כל שתחתיה" : "מחק את המסגרת"}
-                </button>
-              </form>
-            </div>
-          </div>
-        </div>
+          {doomed.length > 0 ? (
+            <>
+              <p className="text-red-800">
+                המחיקה תמחק גם את <b>{doomed.length === 1 ? "תת-המסגרת" : `${doomed.length} תתי-המסגרות`}</b> שתחתיה:
+              </p>
+              <ul className="max-h-40 space-y-0.5 overflow-y-auto rounded-md bg-red-50 px-3 py-2 text-red-900">
+                {doomed.map((d) => (
+                  <li key={d.id}>
+                    {KIND_LABEL[d.kind]}: {d.name}
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : (
+            <p className="text-muted">אין תת-מסגרות תחת המסגרת הזו.</p>
+          )}
+          {doomedPeople > 0 && (
+            <p className="text-amber-800">
+              {plural(doomedPeople, "איש", "אנשים")} שמשויכים למסגרות אלו יעברו ל״ללא שיוך״ — הכרטיסים והתכניות שלהם
+              יישמרו.
+            </p>
+          )}
+        </ConfirmDelete>
       )}
     </>
   );

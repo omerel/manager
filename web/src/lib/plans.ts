@@ -16,6 +16,26 @@ export async function countAssignmentsByTemplate(visibility: Visibility): Promis
 }
 
 /**
+ * For each template, how many people anywhere in the system hold a copy of it.
+ *
+ * Deliberately unclipped, unlike countAssignmentsByTemplate: this feeds the
+ * delete confirmation, and a number narrowed to the admin's own scope would
+ * understate who a deletion touches.
+ */
+export async function countAllAssignmentsByTemplate(): Promise<Map<string, number>> {
+  const people = await prisma.person.findMany({
+    where: { assignedPlan: { isNot: null } },
+    select: { assignedPlan: { select: { sourceTemplateId: true } } },
+  });
+  const counts = new Map<string, number>();
+  for (const p of people) {
+    const t = p.assignedPlan?.sourceTemplateId;
+    if (t) counts.set(t, (counts.get(t) ?? 0) + 1);
+  }
+  return counts;
+}
+
+/**
  * Default stop month offered for a new recurring event. A realistic service
  * span, chosen deliberately: the previous behaviour substituted a 36-month
  * preview constant when no stop was given, which silently became policy.

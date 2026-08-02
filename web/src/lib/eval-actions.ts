@@ -54,7 +54,7 @@ export async function fillSlot(formData: FormData) {
   if (!recurringEventId || !Number.isFinite(occurrenceOffset)) throw new Error("סלוט לא תקין.");
 
   const rec = await prisma.recurringEvent.findUnique({ where: { id: recurringEventId } });
-  if (!rec) throw new Error("אירוע כרוני לא נמצא.");
+  if (!rec) throw new Error("אירוע מחזורי לא נמצא.");
 
   const content = str(formData.get("content"));
   const entry = await prisma.evalEntry.upsert({

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { isAdmin } from "@/lib/authz";
-import { getFieldDefs, FIELD_TYPE_LABEL } from "@/lib/person-schema";
+import { getFieldDefs, FIELD_TYPE_LABEL, CORE_FIELDS, ALL_CORE_FIELDS } from "@/lib/person-schema";
 import { addFieldDef, removeFieldDef, updateFieldDef, moveFieldDef } from "@/lib/person-actions";
 
 const inputCls = "rounded-md border border-border px-3 py-1.5 text-sm";
@@ -17,8 +17,9 @@ export default async function CardSchemaPage({ searchParams }: { searchParams: P
         </Link>
         <h1 className="mt-2 text-2xl font-bold">סכימת כרטיס העובד</h1>
         <p className="mt-1 text-muted">
-          שדות הליבה (שם, תאריך גיוס, סטטוס, סיום שירות, שיוך) קבועים. כאן האדמין מגדיר שדות אישיים נוספים,
-          את סדר הצגתם ואת עריכתם.
+          שדות הליבה ({CORE_FIELDS.form.join(", ")}) קבועים, וכך גם{" "}
+          {CORE_FIELDS.elsewhere.join(", ")} שנקבעים במקום אחר בכרטיס. הגיל אינו שדה — הוא מחושב מתאריך הלידה.
+          כאן האדמין מגדיר שדות אישיים נוספים, את סדר הצגתם ואת עריכתם.
         </p>
       </div>
 
@@ -30,7 +31,7 @@ export default async function CardSchemaPage({ searchParams }: { searchParams: P
 
       <div className="rounded-xl border border-border/70 bg-card shadow-sm">
         <div className="border-b border-border px-4 py-2 text-sm text-muted">
-          שדות ליבה קבועים: שם · תאריך גיוס · סטטוס · סיום שירות · צוות
+          שדות ליבה קבועים: {ALL_CORE_FIELDS.join(" · ")}
         </div>
         {defs.length === 0 ? (
           <p className="px-4 py-3 text-sm text-muted">לא הוגדרו שדות נוספים.</p>

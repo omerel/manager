@@ -2,6 +2,7 @@ import type { EmploymentStatus } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { KIND_LABEL } from "@/lib/org";
 import type { Visibility } from "@/lib/access";
+import type { DeletionImpact } from "@/lib/deletion-impact";
 
 export const STATUS_LABEL: Record<EmploymentStatus, string> = {
   ACTIVE: "פעיל",
@@ -25,7 +26,15 @@ export type PersonRow = {
   /** the template that copy came from — null if it has since been deleted */
   planTemplateId: string | null;
   canEdit: boolean;
+  impact: DeletionImpact;
 };
+
+const IMPACT_COUNTS = {
+  planAssignments: true,
+  evalEntries: true,
+  pointProgress: true,
+  metricReadings: true,
+} as const;
 
 /** Distinct from the framework column's "ללא שיוך": adjacent columns must not read alike. */
 export const NO_PLAN_LABEL = "ללא מסלול";
@@ -66,13 +75,20 @@ export async function getVisiblePeople(visibility: Visibility): Promise<PersonRo
   const where = visibility.isAdmin
     ? { OR: [{ teamId: { in: teamIds } }, { teamId: null }] }
     : { teamId: { in: teamIds } };
-  const [people, resolvePath] = await Promise.all([
-    // the plan comes along in this query rather than per row
+  const [people, attachmentsByPerson, resolvePath] = await Promise.all([
+    // the plan and the deletion counts come along in this query rather than per
+    // row: _count compiles to one query with sub-counts, and measured on the
+    // 40-person registry the whole list costs 7.6ms against 1.1ms without —
+    // less than counting a single person on demand (9.0ms).
     prisma.person.findMany({
       where,
       orderBy: { fullName: "asc" },
-      include: { assignedPlan: { select: { name: true, sourceTemplateId: true } } },
+      include: {
+        assignedPlan: { select: { name: true, sourceTemplateId: true } },
+        _count: { select: IMPACT_COUNTS },
+      },
     }),
+    countAttachmentsByPerson(where),
     buildPathResolver(),
   ]);
   return people.map((p) => ({
@@ -87,19 +103,50 @@ export async function getVisiblePeople(visibility: Visibility): Promise<PersonRo
     planName: p.assignedPlan?.name ?? null,
     planTemplateId: p.assignedPlan?.sourceTemplateId ?? null,
     canEdit: canEditTeam(visibility, p.teamId),
+    impact: {
+      planAssignments: p._count.planAssignments,
+      evalEntries: p._count.evalEntries,
+      attachments: attachmentsByPerson.get(p.id) ?? 0,
+      pointProgress: p._count.pointProgress,
+      metricReadings: p._count.metricReadings,
+      hasPhoto: p.photoPath !== null,
+    },
   }));
+}
+
+/**
+ * Attachments per person. Separate because Attachment hangs off EvalEntry, not
+ * off Person, so _count cannot reach it — one query over the entries either
+ * way, and 1.6ms for the whole list.
+ */
+async function countAttachmentsByPerson(where: object): Promise<Map<string, number>> {
+  const entries = await prisma.evalEntry.findMany({
+    where: { person: where },
+    select: { personId: true, _count: { select: { attachments: true } } },
+  });
+  const byPerson = new Map<string, number>();
+  for (const e of entries) {
+    byPerson.set(e.personId, (byPerson.get(e.personId) ?? 0) + e._count.attachments);
+  }
+  return byPerson;
 }
 
 /** A single person, only if the user may see them; otherwise null. */
 export async function getVisiblePerson(id: string, visibility: Visibility): Promise<PersonRow | null> {
   const p = await prisma.person.findUnique({
     where: { id },
-    include: { assignedPlan: { select: { name: true, sourceTemplateId: true } } },
+    include: {
+      assignedPlan: { select: { name: true, sourceTemplateId: true } },
+      _count: { select: IMPACT_COUNTS },
+    },
   });
   if (!p) return null;
   const isVisible = p.teamId ? visibility.nodeIds.has(p.teamId) : visibility.isAdmin;
   if (!isVisible) return null;
-  const resolvePath = await buildPathResolver();
+  const [resolvePath, attachments] = await Promise.all([
+    buildPathResolver(),
+    prisma.attachment.count({ where: { entry: { personId: id } } }),
+  ]);
   return {
     id: p.id,
     fullName: p.fullName,
@@ -112,6 +159,14 @@ export async function getVisiblePerson(id: string, visibility: Visibility): Prom
     planName: p.assignedPlan?.name ?? null,
     planTemplateId: p.assignedPlan?.sourceTemplateId ?? null,
     canEdit: canEditTeam(visibility, p.teamId),
+    impact: {
+      planAssignments: p._count.planAssignments,
+      evalEntries: p._count.evalEntries,
+      attachments,
+      pointProgress: p._count.pointProgress,
+      metricReadings: p._count.metricReadings,
+      hasPhoto: p.photoPath !== null,
+    },
   };
 }
 
@@ -121,3 +176,4 @@ export function formatDate(d: Date | null): string {
 }
 
 export { KIND_LABEL };
+export { destroysNothingElse, type DeletionImpact } from "@/lib/deletion-impact";

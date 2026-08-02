@@ -22,6 +22,7 @@ export default async function PeoplePage() {
     planName: p.planName,
     planTemplateId: p.planTemplateId,
     photoPath: p.photoPath,
+    impact: p.impact,
   }));
 
   return (
@@ -43,7 +44,7 @@ export default async function PeoplePage() {
       {rows.length === 0 ? (
         <p className="text-muted">אין אנשים בהרשאה שלך.</p>
       ) : (
-        <PeopleTable rows={rows} />
+        <PeopleTable rows={rows} admin={admin} />
       )}
     </div>
   );

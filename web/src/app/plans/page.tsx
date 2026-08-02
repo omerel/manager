@@ -1,9 +1,10 @@
 import Link from "next/link";
-import { getPlans, countAssignmentsByTemplate } from "@/lib/plans";
+import { getPlans, countAssignmentsByTemplate, countAllAssignmentsByTemplate } from "@/lib/plans";
 import { isAdmin } from "@/lib/authz";
 import { computeVisibility } from "@/lib/access";
 import { getSessionUser } from "@/lib/session";
-import { createPlan, copyPlan } from "@/lib/plan-actions";
+import { createPlan } from "@/lib/plan-actions";
+import { PlanRowActions } from "@/components/PlanRowActions";
 
 export default async function PlansPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
   const { q } = await searchParams;
@@ -11,10 +12,12 @@ export default async function PlansPage({ searchParams }: { searchParams: Promis
 
   const user = await getSessionUser();
   const visibility = await computeVisibility(user);
-  const [allPlans, admin, assignedCounts] = await Promise.all([
+  const [allPlans, admin, assignedCounts, assignedEverywhere] = await Promise.all([
     getPlans(),
     isAdmin(),
     countAssignmentsByTemplate(visibility),
+    // the delete confirmation must not narrow to what this admin manages
+    countAllAssignmentsByTemplate(),
   ]);
 
   const plans = query
@@ -85,19 +88,21 @@ export default async function PlansPage({ searchParams }: { searchParams: Promis
                 </Link>
                 <div className="mt-1 text-sm text-muted">
                   {p._count.pointEvents} נקודתיים · {p._count.cumulativeMetrics} מצטברים ·{" "}
-                  {p._count.recurringEvents} כרוניים
+                  {p._count.recurringEvents} מחזוריים
                 </div>
                 <div className="mt-1 text-sm font-medium text-slate-700">
                   {`משויכים תחת ניהולי: ${assigned}`}
                 </div>
               </div>
               {admin && (
-                <form action={copyPlan}>
-                  <input type="hidden" name="planId" value={p.id} />
-                  <button className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-slate-50">
-                    שכפל
-                  </button>
-                </form>
+                <PlanRowActions
+                  planId={p.id}
+                  name={p.name}
+                  pointEvents={p._count.pointEvents}
+                  cumulativeMetrics={p._count.cumulativeMetrics}
+                  recurringEvents={p._count.recurringEvents}
+                  assignedEverywhere={assignedEverywhere.get(p.id) ?? 0}
+                />
               )}
             </li>
             );

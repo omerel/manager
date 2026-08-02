@@ -3,8 +3,11 @@
 /* eslint-disable @next/next/no-img-element */
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { FilterX } from "lucide-react";
+import { FilterX, Trash2 } from "lucide-react";
 import { versionedUrl } from "@/lib/upload-version";
+import { ConfirmDelete, plural } from "@/components/ConfirmDelete";
+import { removePerson } from "@/lib/person-actions";
+import { destroysNothingElse, type DeletionImpact } from "@/lib/deletion-impact";
 
 /**
  * The people table, filtered in the browser.
@@ -27,6 +30,8 @@ export type PeopleRow = {
   planName: string | null;
   planTemplateId: string | null;
   photoPath: string | null;
+  /** counts the delete confirmation states; came down with the list, not on demand */
+  impact: DeletionImpact;
 };
 
 const NO_PLAN_LABEL = "ללא מסלול";
@@ -37,8 +42,9 @@ const EMPTY: Filters = { name: "", org: "", date: "", status: "", plan: "" };
 const has = (haystack: string, needle: string) =>
   haystack.toLowerCase().includes(needle.trim().toLowerCase());
 
-export function PeopleTable({ rows }: { rows: PeopleRow[] }) {
+export function PeopleTable({ rows, admin = false }: { rows: PeopleRow[]; admin?: boolean }) {
   const [f, setF] = useState<Filters>(EMPTY);
+  const [pendingDelete, setPendingDelete] = useState<PeopleRow | null>(null);
   const active = Object.values(f).some((v) => v !== "");
 
   // Closed-set filters offer only what is present in this user's own rows, so a
@@ -104,6 +110,7 @@ export function PeopleTable({ rows }: { rows: PeopleRow[] }) {
               <Th>מסלול קריירה</Th>
               <Th>תאריך גיוס</Th>
               <Th>סטטוס</Th>
+              {admin && <th className="px-4 py-2 text-start font-medium sr-only">פעולות</th>}
             </tr>
             <tr className="border-t border-border">
               <Td>
@@ -135,6 +142,7 @@ export function PeopleTable({ rows }: { rows: PeopleRow[] }) {
                   ))}
                 </select>
               </Td>
+              {admin && <Td> </Td>}
             </tr>
           </thead>
           <tbody>
@@ -175,6 +183,18 @@ export function PeopleTable({ rows }: { rows: PeopleRow[] }) {
                 </td>
                 <td className="px-4 py-2.5">{p.recruitmentDateLabel}</td>
                 <td className="px-4 py-2.5">{p.statusLabel}</td>
+                {admin && (
+                  <td className="px-4 py-2.5 text-end">
+                    <button
+                      type="button"
+                      onClick={() => setPendingDelete(p)}
+                      title={`מחק את ${p.fullName}`}
+                      className="rounded p-1 text-muted hover:bg-red-50 hover:text-red-600"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                    </button>
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
@@ -183,7 +203,57 @@ export function PeopleTable({ rows }: { rows: PeopleRow[] }) {
           <p className="px-4 py-6 text-center text-sm text-muted">לא נמצאו אנשים התואמים לסינון.</p>
         )}
       </div>
+
+      {pendingDelete && (
+        <ConfirmDelete
+          title={`מחיקת ״${pendingDelete.fullName}״`}
+          confirmLabel="מחק את האיש וכל הרשום עליו"
+          onCancel={() => setPendingDelete(null)}
+          action={removePerson}
+          hidden={{ personId: pendingDelete.id }}
+        >
+          <ImpactList impact={pendingDelete.impact} />
+          <p className="text-muted">הפעולה אינה הפיכה. לשחזור נדרש גיבוי מלא (הגדרות מערכת ← גיבוי ונתונים).</p>
+        </ConfirmDelete>
+      )}
     </div>
+  );
+}
+
+/**
+ * The evidence in the confirmation. Only non-zero lines are drawn: on the
+ * current registry 4 people in 10 have no history at all, and a column of
+ * zeroes reads as gravity where there is none — so that case gets a sentence
+ * instead.
+ */
+function ImpactList({ impact }: { impact: DeletionImpact }) {
+  if (destroysNothingElse(impact)) {
+    return <p className="text-muted">לאיש הזה אין היסטוריה במערכת — רק הרשומה עצמה תימחק.</p>;
+  }
+  const lines = [
+    impact.planAssignments && plural(impact.planAssignments, "שיוך למסלול", "שיוכים למסלולים"),
+    impact.evalEntries && plural(impact.evalEntries, "חוות דעת", "חוות דעת"),
+    impact.attachments && plural(impact.attachments, "קובץ מצורף", "קבצים מצורפים"),
+    impact.pointProgress && plural(impact.pointProgress, "אבן דרך שסומנה", "אבני דרך שסומנו"),
+    impact.metricReadings && plural(impact.metricReadings, "קריאת מדד", "קריאות מדד"),
+    impact.hasPhoto && "תמונת הפרופיל",
+  ].filter((l): l is string => typeof l === "string");
+
+  return (
+    <>
+      <p className="text-red-800">יימחקו יחד עם האיש:</p>
+      <ul className="space-y-0.5 rounded-md bg-red-50 px-3 py-2 text-red-900">
+        {lines.map((l) => (
+          <li key={l}>{l}</li>
+        ))}
+      </ul>
+      {impact.planAssignments > 0 && (
+        <p className="text-amber-800">
+          {plural(impact.planAssignments, "המסלול האישי שנוצר עבורו יימחק", "המסלולים האישיים שנוצרו עבורו יימחקו")} —
+          תבניות המסלול עצמן אינן מושפעות.
+        </p>
+      )}
+    </>
   );
 }
 
