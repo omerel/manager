@@ -33,7 +33,13 @@ const H = 7.5;
 const M = 0.85; // page margin
 
 const pptx = new PptxGenJS();
-pptx.layout = "LAYOUT_16x9";
+// The slide size is DERIVED from the design canvas above, never named
+// separately. Every coordinate in this file is written against W × H; the deck
+// originally shipped with the built-in "LAYOUT_16x9" (10 × 5.625in), which has
+// the same aspect ratio but is smaller — so nothing looked distorted and
+// everything past 10in was simply cut off the right edge, on all 18 slides.
+pptx.defineLayout({ name: "HELM", width: W, height: H });
+pptx.layout = "HELM";
 pptx.author = "Helm";
 pptx.title = "Helm — הצעה לפיילוט";
 
@@ -187,12 +193,15 @@ const rule = (s, { x, y, h, color = C.accent }) =>
   });
   body(s, "זה לא צירוף מקרים, וזו לא שאלה של מוטיבציה. מה שיש לו נשא מערכתי — קורה. מה שאין לו — לא קורה, שוב ושוב.",
     { y: 3.95, w: 7.3, fontSize: 15 });
-  card(s, { x: 8.6, y: 2.5, w: W - M - 8.6, h: 1.1, title: "✓  חוות דעת שנתית", titleColor: C.accent,
+  // 1.35, not 1.1: both body lines wrap to two lines in this column width, and
+  // at h=1.1 the card's text box is 0.32in — one line's worth — so the second
+  // line spilled past the card's bottom edge.
+  card(s, { x: 8.6, y: 2.5, w: W - M - 8.6, h: 1.35, title: "✓  חוות דעת שנתית", titleColor: C.accent,
     text: "מחזור מוגדר · מישהו נשאל · יש מחיר לאי-ביצוע" });
-  card(s, { x: 8.6, y: 3.75, w: W - M - 8.6, h: 1.1, title: "✕  תכנית קריירה", titleColor: C.critical,
+  card(s, { x: 8.6, y: 4.0, w: W - M - 8.6, h: 1.35, title: "✕  תכנית קריירה", titleColor: C.critical,
     text: "מסמך · אף אחד לא נשאל · אין מחיר להתעלמות" });
   s.addText("ההבדל אינו בחשיבות. הוא בנשא.", {
-    ...rtl, x: 8.6, y: 5.0, w: W - M - 8.6, h: 0.3, fontSize: 11.5, color: C.muted, italic: true,
+    ...rtl, x: 8.6, y: 5.55, w: W - M - 8.6, h: 0.3, fontSize: 11.5, color: C.muted, italic: true,
   });
 }
 

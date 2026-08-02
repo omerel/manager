@@ -4,7 +4,8 @@
   "private": true,
   "description": "מחולל המצגת של Helm — הצעה לפיילוט",
   "scripts": {
-    "build": "node build.mjs 'Helm - הצעה לפיילוט.pptx'"
+    "build": "node build.mjs 'Helm - הצעה לפיילוט.pptx' && npm run check",
+    "check": "python3 check-deck.py 'Helm - הצעה לפיילוט.pptx'"
   },
   "dependencies": {
     "pptxgenjs": "^4.0.1"
