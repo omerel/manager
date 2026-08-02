@@ -15,6 +15,20 @@ The system SHALL ship as a single Docker image (Ubuntu 24.04 base) containing ev
 - **WHEN** the image runs in a network with no internet access (only the database and the internal LLM endpoint reachable)
 - **THEN** all features work: pages, migrations, PDF export, and agent runs via the baked-in Claude CLI
 
+### Requirement: The image builds without a database
+
+The image SHALL build with no database reachable. Every route SHALL therefore be server-rendered on demand rather than prerendered at build time — the root layout reads branding from the database to produce page metadata, so any statically generated route would query it during the build and fail the whole image.
+
+#### Scenario: Building offline
+
+- **WHEN** the delivery image is built on a machine with no database
+- **THEN** the build completes, and every route is reported as server-rendered on demand
+
+#### Scenario: A route with no dynamic dependency
+
+- **WHEN** a route is added that reads neither the session nor any request data — for example one that only redirects
+- **THEN** it SHALL NOT be a prerendered page; such a redirect belongs in the framework's redirect configuration, since a page form of it would be statically generated and break the offline build
+
 ### Requirement: Environment-only runtime configuration
 
 All runtime configuration SHALL come from environment variables: `DATABASE_URL`, `APP_SECRET`, bootstrap-admin credentials, and any Claude CLI environment (passed through to agent subprocesses unchanged). No configuration files need editing inside the container.

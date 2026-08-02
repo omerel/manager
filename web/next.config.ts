@@ -27,6 +27,15 @@ const PROXY_HOSTS = [
 
 const nextConfig: NextConfig = {
   allowedDevOrigins: PROXY_HOSTS,
+  // Bulk intake moved onto the people page. This stays a framework-level
+  // redirect rather than a page that calls redirect(): such a page has no
+  // dynamic signal, so `next build` prerenders it — and prerendering runs the
+  // root layout's generateMetadata, which reads branding from the database.
+  // The image is built with no database, so that one static page failed the
+  // whole air-gap build.
+  async redirects() {
+    return [{ source: "/people/intake", destination: "/people", permanent: false }];
+  },
   // Pin the workspace root to this app (silences the multi-lockfile inference warning).
   turbopack: { root: import.meta.dirname },
   experimental: {
