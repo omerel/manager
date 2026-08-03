@@ -1,5 +1,5 @@
 import type { PersonFieldDef } from "@/generated/prisma/client";
-import { toDateInput } from "@/lib/dates";
+import { DateField } from "@/components/DateField";
 import { ageFromBirthDate } from "@/lib/person-name";
 
 type CoreDefaults = {
@@ -38,7 +38,7 @@ export function PersonFormFields({
         <input name="lastName" required defaultValue={core?.lastName ?? ""} className={inputCls} />
       </Labeled>
       <Labeled label="תאריך לידה">
-        <input type="date" name="birthDate" required defaultValue={toDateInput(core?.birthDate)} className={inputCls} />
+        <DateField name="birthDate" defaultDate={core?.birthDate} required className={inputCls} />
       </Labeled>
       <Labeled label="גיל (מחושב מתאריך הלידה)">
         <input
@@ -49,10 +49,10 @@ export function PersonFormFields({
         />
       </Labeled>
       <Labeled label="תאריך גיוס">
-        <input type="date" name="recruitmentDate" required defaultValue={toDateInput(core?.recruitmentDate)} className={inputCls} />
+        <DateField name="recruitmentDate" defaultDate={core?.recruitmentDate} required className={inputCls} />
       </Labeled>
       <Labeled label="תאריך הצבה ביחידה (עוגן התכנית)">
-        <input type="date" name="placementDate" required defaultValue={toDateInput(core?.placementDate)} className={inputCls} />
+        <DateField name="placementDate" defaultDate={core?.placementDate} required className={inputCls} />
       </Labeled>
       <Labeled label="סטטוס העסקה">
         <select name="status" defaultValue={core?.status ?? "ACTIVE"} className={inputCls}>
@@ -64,7 +64,7 @@ export function PersonFormFields({
         </select>
       </Labeled>
       <Labeled label="תאריך סיום שירות (תת״ש) — אופציונלי">
-        <input type="date" name="endOfServiceDate" defaultValue={toDateInput(core?.endOfServiceDate)} className={inputCls} />
+        <DateField name="endOfServiceDate" defaultDate={core?.endOfServiceDate} className={inputCls} />
       </Labeled>
 
       {defs.map((def) => {
@@ -81,10 +81,13 @@ export function PersonFormFields({
                   </option>
                 ))}
               </select>
+            ) : def.type === "DATE" ? (
+              // a custom date is a date: same control, same rules as the core ones
+              <DateField name={name} defaultDate={val} required={def.required} className={inputCls} />
             ) : (
               <input
                 name={name}
-                type={def.type === "DATE" ? "date" : def.type === "NUMBER" ? "number" : "text"}
+                type={def.type === "NUMBER" ? "number" : "text"}
                 step={def.type === "NUMBER" ? "any" : undefined}
                 required={def.required}
                 defaultValue={val}

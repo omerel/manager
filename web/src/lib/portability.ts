@@ -86,6 +86,8 @@ function referencedFiles(tables: Tables): string[] {
 
 export async function buildFullZip(): Promise<Buffer> {
   const tables = await dumpTables("full");
+  // ISO on purpose: a backup is read by the importer, not by a person, and ISO
+  // is the one date form with no reading convention to get wrong on the way back in.
   const bundle: Bundle = { version: BUNDLE_VERSION, scope: "full", exportedAt: new Date().toISOString(), tables };
   const zip = new AdmZip();
   zip.addFile("data.json", Buffer.from(JSON.stringify(bundle, null, 1), "utf8"));

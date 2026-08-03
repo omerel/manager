@@ -8,15 +8,19 @@ import type { EmploymentStatus, FieldType } from "@/generated/prisma/client";
 import { composeFullName } from "@/lib/person-name";
 import { deleteUploadDir } from "@/lib/storage";
 import { monthsSince } from "@/lib/waivers";
+import { parseIsraeliDate } from "@/lib/dates";
 
 function str(v: FormDataEntryValue | null): string {
   return String(v ?? "").trim();
 }
+/**
+ * A date from a form, read the Israeli way. Returns null for empty AND for
+ * malformed input, so a value the system could not understand is never stored:
+ * the required-field checks that already throw on a missing date cover the
+ * malformed case for free.
+ */
 function dateOrNull(v: FormDataEntryValue | null): Date | null {
-  const s = str(v);
-  if (!s) return null;
-  const d = new Date(s);
-  return isNaN(d.getTime()) ? null : d;
+  return parseIsraeliDate(str(v));
 }
 function statusOf(v: FormDataEntryValue | null): EmploymentStatus {
   const s = str(v);

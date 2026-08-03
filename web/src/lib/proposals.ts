@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { parseIsraeliDate } from "@/lib/dates";
 
 export type ProposalItem = {
   key: string; // "firstName" | "lastName" | "birthDate" | "recruitmentDate" | "endOfServiceDate" | "field:<fieldDefId>"
@@ -7,7 +8,7 @@ export type ProposalItem = {
   proposed: string;
 };
 
-type ExtractedField = { key: string; label: string };
+type ExtractedField = { key: string; label: string; type?: string };
 
 /**
  * Turn raw agent extractions into field proposals on an existing person —
@@ -39,9 +40,24 @@ export async function proposeFieldUpdates(
     return "";
   };
   const labelOf = new Map(fields.map((f) => [f.key, f.label]));
+  const typeOf = new Map(fields.map((f) => [f.key, f.type]));
+  const isDate = (key: string) =>
+    typeOf.get(key) === "תאריך" || ["birthDate", "recruitmentDate", "placementDate", "endOfServiceDate"].includes(key);
+
   const items: ProposalItem[] = raw
     .filter((r) => labelOf.has(r.key))
-    .map((r) => ({ key: r.key, label: labelOf.get(r.key)!, current: currentOf(r.key), proposed: r.proposed }))
+    // A date the strict reader refuses never reaches the review screen. The
+    // reviewer then sees the field missing and types it — which is honest,
+    // whereas a guessed date would arrive looking found on a screen built to be
+    // approved quickly.
+    .filter((r) => !isDate(r.key) || parseIsraeliDate(r.proposed) !== null)
+    // normalise what did parse, so the reviewer compares like with like
+    .map((r) => ({
+      key: r.key,
+      label: labelOf.get(r.key)!,
+      current: currentOf(r.key),
+      proposed: isDate(r.key) ? parseIsraeliDate(r.proposed)!.toISOString().slice(0, 10) : r.proposed,
+    }))
     .filter((it) => it.proposed !== it.current);
 
   // one open proposal per person — replace any previous one

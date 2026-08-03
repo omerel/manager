@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import { parseIsraeliDate } from "@/lib/dates";
 import { computeVisibility } from "@/lib/access";
 import { getSessionUser } from "@/lib/session";
 import { getEditableTeams } from "@/lib/people";
@@ -42,11 +43,9 @@ export default async function NewPersonPage({
   // Draft pre-filled by the agent from a document (nothing persisted until save).
   const draft = draftId ? await prisma.personDraft.findFirst({ where: { id: draftId, createdBy: user.id } }) : null;
   const dv = (draft?.values ?? {}) as Record<string, string>;
-  const draftDate = (s?: string) => {
-    if (!s) return undefined;
-    const d = new Date(s);
-    return isNaN(d.getTime()) ? undefined : d;
-  };
+  // an agent-supplied date the strict reader refuses is left blank for the
+  // reviewer to type, never guessed into the form
+  const draftDate = (s?: string) => parseIsraeliDate(s ?? null) ?? undefined;
   const valueByDef: Record<string, string> = {};
   for (const [k, v] of Object.entries(dv)) {
     if (k.startsWith("field:")) valueByDef[k.slice(6)] = v;

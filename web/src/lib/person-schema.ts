@@ -1,6 +1,6 @@
 import type { FieldType } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
-import { fmtDate } from "@/lib/dates";
+import { fmtDate, parseIsraeliDate } from "@/lib/dates";
 
 /**
  * The fixed fields of a person — the ones the Admin does *not* define, and the
@@ -35,8 +35,9 @@ export async function getFieldDefs() {
 export function formatFieldValue(type: FieldType, value: string): string {
   if (!value) return "—";
   if (type === "DATE") {
-    const d = new Date(value);
-    return isNaN(d.getTime()) ? value : fmtDate(d);
+    const d = parseIsraeliDate(value);
+    // an unreadable stored value is shown as-is rather than reinterpreted
+    return d ? fmtDate(d) : value;
   }
   return value;
 }

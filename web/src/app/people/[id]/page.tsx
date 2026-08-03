@@ -6,7 +6,8 @@ import { prisma } from "@/lib/prisma";
 import { getFieldDefs, formatFieldValue } from "@/lib/person-schema";
 import { STATUS_LABEL, getEditableTeams, UNASSIGNED_LABEL } from "@/lib/people";
 import { ageFromBirthDate } from "@/lib/person-name";
-import { fmtDate, toDateInput, addMonths } from "@/lib/dates";
+import { fmtDate, addMonths } from "@/lib/dates";
+import { DateField } from "@/components/DateField";
 import { getPersonFull, buildPersonTimeline, type PersonFull } from "@/lib/person-view";
 import { computePersonGaps, levelForPoint, evalMetric, GAP_META, type GapLevel } from "@/lib/gaps";
 import { PersonFormFields } from "@/components/PersonFormFields";
@@ -343,7 +344,6 @@ function PlanSection({
   canEdit: boolean;
   today: Date;
 }) {
-  const todayInput = toDateInput(today);
 
   if (!person.assignedPlan) {
     return (
@@ -429,7 +429,7 @@ function PlanSection({
                 <form action={setPointDone} className="flex flex-wrap items-center gap-1">
                   <input type="hidden" name="personId" value={person.id} />
                   <input type="hidden" name="pointEventId" value={p.id} />
-                  <input type="date" name="doneOn" defaultValue={todayInput} className="rounded border border-border px-2 py-1 text-xs" />
+                  <DateField name="doneOn" defaultDate={today} className="w-32 rounded border border-border px-2 py-1 text-xs text-end" />
                   <input
                     name="note"
                     placeholder="הערה (למשל: איזה מופע)"
@@ -498,7 +498,7 @@ function PlanSection({
                     placeholder="ערך"
                     className="w-24 rounded border border-border px-2 py-1 text-xs"
                   />
-                  <input type="date" name="asOf" defaultValue={todayInput} className="rounded border border-border px-2 py-1 text-xs" />
+                  <DateField name="asOf" defaultDate={today} className="w-32 rounded border border-border px-2 py-1 text-xs text-end" />
                   <input
                     name="note"
                     defaultValue={m.note ?? ""}

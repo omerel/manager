@@ -14,6 +14,7 @@ import { runExtraction } from "@/lib/agent";
 import { saveUpload, deleteUpload } from "@/lib/storage";
 import { runInBackground, hasLiveRun } from "@/lib/jobs";
 import { composeFullName } from "@/lib/person-name";
+import { parseIsraeliDate } from "@/lib/dates";
 import { proposeFieldUpdates } from "@/lib/proposals";
 export type { ProposalItem } from "@/lib/proposals";
 import type { ProposalItem } from "@/lib/proposals";
@@ -89,8 +90,9 @@ async function applyItem(personId: string, item: ProposalItem) {
       data: { firstName, lastName, fullName: composeFullName(firstName, lastName) },
     });
   } else if (item.key === "birthDate" || item.key === "recruitmentDate" || item.key === "placementDate" || item.key === "endOfServiceDate") {
-    const d = new Date(item.proposed);
-    if (isNaN(d.getTime())) throw new Error("תאריך מוצע לא תקין.");
+    // read day-first; a value we cannot parse is refused, never guessed
+    const d = parseIsraeliDate(item.proposed);
+    if (!d) throw new Error("תאריך מוצע לא תקין — נדרש dd/mm/yyyy.");
     await prisma.person.update({ where: { id: personId }, data: { [item.key]: d } });
   } else if (item.key.startsWith("field:")) {
     const fieldDefId = item.key.slice(6);

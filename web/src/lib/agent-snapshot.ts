@@ -100,6 +100,10 @@ export async function exportScopedSnapshot(visibility: Visibility, today: Date):
     return {
       שם: p.fullName,
       מסגרת: pathOf(p.teamId),
+      // ISO on purpose: this is a machine interface. The UI is dd/mm/yyyy, but
+      // a snapshot the agent reasons over must have no reading convention to
+      // get wrong — and the agent is told, in the extraction prompt, that the
+      // DOCUMENTS it reads are day-first.
       תאריך_גיוס: p.recruitmentDate.toISOString().slice(0, 10),
       // the plan's origin — every תאריך_יעד below is measured from THIS date
       תאריך_הצבה_ביחידה: p.placementDate.toISOString().slice(0, 10),
