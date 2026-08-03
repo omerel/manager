@@ -4,20 +4,20 @@ type Checkpoint = { offsetMonths: number; target: number };
 
 /**
  * Compact planned-vs-actual curve for a cumulative metric.
- * X = months from recruitment, Y = accumulated value. Planned = stepped line
+ * X = months from unit placement, Y = accumulated value. Planned = stepped line
  * through checkpoints; actual = the recorded reading; dashed line = today.
  */
 export function MetricCurve({
   checkpoints,
   value,
-  recruitmentDate,
+  placementDate,
   asOf,
   today,
   unit,
 }: {
   checkpoints: Checkpoint[];
   value: number | null;
-  recruitmentDate: Date;
+  placementDate: Date;
   asOf: Date | null;
   today: Date;
   unit: string;
@@ -29,8 +29,8 @@ export function MetricCurve({
   const H = 120;
   const pad = 24;
 
-  const currentOffset = Math.max(0, monthsBetween(recruitmentDate, today));
-  const asOfOffset = asOf ? Math.max(0, monthsBetween(recruitmentDate, asOf)) : null;
+  const currentOffset = Math.max(0, monthsBetween(placementDate, today));
+  const asOfOffset = asOf ? Math.max(0, monthsBetween(placementDate, asOf)) : null;
 
   const maxOffset = Math.max(...cps.map((c) => c.offsetMonths), currentOffset, 1);
   const maxTarget = Math.max(...cps.map((c) => c.target), value ?? 0, 1);

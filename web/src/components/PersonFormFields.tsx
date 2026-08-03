@@ -7,6 +7,7 @@ type CoreDefaults = {
   lastName?: string;
   birthDate?: Date | null;
   recruitmentDate?: Date | null;
+  placementDate?: Date | null;
   status?: string;
   endOfServiceDate?: Date | null;
 };
@@ -47,8 +48,11 @@ export function PersonFormFields({
           className={`${inputCls} bg-stone-100 text-muted`}
         />
       </Labeled>
-      <Labeled label="תאריך גיוס (עוגן התכנית)">
+      <Labeled label="תאריך גיוס">
         <input type="date" name="recruitmentDate" required defaultValue={toDateInput(core?.recruitmentDate)} className={inputCls} />
+      </Labeled>
+      <Labeled label="תאריך הצבה ביחידה (עוגן התכנית)">
+        <input type="date" name="placementDate" required defaultValue={toDateInput(core?.placementDate)} className={inputCls} />
       </Labeled>
       <Labeled label="סטטוס העסקה">
         <select name="status" defaultValue={core?.status ?? "ACTIVE"} className={inputCls}>
@@ -59,7 +63,7 @@ export function PersonFormFields({
           ))}
         </select>
       </Labeled>
-      <Labeled label="תאריך סיום שירות (אופציונלי)">
+      <Labeled label="תאריך סיום שירות (תת״ש) — אופציונלי">
         <input type="date" name="endOfServiceDate" defaultValue={toDateInput(core?.endOfServiceDate)} className={inputCls} />
       </Labeled>
 

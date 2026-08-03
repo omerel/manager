@@ -1,5 +1,5 @@
 /**
- * The years.months notation for recruitment-anchored offsets: the integer part
+ * The years.months notation for placement-anchored offsets: the integer part
  * is years, the digits after the dot are months. `3.4` = 3 years and 4 months.
  *
  * The notation is positional, NOT decimal. `3.1` is one month and `3.10` is
@@ -47,5 +47,5 @@ export function monthsAsWords(totalMonths: number): string {
   if (y && m) return `${y} ו-${m}`;
   if (y) return y;
   if (m) return m;
-  return "מרגע הגיוס";
+  return "מרגע ההצבה";
 }

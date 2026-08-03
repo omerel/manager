@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/authz";
 import { nextColorKey } from "@/lib/palette";
 import { parseYearsMonths } from "@/lib/years-months";
+import type { RecurringDisplay } from "@/generated/prisma/client";
 
 function int(v: FormDataEntryValue | null, fallback = 0): number {
   const n = Number(String(v ?? "").trim());
@@ -20,7 +21,7 @@ function str(v: FormDataEntryValue | null): string {
 }
 
 /**
- * A recruitment-anchored offset entered in the years.months notation, parsed
+ * A placement-anchored offset entered in the years.months notation, parsed
  * from the RAW string (`3.1` = one month, `3.10` = ten — the same float).
  * Throws the field's Hebrew error instead of storing a guess.
  */
@@ -72,6 +73,7 @@ export async function copyPlan(formData: FormData) {
           label: r.label,
           intervalMonths: r.intervalMonths,
           startOffsetMonths: r.startOffsetMonths,
+          display: r.display,
           stopMode: "UNTIL_OFFSET",
           stopOffsetMonths: r.stopOffsetMonths,
           color: r.color,
@@ -135,10 +137,15 @@ export async function addCheckpoint(formData: FormData) {
  * equally explicit — the system never decides on the admin's behalf that the
  * cycle begins at recruitment.
  */
+/** MARKER unless the admin explicitly asked for cards — the default is the quiet one. */
+function displayFrom(formData: FormData): RecurringDisplay {
+  return str(formData.get("display")) === "CARD" ? "CARD" : "MARKER";
+}
+
 function recurringSpanFrom(formData: FormData): { startOffsetMonths: number; stopOffsetMonths: number } {
   const startOffsetMonths = offsetOf(formData, "startOffsetMonths", "תחילת האירוע");
   const stopOffsetMonths = offsetOf(formData, "stopOffsetMonths", "סיום האירוע");
-  if (stopOffsetMonths <= 0) throw new Error("יש להזין עד מתי (שנים.חודשים מהגיוס) האירוע חוזר.");
+  if (stopOffsetMonths <= 0) throw new Error("יש להזין עד מתי (שנים.חודשים מההצבה) האירוע חוזר.");
   if (startOffsetMonths > stopOffsetMonths) throw new Error("תחילת האירוע חייבת להיות לפני מועד הסיום שלו.");
   return { startOffsetMonths, stopOffsetMonths };
 }
@@ -157,6 +164,7 @@ export async function addRecurringEvent(formData: FormData) {
       intervalMonths: Math.max(1, int(formData.get("intervalMonths"), 6)),
       stopMode: "UNTIL_OFFSET",
       ...span,
+      display: displayFrom(formData),
       color: nextColorKey(existing),
     },
   });
@@ -211,6 +219,7 @@ export async function updateRecurringEvent(formData: FormData) {
       intervalMonths: Math.max(1, int(formData.get("intervalMonths"), 6)),
       stopMode: "UNTIL_OFFSET",
       ...recurringSpanFrom(formData),
+      display: displayFrom(formData),
     },
   });
   revalidatePath(`/plans/${planId}`);

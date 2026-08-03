@@ -48,7 +48,8 @@ export async function extractionFields() {
     { key: "lastName", label: "שם משפחה", type: "טקסט" },
     { key: "birthDate", label: "תאריך לידה", type: "תאריך" },
     { key: "recruitmentDate", label: "תאריך גיוס", type: "תאריך" },
-    { key: "endOfServiceDate", label: "תאריך סיום שירות", type: "תאריך" },
+    { key: "placementDate", label: "תאריך הצבה ביחידה", type: "תאריך" },
+    { key: "endOfServiceDate", label: "תאריך סיום שירות (תת״ש)", type: "תאריך" },
     ...defs.map((d) => ({
       key: `field:${d.id}`,
       label: d.label,

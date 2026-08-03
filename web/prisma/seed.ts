@@ -29,7 +29,7 @@ async function main() {
     ],
   });
 
-  // --- Sample career plan (template, relative to recruitment) ---
+  // --- Sample career plan (template, relative to unit placement) ---
   const plan = await prisma.careerPlan.create({
     data: {
       name: "מסלול חוקר",
@@ -110,7 +110,8 @@ async function main() {
   for (const p of people) {
     const fullName = `${p.firstName} ${p.lastName}`;
     const created = await prisma.person.create({
-      data: { ...p, fullName, status: p.status ?? EmploymentStatus.ACTIVE },
+      // no separate placement in the seed: these people started here
+      data: { ...p, fullName, placementDate: p.recruitmentDate, status: p.status ?? EmploymentStatus.ACTIVE },
     });
     idByName[fullName] = created.id;
   }

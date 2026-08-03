@@ -265,7 +265,7 @@ function PlanHistorySection({ person }: { person: PersonFull }) {
               {missed.length > 0 && (
                 <ul className="mt-2 space-y-0.5 text-xs text-muted">
                   {missed.map((e) => (
-                    <li key={e.id}>⊘ {e.label} · יעד היה {fmtDate(addMonths(person.recruitmentDate, e.offsetMonths))}</li>
+                    <li key={e.id}>⊘ {e.label} · יעד היה {fmtDate(addMonths(person.placementDate, e.offsetMonths))}</li>
                   ))}
                 </ul>
               )}
@@ -303,6 +303,7 @@ function PersonalDetails({
               lastName: person.lastName,
               birthDate: person.birthDate,
               recruitmentDate: person.recruitmentDate,
+              placementDate: person.placementDate,
               status: person.status,
               endOfServiceDate: person.endOfServiceDate,
             }}
@@ -316,6 +317,7 @@ function PersonalDetails({
           <Field label="תאריך לידה" value={fmtDate(person.birthDate)} />
           <Field label="גיל" value={ageFromBirthDate(person.birthDate)} />
           <Field label="תאריך גיוס" value={fmtDate(person.recruitmentDate)} />
+          <Field label="תאריך הצבה ביחידה" value={fmtDate(person.placementDate)} />
           <Field label="סטטוס העסקה" value={STATUS_LABEL[person.status]} />
           <Field label="תאריך סיום שירות" value={fmtDate(person.endOfServiceDate)} />
           {person.fieldValues.map((fv) => (
@@ -453,7 +455,7 @@ function PlanSection({
             const live = m.checkpoints.filter((c) => !c.waived);
             const ev = evalMetric(
               { name: m.name, unit: m.unit, checkpoints: live.map((c) => ({ offsetMonths: c.offsetMonths, target: c.target })), value: m.value },
-              person.recruitmentDate,
+              person.placementDate,
               today,
             );
             return (
@@ -479,7 +481,7 @@ function PlanSection({
               <MetricCurve
                 checkpoints={m.checkpoints.map((c) => ({ offsetMonths: c.offsetMonths, target: c.target }))}
                 value={m.value}
-                recruitmentDate={person.recruitmentDate}
+                placementDate={person.placementDate}
                 asOf={m.asOf}
                 today={today}
                 unit={m.unit}

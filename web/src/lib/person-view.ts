@@ -89,7 +89,8 @@ export type RecurrenceRow = {
 };
 
 /**
- * Unroll a recurring event for a specific person.
+ * Unroll a recurring event for a specific person, on the plan's own axis:
+ * months from the person's UNIT PLACEMENT date.
  *
  * The plan's stop month decides the schedule — identically for everyone
  * assigned to it. A known end-of-service date then clips it, for every
@@ -100,12 +101,13 @@ export function unrollForPerson(
   intervalMonths: number,
   stopOffsetMonths: number | null,
   startOffsetMonths: number,
-  recruitmentDate: Date,
+  /** the plan's origin — unit placement, never recruitment */
+  placementDate: Date,
   endOfServiceDate: Date | null,
 ): number[] {
   if (intervalMonths <= 0 || stopOffsetMonths == null || startOffsetMonths < 0) return [];
   const cap = endOfServiceDate
-    ? Math.min(stopOffsetMonths, monthsBetween(recruitmentDate, endOfServiceDate))
+    ? Math.min(stopOffsetMonths, monthsBetween(placementDate, endOfServiceDate))
     : stopOffsetMonths;
   const out: number[] = [];
   for (let m = startOffsetMonths; m <= cap; m += intervalMonths) out.push(m);
@@ -114,7 +116,9 @@ export function unrollForPerson(
 
 export function buildPersonTimeline(person: PersonFull) {
   const plan = person.assignedPlan;
-  const rec = person.recruitmentDate;
+  // THE anchor. A plan describes a path in this unit, so every offset resolves
+  // through the placement date; the recruitment date is history, not an origin.
+  const rec = person.placementDate;
   const ctx = waiverContextOf(person);
   const doneByEvent = new Map(person.pointProgress.map((p) => [p.pointEventId, p]));
   const readingByMetric = new Map(person.metricReadings.map((r) => [r.metricId, r]));

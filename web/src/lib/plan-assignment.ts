@@ -77,8 +77,9 @@ export async function buildAssignmentPreview(
   });
   if (!person || !tpl || !tpl.isTemplate) return null;
 
-  // the waiver line: where this person stands on their own timeline right now
-  const tenureMonths = monthsSince(person.recruitmentDate, now);
+  // the waiver line: how far into their path IN THIS UNIT they already are —
+  // the same axis the plan itself uses
+  const tenureMonths = monthsSince(person.placementDate, now);
   const waived = (offset: number) => offset <= tenureMonths;
 
   const items: PreviewItem[] = [

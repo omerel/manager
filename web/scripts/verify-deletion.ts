@@ -54,6 +54,7 @@ async function person() {
       fullName: "בדיקת מחיקה",
       birthDate: new Date("1995-01-01"),
       recruitmentDate: new Date("2023-01-01"),
+      placementDate: new Date("2023-01-01"),
       teamId: team?.id ?? null,
       photoPath: null,
     },

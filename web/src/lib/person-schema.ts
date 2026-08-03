@@ -13,7 +13,7 @@ import { fmtDate } from "@/lib/dates";
  * assignment), which is exactly why it kept being forgotten.
  */
 export const CORE_FIELDS = {
-  form: ["שם פרטי", "שם משפחה", "תאריך לידה", "תאריך גיוס", "סטטוס העסקה", "תאריך סיום שירות"],
+  form: ["שם פרטי", "שם משפחה", "תאריך לידה", "תאריך גיוס", "תאריך הצבה ביחידה", "סטטוס העסקה", "תאריך סיום שירות (תת״ש)"],
   elsewhere: ["שיוך לצוות", "תמונת פרופיל", "מסלול קריירה"],
 } as const;
 

@@ -44,16 +44,16 @@ export async function countAllAssignmentsByTemplate(): Promise<Map<string, numbe
 export const DEFAULT_STOP_MONTHS = 72;
 
 /**
- * Human label for a month offset relative to recruitment, in the years.months
- * notation plus words — "גיוס +3.4 (3 שנים ו-4 חודשים)".
+ * Human label for a month offset relative to UNIT PLACEMENT, in the
+ * years.months notation plus words — "הצבה +3.4 (3 שנים ו-4 חודשים)".
  */
 export function formatOffset(months: number): string {
-  if (months === 0) return "מרגע הגיוס";
-  return `גיוס +${formatYearsMonths(months)} (${monthsAsWords(months)})`;
+  if (months === 0) return "מרגע ההצבה";
+  return `הצבה +${formatYearsMonths(months)} (${monthsAsWords(months)})`;
 }
 
 /**
- * Unroll a recurring event into occurrence offsets (months from recruitment):
+ * Unroll a recurring event into occurrence offsets (months from placement):
  * start, start+interval, … up to and including the stop. The cap always comes
  * from the plan. A missing cap yields nothing rather than a default:
  * substituting a horizon here is what once turned a preview constant into the

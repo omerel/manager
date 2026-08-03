@@ -138,6 +138,7 @@ export default async function NewPersonPage({
                 lastName: dv["lastName"] ?? "",
                 birthDate: draftDate(dv["birthDate"]) ?? null,
                 recruitmentDate: draftDate(dv["recruitmentDate"]) ?? null,
+                placementDate: draftDate(dv["placementDate"]) ?? null,
                 endOfServiceDate: draftDate(dv["endOfServiceDate"]) ?? null,
               }}
             />

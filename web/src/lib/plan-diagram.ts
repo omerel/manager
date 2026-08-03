@@ -5,7 +5,7 @@ import { softColorFor } from "@/lib/palette";
 
 /**
  * Pure SVG-string builder for the career-path diagram: a large upward arrow
- * from recruitment (base) to end of service (tip), events branching off it,
+ * from unit placement (base) to end of service (tip), events branching off it,
  * proportional to their month offsets. Shared verbatim by the plan page and
  * the PDF export — zero dependencies (air-gap safe).
  */
@@ -52,7 +52,7 @@ type EventCard = {
   offset: number;
   title: string;
   sub: string;
-  kind: "point" | "metric";
+  kind: "point" | "metric" | "recurring";
   /** per-metric soft colour; point events use the brand green */
   bg?: string;
   accent?: string;
@@ -69,7 +69,7 @@ export function buildPlanDiagramSvg(plan: PlanWithEvents): string {
   // ---- collect events ----
   const cards: EventCard[] = [];
   for (const e of plan.pointEvents) {
-    cards.push({ offset: e.offsetMonths, title: e.label, sub: `${formatYearsMonths(e.offsetMonths)} מהגיוס (${monthsAsWords(e.offsetMonths)})`, kind: "point" });
+    cards.push({ offset: e.offsetMonths, title: e.label, sub: `${formatYearsMonths(e.offsetMonths)} מההצבה (${monthsAsWords(e.offsetMonths)})`, kind: "point" });
   }
   plan.cumulativeMetrics.forEach((m, mi) => {
     const col = softColorFor(m.color, mi); // one colour per metric, shared by all its checkpoints
@@ -77,7 +77,7 @@ export function buildPlanDiagramSvg(plan: PlanWithEvents): string {
       cards.push({
         offset: c.offsetMonths,
         title: `${m.name}: ${c.target} ${m.unit}`,
-        sub: `יעד עד ${formatYearsMonths(c.offsetMonths)} מהגיוס`,
+        sub: `יעד עד ${formatYearsMonths(c.offsetMonths)} מההצבה`,
         kind: "metric",
         bg: col.bg,
         accent: col.accent,
@@ -85,21 +85,44 @@ export function buildPlanDiagramSvg(plan: PlanWithEvents): string {
       });
     }
   });
-  cards.sort((a, b) => a.offset - b.offset);
 
-  const recurring = plan.recurringEvents.map((r, ri) => ({
-    label: r.label,
-    interval: r.intervalMonths,
-    stop: `מ-${formatYearsMonths(r.startOffsetMonths)} עד ${formatYearsMonths(r.stopOffsetMonths ?? 0)} מהגיוס`,
-    offsets: unrollRecurring(r.intervalMonths, r.stopOffsetMonths, r.startOffsetMonths),
-    accent: softColorFor(r.color, ri).accent,
-  }));
+  // A recurring event is drawn ONE way, never both: markers on the axis, or a
+  // card at each occurrence. The split happens here so nothing downstream has
+  // to remember the rule.
+  const allRecurring = plan.recurringEvents.map((r, ri) => {
+    const col = softColorFor(r.color, ri);
+    return {
+      label: r.label,
+      interval: r.intervalMonths,
+      stop: `מ-${formatYearsMonths(r.startOffsetMonths)} עד ${formatYearsMonths(r.stopOffsetMonths ?? 0)} מההצבה`,
+      offsets: unrollRecurring(r.intervalMonths, r.stopOffsetMonths, r.startOffsetMonths),
+      accent: col.accent,
+      bg: col.bg,
+      border: col.border,
+      asCards: r.display === "CARD",
+    };
+  });
+  const recurring = allRecurring.filter((r) => !r.asCards);
+  for (const r of allRecurring.filter((r) => r.asCards)) {
+    for (const off of r.offsets) {
+      cards.push({
+        offset: off,
+        title: r.label,
+        sub: `${formatYearsMonths(off)} מההצבה · כל ${r.interval} חודשים`,
+        kind: "recurring",
+        bg: r.bg,
+        accent: r.accent,
+        border: r.border,
+      });
+    }
+  }
+  cards.sort((a, b) => a.offset - b.offset);
 
   // ---- event-ordinal axis ----
   // Positions come from the *sequence* of months in which something happens,
   // not from calendar distance: a plan running to 72 months must not be twice
   // as tall as one running to 36. Each slot is labelled with its month; only
-  // the jump from recruitment to the first one is marked, since the labels
+  // the jump from placement to the first one is marked, since the labels
   // already tell the reader the spacing is not proportional.
   const cardsByMonth = new Map<number, EventCard[]>();
   for (const c of cards) {
@@ -120,10 +143,10 @@ export function buildPlanDiagramSvg(plan: PlanWithEvents): string {
   const shownRecurrences = recurring.flatMap((r) => r.offsets).filter(inCardSpan);
 
   const slotMonths = [...new Set([...cardMonths, ...shownRecurrences])]
-    .filter((m) => m > 0) // month 0 coincides with the recruitment chip itself
+    .filter((m) => m > 0) // month 0 coincides with the placement chip itself
     .sort((a, b) => a - b);
 
-  const BREAK_GAP = 52; // room between the recruitment chip and the first slot
+  const BREAK_GAP = 52; // room between the placement chip and the first slot
   const TOP_ZONE = 190; // title, arrowhead and breathing room above the last slot
   // a slot only grows when more than two cards share a month, which is rare;
   // in the normal case every slot is one row and the ticks are evenly spaced
@@ -132,7 +155,7 @@ export function buildPlanDiagramSvg(plan: PlanWithEvents): string {
 
   const stack = slotMonths.reduce((s, m) => s + slotH(m), 0);
   const H = Math.max(520, 96 + BREAK_GAP + stack + TOP_ZONE);
-  const baseY = H - 96; // recruitment
+  const baseY = H - 96; // unit placement
   const tipY = 96; // arrowhead tip
   const shaftTop = tipY + 46;
 
@@ -160,7 +183,7 @@ export function buildPlanDiagramSvg(plan: PlanWithEvents): string {
     `<rect width="${W}" height="${H}" fill="white"/>`,
     // title
     `<text x="${CX}" y="44" text-anchor="middle" font-size="22" font-weight="700" fill="${C.deep}">${esc(plan.name)}</text>`,
-    `<text x="${CX}" y="66" text-anchor="middle" font-size="12" fill="${C.muted}">מסלול קריירה · ציר לפי אירועים, בשנים.חודשים מהגיוס (המרווחים אינם פרופורציוניים)</text>`,
+    `<text x="${CX}" y="66" text-anchor="middle" font-size="12" fill="${C.muted}">מסלול קריירה · ציר לפי אירועים, בשנים.חודשים מההצבה ביחידה (המרווחים אינם פרופורציוניים)</text>`,
   );
 
   // ---- spine arrow ----
@@ -170,14 +193,14 @@ export function buildPlanDiagramSvg(plan: PlanWithEvents): string {
     // tip: end-of-service + leaf
     `<g transform="translate(${CX + 38},${tipY + 2}) scale(0.9)"><g transform="scale(1)">${ICON.leaf.replace('fill="white"', `fill="${C.action}"`)}</g></g>`,
     `<text x="${CX}" y="${tipY - 14}" text-anchor="middle" font-size="14" font-weight="600" fill="${C.action}">סוף השירות</text>`,
-    // base: recruitment chip (rocket inside, right of the text — Hebrew reads right→left)
+    // base: unit-placement chip — the plan's origin (rocket inside, right of the text)
     `<g filter="url(#soft)"><rect x="${CX - 74}" y="${baseY - 4}" width="148" height="42" rx="21" fill="${C.deep}"/></g>`,
     `<g transform="translate(${CX + 28},${baseY + 5}) scale(1.1)">${ICON.rocket}</g>`,
-    `<text x="${CX - 10}" y="${baseY + 23}" text-anchor="middle" font-size="16" font-weight="700" fill="white">גיוס</text>`,
+    `<text x="${CX - 10}" y="${baseY + 23}" text-anchor="middle" font-size="16" font-weight="700" fill="white">הצבה</text>`,
   );
 
   // ---- slot ticks, and the one break marker ----
-  // Only the jump from recruitment to the first event month is marked. A notch
+  // Only the jump from placement to the first event month is marked. A notch
   // between every pair of slots was noise: with labelled ticks it repeated on
   // nearly every boundary and read as texture rather than information.
   const breakMark = (yy: number, w: number) =>
@@ -280,6 +303,10 @@ export function buildPlanDiagramSvg(plan: PlanWithEvents): string {
   // Each entry states the event's real definition; when the drawing shows only
   // part of it, the legend says so rather than letting the diagram imply that
   // the recurrence ends where the markers do.
+  //
+  // Only marker-drawn events appear here. An event drawn as cards carries its
+  // own label at every occurrence, so a legend row for it would be a second,
+  // redundant key — and the header would be claiming markers that do not exist.
   if (recurring.length > 0) {
     const clipped =
       firstCard != null && recurring.some((r) => r.offsets.some((o) => !inCardSpan(o)));
@@ -290,7 +317,7 @@ export function buildPlanDiagramSvg(plan: PlanWithEvents): string {
     const legendX = 16;
     const legendW = 330; // narrower would wrap a row and push the closing note out of the box
     const legendY = H - lh - 14;
-    const markX = legendX + legendW - 11; // leading edge in RTL, clear of the גיוס chip
+    const markX = legendX + legendW - 11; // leading edge in RTL, clear of the הצבה chip
 
     // Every graphic in the legend is a real SVG element; the foreignObject
     // carries text only. HTML inside a foreignObject cannot be relied on to
@@ -318,7 +345,7 @@ export function buildPlanDiagramSvg(plan: PlanWithEvents): string {
     parts.push(
       `<foreignObject x="${legendX}" y="${legendY}" width="${legendW}" height="${lh}">
          <div xmlns="http://www.w3.org/1999/xhtml" dir="rtl" style="font-family:Rubik,'Noto Sans Hebrew',sans-serif;font-size:12px">
-           <div style="font-weight:600;color:${C.ink};height:${ROW_H}px;line-height:${ROW_H}px;padding-right:22px">אירועים מחזוריים לאורך המסלול:</div>
+           <div style="font-weight:600;color:${C.ink};height:${ROW_H}px;line-height:${ROW_H}px;padding-right:22px">אירועים מחזוריים המסומנים על הציר:</div>
            ${recurring
              .map(
                (r) =>

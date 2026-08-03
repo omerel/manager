@@ -1,9 +1,9 @@
 /**
  * Whether a plan item counts for a person.
  *
- * A person is assigned a plan at some point along their service, and the plan's
- * timeline is anchored to their recruitment — so most of a plan handed to a
- * long-serving person sits in their past. Those items were never required of
+ * A person is assigned a plan at some point along their path, and the plan's
+ * timeline is anchored to their UNIT PLACEMENT — so most of a plan handed to
+ * someone long placed here sits in their past. Those items were never required of
  * them, and reporting them as overdue would be a wall of false red.
  *
  * The rule, in one place because gaps, the timeline view and the assignment
@@ -24,7 +24,7 @@ export type WaiverOverride = {
 };
 
 export type WaiverContext = {
-  /** months from recruitment at the moment of assignment; 0 = nothing waived */
+  /** months from unit placement at the moment of assignment; 0 = nothing waived */
   line: number;
   overrides: WaiverOverride[];
 };
@@ -73,10 +73,10 @@ export function isOccurrenceWaived(
   return whole ?? beforeLine(occurrenceOffset, ctx.line);
 }
 
-/** Months from recruitment to a given moment — how the line is derived. */
-export function monthsSince(recruitmentDate: Date, at: Date): number {
+/** Whole months between an origin and a moment — how the waiver line is derived. */
+export function monthsSince(origin: Date, at: Date): number {
   const months =
-    (at.getUTCFullYear() - recruitmentDate.getUTCFullYear()) * 12 +
-    (at.getUTCMonth() - recruitmentDate.getUTCMonth());
-  return Math.max(0, at.getUTCDate() < recruitmentDate.getUTCDate() ? months - 1 : months);
+    (at.getUTCFullYear() - origin.getUTCFullYear()) * 12 +
+    (at.getUTCMonth() - origin.getUTCMonth());
+  return Math.max(0, at.getUTCDate() < origin.getUTCDate() ? months - 1 : months);
 }

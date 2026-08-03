@@ -148,6 +148,8 @@ export async function createPerson(formData: FormData) {
 
   const recruitmentDate = dateOrNull(formData.get("recruitmentDate"));
   if (!recruitmentDate) throw new Error("חובה להזין תאריך גיוס.");
+  const placementDate = dateOrNull(formData.get("placementDate"));
+  if (!placementDate) throw new Error("חובה להזין תאריך הצבה ביחידה — ממנו נגזרים כל מועדי התכנית.");
   const firstName = str(formData.get("firstName"));
   const lastName = str(formData.get("lastName"));
   if (!firstName || !lastName) throw new Error("חובה להזין שם פרטי ושם משפחה.");
@@ -162,6 +164,7 @@ export async function createPerson(formData: FormData) {
       fullName: composeFullName(firstName, lastName),
       birthDate,
       recruitmentDate,
+      placementDate,
       status: statusOf(formData.get("status")),
       endOfServiceDate: dateOrNull(formData.get("endOfServiceDate")),
       teamId,
@@ -190,6 +193,8 @@ export async function updatePerson(formData: FormData) {
 
   const recruitmentDate = dateOrNull(formData.get("recruitmentDate"));
   if (!recruitmentDate) throw new Error("חובה להזין תאריך גיוס.");
+  const placementDate = dateOrNull(formData.get("placementDate"));
+  if (!placementDate) throw new Error("חובה להזין תאריך הצבה ביחידה — ממנו נגזרים כל מועדי התכנית.");
   const firstName = str(formData.get("firstName"));
   const lastName = str(formData.get("lastName"));
   if (!firstName || !lastName) throw new Error("חובה להזין שם פרטי ושם משפחה.");
@@ -206,6 +211,7 @@ export async function updatePerson(formData: FormData) {
         fullName: composeFullName(firstName, lastName),
         birthDate,
         recruitmentDate,
+        placementDate,
         status: statusOf(formData.get("status")),
         endOfServiceDate: dateOrNull(formData.get("endOfServiceDate")),
       },
@@ -245,11 +251,12 @@ export async function assignPlan(formData: FormData) {
 
   const person = await prisma.person.findUniqueOrThrow({
     where: { id: personId },
-    select: { recruitmentDate: true, assignedPlanId: true },
+    select: { placementDate: true, assignedPlanId: true },
   });
 
   const now = new Date();
-  const waiverOffsetMonths = monthsSince(person.recruitmentDate, now);
+  // measured on the plan's own axis: months in this unit, not total service
+  const waiverOffsetMonths = monthsSince(person.placementDate, now);
   const reason = str(formData.get("reason")) || null;
 
   // Build the copy item by item so every template id maps to its copy id —
@@ -286,6 +293,7 @@ export async function assignPlan(formData: FormData) {
         label: r.label,
         intervalMonths: r.intervalMonths,
         startOffsetMonths: r.startOffsetMonths,
+        display: r.display,
         stopMode: "UNTIL_OFFSET",
         stopOffsetMonths: r.stopOffsetMonths,
         color: r.color,

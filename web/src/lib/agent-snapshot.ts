@@ -101,6 +101,8 @@ export async function exportScopedSnapshot(visibility: Visibility, today: Date):
       שם: p.fullName,
       מסגרת: pathOf(p.teamId),
       תאריך_גיוס: p.recruitmentDate.toISOString().slice(0, 10),
+      // the plan's origin — every תאריך_יעד below is measured from THIS date
+      תאריך_הצבה_ביחידה: p.placementDate.toISOString().slice(0, 10),
       סטטוס: STATUS_LABEL[p.status],
       סיום_שירות: p.endOfServiceDate?.toISOString().slice(0, 10) ?? null,
       פרטים_נוספים: Object.fromEntries(p.fieldValues.map((fv) => [fv.field.label, fv.value])),
@@ -118,7 +120,7 @@ export async function exportScopedSnapshot(visibility: Visibility, today: Date):
               const prog = p.pointProgress.find((x) => x.pointEventId === e.id);
               return {
                 אירוע: e.label,
-                תאריך_יעד: addMonths(p.recruitmentDate, e.offsetMonths).toISOString().slice(0, 10),
+                תאריך_יעד: addMonths(p.placementDate, e.offsetMonths).toISOString().slice(0, 10),
                 הושלם: !!prog,
                 תאריך_ביצוע: prog?.doneOn.toISOString().slice(0, 10) ?? null,
                 הערה: prog?.note ?? null,
@@ -131,7 +133,7 @@ export async function exportScopedSnapshot(visibility: Visibility, today: Date):
                 יחידה: m.unit,
                 יעדים: m.checkpoints.map((c) => ({
                   יעד: c.target,
-                  עד_תאריך: addMonths(p.recruitmentDate, c.offsetMonths).toISOString().slice(0, 10),
+                  עד_תאריך: addMonths(p.placementDate, c.offsetMonths).toISOString().slice(0, 10),
                 })),
                 ערך_בפועל: reading?.value ?? null,
                 נכון_לתאריך: reading?.asOf.toISOString().slice(0, 10) ?? null,

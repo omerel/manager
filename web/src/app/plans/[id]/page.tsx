@@ -141,7 +141,7 @@ function PointEventsSection({ plan, admin }: { plan: PlanWithEvents; admin: bool
                     <input type="hidden" name="planId" value={plan.id} />
                     <input type="hidden" name="id" value={e.id} />
                     <TextField name={`label-${e.id}`} field="label" label="שם האירוע" defaultValue={e.label} required />
-                    <OffsetField name={`offset-${e.id}`} field="offsetMonths" label="מועד (שנים.חודשים מהגיוס)" defaultMonths={e.offsetMonths} required />
+                    <OffsetField name={`offset-${e.id}`} field="offsetMonths" label="מועד (שנים.חודשים מההצבה)" defaultMonths={e.offsetMonths} required />
                   </InlineEdit>
                 ) : (
                   summary
@@ -156,7 +156,7 @@ function PointEventsSection({ plan, admin }: { plan: PlanWithEvents; admin: bool
         <form action={addPointEvent} className="flex flex-wrap items-end gap-2 rounded-lg border border-dashed border-border p-3">
           <input type="hidden" name="planId" value={plan.id} />
           <TextField name="label" label="שם האירוע" placeholder="סיום הכשרה בסיסית" />
-          <OffsetField name="offsetMonths" label="מועד (שנים.חודשים מהגיוס)" defaultMonths={1} required />
+          <OffsetField name="offsetMonths" label="מועד (שנים.חודשים מההצבה)" defaultMonths={1} required />
           <AddButton>הוסף נקודתי</AddButton>
         </form>
       )}
@@ -218,7 +218,7 @@ function CumulativeSection({ plan, admin }: { plan: PlanWithEvents; admin: boole
                             <input type="hidden" name="planId" value={plan.id} />
                             <input type="hidden" name="id" value={cp.id} />
                             <NumField name={`cptarget-${cp.id}`} field="target" label={`יעד (${m.unit})`} defaultValue={cp.target} step="any" />
-                            <OffsetField name={`cpoffset-${cp.id}`} field="offsetMonths" label="מועד (שנים.חודשים מהגיוס)" defaultMonths={cp.offsetMonths} required />
+                            <OffsetField name={`cpoffset-${cp.id}`} field="offsetMonths" label="מועד (שנים.חודשים מההצבה)" defaultMonths={cp.offsetMonths} required />
                           </InlineEdit>
                         ) : (
                           cpSummary
@@ -234,7 +234,7 @@ function CumulativeSection({ plan, admin }: { plan: PlanWithEvents; admin: boole
                   <input type="hidden" name="planId" value={plan.id} />
                   <input type="hidden" name="metricId" value={m.id} />
                   <NumField name={`newtarget-${m.id}`} field="target" label={`יעד (${m.unit})`} defaultValue={100} step="any" />
-                  <OffsetField name={`newoffset-${m.id}`} field="offsetMonths" label="מועד (שנים.חודשים מהגיוס)" defaultMonths={6} required />
+                  <OffsetField name={`newoffset-${m.id}`} field="offsetMonths" label="מועד (שנים.חודשים מההצבה)" defaultMonths={6} required />
                   <AddButton>הוסף יעד-ביניים</AddButton>
                 </form>
               )}
@@ -275,7 +275,7 @@ function RecurringSection({ plan, admin }: { plan: PlanWithEvents; admin: boolea
                 </span>{" "}
                 {stop ? (
                   <span className="text-sm text-muted">
-                    · כל {r.intervalMonths} חודשים · {stop} · מופעים: {preview.map((o) => `+${formatYearsMonths(o)}`).join(", ") || "—"}
+                    · כל {r.intervalMonths} חודשים · {stop} · {r.display === "CARD" ? "כרטיס בכל מופע" : "סימון על הציר"} · מופעים: {preview.map((o) => `+${formatYearsMonths(o)}`).join(", ") || "—"}
                   </span>
                 ) : (
                   <span className="text-sm font-medium text-red-700">
@@ -299,17 +299,18 @@ function RecurringSection({ plan, admin }: { plan: PlanWithEvents; admin: boolea
                     <OffsetField
                       name={`rstart-${r.id}`}
                       field="startOffsetMonths"
-                      label="התחלה (שנים.חודשים מהגיוס)"
+                      label="התחלה (שנים.חודשים מההצבה)"
                       defaultMonths={r.startOffsetMonths}
                       required
                     />
                     <OffsetField
                       name={`rstopoff-${r.id}`}
                       field="stopOffsetMonths"
-                      label="עד (שנים.חודשים מהגיוס)"
+                      label="עד (שנים.חודשים מההצבה)"
                       defaultMonths={r.stopOffsetMonths ?? DEFAULT_STOP_MONTHS}
                       required
                     />
+                    <DisplayField name={`rdisp-${r.id}`} defaultValue={r.display} />
                   </InlineEdit>
                 ) : (
                   summary
@@ -326,8 +327,9 @@ function RecurringSection({ plan, admin }: { plan: PlanWithEvents; admin: boolea
           <TextField name="label" label="שם האירוע" placeholder="חוות דעת" />
           <NumField name="intervalMonths" label="כל כמה חודשים" defaultValue={6} />
           {/* default start: one interval in — "not at recruitment" is the default posture, not a prohibition */}
-          <OffsetField name="startOffsetMonths" label="התחלה (שנים.חודשים מהגיוס)" defaultMonths={6} required />
-          <OffsetField name="stopOffsetMonths" label="עד (שנים.חודשים מהגיוס)" defaultMonths={DEFAULT_STOP_MONTHS} required />
+          <OffsetField name="startOffsetMonths" label="התחלה (שנים.חודשים מההצבה)" defaultMonths={6} required />
+          <OffsetField name="stopOffsetMonths" label="עד (שנים.חודשים מההצבה)" defaultMonths={DEFAULT_STOP_MONTHS} required />
+          <DisplayField name="display-new" defaultValue="MARKER" />
           <AddButton>הוסף מחזורי</AddButton>
         </form>
       )}
@@ -399,6 +401,26 @@ function NumField({
     </div>
   );
 }
+/**
+ * How a recurring event is drawn. MARKER first, and named as the default, so
+ * the quiet option is the one you land on; the card option states its cost
+ * because a frequent event over a long plan becomes a card per occurrence.
+ */
+function DisplayField({ name, defaultValue }: { name: string; defaultValue: "MARKER" | "CARD" }) {
+  return (
+    <div className="flex flex-col">
+      <label htmlFor={name} className="mb-1 text-sm text-muted">
+        תצוגה באיור
+      </label>
+      <select id={name} name="display" defaultValue={defaultValue} className="rounded-md border border-border px-3 py-1.5 text-sm">
+        <option value="MARKER">סימון על הציר (ברירת מחדל)</option>
+        <option value="CARD">כרטיס בכל מופע</option>
+      </select>
+      <span className="mt-0.5 text-xs text-muted">״כרטיס בכל מופע״ מצייר כרטיס לכל חזרה</span>
+    </div>
+  );
+}
+
 function AddButton({ children }: { children: React.ReactNode }) {
   return <SubmitButton pendingText="מוסיף…">{children}</SubmitButton>;
 }

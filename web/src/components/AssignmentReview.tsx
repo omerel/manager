@@ -21,7 +21,7 @@ export function AssignmentReview({ preview, backHref }: { preview: AssignmentPre
           שיוך ״{preview.templateName}״ ל{preview.personName}
         </h2>
         <p className="mt-1 text-sm text-muted">
-          ותק במעבר: <b>חודש {tenureMonths}</b> מהגיוס.
+          ותק במעבר: <b>חודש {tenureMonths}</b> מההצבה ביחידה.
           {preview.previousPlanName ? ` מסלול נוכחי: ${preview.previousPlanName}.` : " זהו המסלול הראשון שלו."}
         </p>
       </div>

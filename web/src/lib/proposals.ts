@@ -33,6 +33,7 @@ export async function proposeFieldUpdates(
     if (key === "lastName") return person.lastName;
     if (key === "birthDate") return person.birthDate?.toISOString().slice(0, 10) ?? "";
     if (key === "recruitmentDate") return person.recruitmentDate.toISOString().slice(0, 10);
+    if (key === "placementDate") return person.placementDate.toISOString().slice(0, 10);
     if (key === "endOfServiceDate") return person.endOfServiceDate?.toISOString().slice(0, 10) ?? "";
     if (key.startsWith("field:")) return valueByDef.get(key.slice(6)) ?? "";
     return "";

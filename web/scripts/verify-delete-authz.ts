@@ -63,6 +63,7 @@ async function makePerson(name: string) {
       fullName: `בדיקה ${name}`,
       birthDate: new Date("1995-01-01"),
       recruitmentDate: new Date("2023-01-01"),
+      placementDate: new Date("2023-01-01"),
       teamId: team?.id ?? null,
     },
   });

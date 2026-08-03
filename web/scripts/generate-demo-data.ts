@@ -186,6 +186,9 @@ async function main() {
             label: r.label,
             intervalMonths: r.intervalMonths,
             startOffsetMonths: r.intervalMonths, // first occurrence one interval in, as before the column
+            // the first recurring event of each plan is drawn as cards, so the
+            // dev registry exercises both display modes, not only the default
+            display: i === 0 ? ("CARD" as const) : ("MARKER" as const),
             stopMode: "UNTIL_OFFSET" as const,
             stopOffsetMonths: r.stopOffsetMonths,
             color: nextColorKey(i),
@@ -295,6 +298,10 @@ async function main() {
           fullName: composeFullName(firstName, lastName),
           birthDate,
           recruitmentDate,
+          // Most people started here; every 7th arrived later, so the dev
+          // registry actually exercises a placement date that is NOT the
+          // recruitment date — otherwise the anchor is untested by the data.
+          placementDate: i % 7 === 3 ? addMonths(recruitmentDate, 6) : recruitmentDate,
           status,
           endOfServiceDate,
           teamId: team.id,

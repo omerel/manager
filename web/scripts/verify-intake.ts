@@ -51,7 +51,7 @@ async function main() {
   const team = await prisma.orgNode.findFirst({ where: { kind: "TEAM" } });
   const twinData = {
     firstName: "תאום", lastName: "כפול", fullName: "תאום כפול",
-    birthDate: new Date("1990-01-01"), recruitmentDate: new Date("2020-01-01"), teamId: team?.id ?? null,
+    birthDate: new Date("1990-01-01"), recruitmentDate: new Date("2020-01-01"), placementDate: new Date("2020-01-01"), teamId: team?.id ?? null,
   };
   const twin1 = await prisma.person.create({ data: twinData });
   const twin2 = await prisma.person.create({ data: twinData });

@@ -88,7 +88,7 @@ async function applyItem(personId: string, item: ProposalItem) {
       where: { id: personId },
       data: { firstName, lastName, fullName: composeFullName(firstName, lastName) },
     });
-  } else if (item.key === "birthDate" || item.key === "recruitmentDate" || item.key === "endOfServiceDate") {
+  } else if (item.key === "birthDate" || item.key === "recruitmentDate" || item.key === "placementDate" || item.key === "endOfServiceDate") {
     const d = new Date(item.proposed);
     if (isNaN(d.getTime())) throw new Error("תאריך מוצע לא תקין.");
     await prisma.person.update({ where: { id: personId }, data: { [item.key]: d } });

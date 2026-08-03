@@ -133,7 +133,7 @@ model OrgNode {
   grants   AccessGrant[]
 }
 
-// --- Career plans (templates, relative to recruitment). Admin-authored. ---
+// --- Career plans (templates, relative to unit placement). Admin-authored. ---
 
 model CareerPlan {
   id                String             @id @default(cuid())
@@ -165,8 +165,9 @@ model PlanAssignment {
   templateName       String // snapshot: readable history even if the template is later deleted
   assignedAt         DateTime        @default(now())
   endedAt            DateTime? // null = active; a person has at most one active assignment
-  /// Months from recruitment at the moment of assignment. Items at or before it
-  /// are waived: they were never required of this person.
+  /// Months from UNIT PLACEMENT at the moment of assignment — the same axis the
+  /// plan uses. Items at or before it are waived: they were never required of
+  /// this person.
   waiverOffsetMonths Int             @default(0)
   reason             String? // why the person moved off the previous plan
   waivers            PlanWaiver[]
@@ -216,7 +217,7 @@ model PlanCarryOver {
   originalDate   DateTime? // completion date, or the reading's as-of date
 }
 
-// One-time, binary milestone at a month offset from recruitment.
+// One-time, binary milestone at a month offset from unit placement.
 model PointEvent {
   id           String          @id @default(cuid())
   plan         CareerPlan      @relation(fields: [planId], references: [id], onDelete: Cascade)
@@ -253,17 +254,25 @@ enum RecurringStopMode {
   END_OF_SERVICE // stop at the person's end of service
 }
 
-// Defined once; auto-unrolls every `intervalMonths` from recruitment.
+// Defined once; auto-unrolls every `intervalMonths` from unit placement.
+/// How a recurring event is drawn on the diagram.
+enum RecurringDisplay {
+  MARKER // small coloured diamonds on the axis (default)
+  CARD // a labelled card at EVERY occurrence, like a point event
+}
+
 model RecurringEvent {
   id               String            @id @default(cuid())
   plan             CareerPlan        @relation(fields: [planId], references: [id], onDelete: Cascade)
   planId           String
   label            String
   intervalMonths   Int
-  /// Months from recruitment of the FIRST occurrence; the cycle runs
+  /// Months from unit placement of the FIRST occurrence; the cycle runs
   /// start, start+interval, … ≤ stop. Backfilled = intervalMonths, which is
   /// exactly the schedule events produced before the column existed.
   startOffsetMonths Int
+  /// MARKER (default) or CARD — one event has one representation, never both.
+  display          RecurringDisplay  @default(MARKER)
   stopMode         RecurringStopMode
   stopOffsetMonths Int? // required when stopMode = UNTIL_OFFSET
   color            String? // soft-palette color assigned at creation (stable)
@@ -283,7 +292,7 @@ model EvalEntry {
   content          String? // textual body
   recurringEvent   RecurringEvent? @relation(fields: [recurringEventId], references: [id], onDelete: Cascade)
   recurringEventId String?
-  occurrenceOffset Int? // months from recruitment; set together with recurringEventId
+  occurrenceOffset Int? // months from unit placement; set together with recurringEventId
   attachments      Attachment[]
   createdAt        DateTime        @default(now())
 
@@ -308,7 +317,11 @@ model Person {
   fullName         String // maintained = firstName + " " + lastName (display + sort + search)
   birthDate        DateTime? // required in forms; age is derived from it, never stored
   photoPath        String? // profile picture, relative path under uploads/
-  recruitmentDate  DateTime // anchor that converts plan offsets to calendar dates
+  recruitmentDate  DateTime // their history; NOT what plan offsets resolve through
+  /// Placed in this unit. THE anchor that converts plan offsets to calendar
+  /// dates: a plan describes a path here, so time served elsewhere must not be
+  /// measured as though it had been served here. Backfilled = recruitmentDate.
+  placementDate    DateTime
   status           EmploymentStatus   @default(ACTIVE)
   endOfServiceDate DateTime?
   team             OrgNode?           @relation(fields: [teamId], references: [id])

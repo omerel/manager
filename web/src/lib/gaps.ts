@@ -11,7 +11,12 @@ import {
 
 /** Minimal shape needed to compute gaps (satisfied by the full person query). */
 export type PersonForGaps = {
-  recruitmentDate: Date;
+  /**
+   * The plan's origin. Deliberately the ONLY date this type carries: a caller
+   * that still has recruitment in hand has to notice it is not what the engine
+   * asked for, which is how the anchor move was kept honest.
+   */
+  placementDate: Date;
   endOfServiceDate: Date | null;
   pointProgress: { pointEventId: string; doneOn: Date }[];
   metricReadings: { metricId: string; value: number; asOf: Date }[];
@@ -70,14 +75,14 @@ export function levelForPoint(p: { dueDate: Date; done: boolean; doneOn: Date | 
  *  recent past-due checkpoint (or the next upcoming one if none is due yet). */
 export function evalMetric(
   m: Metricish,
-  recruitmentDate: Date,
+  placementDate: Date,
   today: Date,
 ): { level: GapLevel; detail: string; boundTarget: number | null; boundDue: Date | null } {
   const value = m.value ?? 0;
   const cps = [...m.checkpoints].sort((a, b) => a.offsetMonths - b.offsetMonths);
   if (cps.length === 0) return { level: "MET", detail: "אין יעדים", boundTarget: null, boundDue: null };
 
-  const withDates = cps.map((c) => ({ ...c, due: addMonths(recruitmentDate, c.offsetMonths) }));
+  const withDates = cps.map((c) => ({ ...c, due: addMonths(placementDate, c.offsetMonths) }));
   const pastDue = withDates.filter((c) => c.due.getTime() <= today.getTime());
   const bound = pastDue.length ? pastDue[pastDue.length - 1] : withDates[0];
 
@@ -95,7 +100,7 @@ export function computePersonGaps(person: PersonForGaps, today: Date): { items: 
   const plan = person.assignedPlan;
   if (!plan) return { items: [], status: null };
 
-  const rec = person.recruitmentDate;
+  const rec = person.placementDate;
   // Items that predate the assignment were never required of this person;
   // reporting them would be a wall of red for things nobody asked of them.
   const ctx: WaiverContext = plan.assignment
