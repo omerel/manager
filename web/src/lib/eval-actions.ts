@@ -6,6 +6,8 @@ import { prisma } from "@/lib/prisma";
 import { formatYearsMonths } from "@/lib/years-months";
 import { requireEditForPerson } from "@/lib/authz";
 import { logActivity } from "@/lib/activity-log";
+import { parseIsraeliDate, addMonths } from "@/lib/dates";
+import { parseScore } from "@/lib/eval-scale";
 import { saveUpload } from "@/lib/storage";
 
 function str(v: FormDataEntryValue | null): string {
@@ -34,6 +36,19 @@ function done(personId: string): never {
 }
 
 /** Free-form entry (title + optional text + optional file). */
+/**
+ * When the event happened. Defaults to today, so writing something up the same
+ * day costs nothing; a malformed date is refused rather than guessed, like
+ * every other date in the system.
+ */
+function eventDateFrom(formData: FormData): Date {
+  const raw = str(formData.get("eventDate"));
+  if (!raw) return new Date();
+  const d = parseIsraeliDate(raw);
+  if (!d) throw new Error("תאריך האירוע לא תקין — נדרש dd/mm/yyyy.");
+  return d;
+}
+
 export async function addFreeEntry(formData: FormData) {
   const personId = str(formData.get("personId"));
   await requireEditForPerson(personId);
@@ -41,10 +56,46 @@ export async function addFreeEntry(formData: FormData) {
   const content = str(formData.get("content"));
   if (!title && !content) throw new Error("יש להזין כותרת או תוכן.");
   const entry = await prisma.evalEntry.create({
-    data: { personId, title: title || "רשומה", content: content || null },
+    data: { personId, kind: "FREE", title: title || "רשומה", content: content || null, eventDate: eventDateFrom(formData) },
   });
   await attachIfPresent(entry.id, personId, formData);
   await logActivity({ action: "eval.add", description: `הוסיף חוות דעת עבור ${(await prisma.person.findUnique({ where: { id: personId }, select: { fullName: true } }))?.fullName ?? personId}`, subjectType: "person", subjectId: personId });
+  done(personId);
+}
+
+/**
+ * An ad-hoc interview summary: subject, when it happened, an optional file and
+ * an optional 1–5 assessment.
+ *
+ * A score outside the scale is REFUSED, never clamped: turning a stray 7 into
+ * "מעל המצופה" would record an assessment of a person that nobody made.
+ */
+export async function addInterview(formData: FormData) {
+  const personId = str(formData.get("personId"));
+  await requireEditForPerson(personId);
+  const title = str(formData.get("title"));
+  if (!title) throw new Error("יש להזין נושא לראיון.");
+
+  const score = parseScore(str(formData.get("score")));
+  if (score === undefined) throw new Error("דירוג לא תקין — יש לבחור ערך בין 1 ל-5, או להשאיר ריק.");
+
+  const entry = await prisma.evalEntry.create({
+    data: {
+      personId,
+      kind: "INTERVIEW",
+      title,
+      content: str(formData.get("content")) || null,
+      eventDate: eventDateFrom(formData),
+      score,
+    },
+  });
+  await attachIfPresent(entry.id, personId, formData);
+  await logActivity({
+    action: "eval.interview",
+    description: `הוסיף סיכום ראיון עבור ${(await prisma.person.findUnique({ where: { id: personId }, select: { fullName: true } }))?.fullName ?? personId}`,
+    subjectType: "person",
+    subjectId: personId,
+  });
   done(personId);
 }
 
@@ -58,6 +109,10 @@ export async function fillSlot(formData: FormData) {
 
   const rec = await prisma.recurringEvent.findUnique({ where: { id: recurringEventId } });
   if (!rec) throw new Error("אירוע מחזורי לא נמצא.");
+  // A slot's event date is ITS occurrence month on the person's own timeline —
+  // not today. The slot already knows when it was due; dating it "now" would
+  // scatter the plan's occurrences across whenever someone got round to typing.
+  const anchor = await prisma.person.findUniqueOrThrow({ where: { id: personId }, select: { placementDate: true } });
 
   const content = str(formData.get("content"));
   const entry = await prisma.evalEntry.upsert({
@@ -68,6 +123,7 @@ export async function fillSlot(formData: FormData) {
       personId,
       recurringEventId,
       occurrenceOffset,
+      eventDate: addMonths(anchor.placementDate, occurrenceOffset),
       title: `${rec.label} · גיוס +${formatYearsMonths(occurrenceOffset)}`,
       content: content || null,
     },

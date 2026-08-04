@@ -98,7 +98,7 @@ async function person() {
   }
   await prisma.person.update({ where: { id: p.id }, data: { assignedPlanId: copies[1] } });
 
-  const entry = await prisma.evalEntry.create({ data: { personId: p.id, title: "חוו״ד בדיקה", content: "גוף" } });
+  const entry = await prisma.evalEntry.create({ data: { personId: p.id, title: "חוו״ד בדיקה", content: "גוף", eventDate: new Date() } });
   await prisma.attachment.create({
     data: { entryId: entry.id, filename: "a.txt", storagePath: `${p.id}/a.txt`, mimeType: "text/plain", size: 3 },
   });

@@ -401,6 +401,7 @@ async function main() {
             personId: p.id,
             recurringEventId: r.id,
             occurrenceOffset: off,
+            eventDate: addMonths(p.recruitmentDate, off), // the occurrence's own month
             title: `${r.label} · גיוס +${off} חודשים`,
             content: pick([
               "עומד/ת ביעדים, השתלבות טובה בצוות.",
@@ -418,6 +419,8 @@ async function main() {
       await prisma.evalEntry.create({
         data: {
           personId: p.id,
+          // spread over the past year, so ordering by event date is exercised
+          eventDate: addMonths(TODAY, -int(0, 11)),
           title: pick(["השתתפות בכנס", "קבלת צל״ש", "סיום קורס חיצוני", "הובלת יום עיון"]),
           content: "רשומה חופשית שנוצרה עבור נתוני ההדגמה.",
         },

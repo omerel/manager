@@ -313,12 +313,30 @@ model RecurringEvent {
 
 // An entry on a person's evaluations page. Either free-form (recurringEventId null)
 // or a structured slot filling a specific recurring occurrence (event + month offset).
+/// What an entry is. A row with `recurringEventId` set is a plan occurrence and
+/// is neither of these — that test stays where it is; `kind` splits what remains.
+enum EvalEntryKind {
+  FREE // an ad-hoc note: "attended conference X"
+  INTERVIEW // an ad-hoc interview summary, which may carry an assessment
+}
+
 model EvalEntry {
   id               String          @id @default(cuid())
   person           Person          @relation(fields: [personId], references: [id], onDelete: Cascade)
   personId         String
+  /// Defaults to FREE deliberately: a mislabelled free entry is visible and
+  /// fixable, whereas defaulting to INTERVIEW would manufacture interviews.
+  kind             EvalEntryKind   @default(FREE)
   title            String
   content          String? // textual body
+  /// When the event HAPPENED, as against createdAt = when it was typed.
+  /// Backfilled from createdAt, which is what the page already displayed as the
+  /// event's date, so no entry changes meaning.
+  eventDate        DateTime
+  /// 1–5, INTERVIEW only. Optional: an unrated interview must carry no value
+  /// rather than one nobody chose. Int, not an enum — it is an ordered scale a
+  /// report will want to compare and sort. Meanings live in lib/eval-scale.ts.
+  score            Int?
   recurringEvent   RecurringEvent? @relation(fields: [recurringEventId], references: [id], onDelete: Cascade)
   recurringEventId String?
   occurrenceOffset Int? // months from unit placement; set together with recurringEventId

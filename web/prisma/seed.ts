@@ -1,5 +1,6 @@
 import "dotenv/config";
 import { PrismaPg } from "@prisma/adapter-pg";
+import { addMonths } from "../src/lib/dates";
 import { PrismaClient, OrgKind, Role, AccessLevel, EmploymentStatus } from "../src/generated/prisma/client";
 import { hashPassword } from "../src/lib/password";
 
@@ -176,6 +177,7 @@ async function main() {
         personId: idByName["מאיה בר"],
         recurringEventId: mayaEvalEvent.id,
         occurrenceOffset: 6,
+        eventDate: addMonths(recruited(2024, 9), 6), // the occurrence's own month
         title: "חוות דעת · גיוס +6 חודשים",
         content: "חוות דעת תקופתית ראשונה: קליטה מצוינת בצוות, עומדת ביעדי הלמידה.",
       },
@@ -185,6 +187,7 @@ async function main() {
   await prisma.evalEntry.create({
     data: {
       personId: idByName["מאיה בר"],
+      eventDate: new Date(),
       title: "השתתפות בכנס ראייה ממוחשבת",
       content: "הציגה פוסטר בכנס השנתי.",
     },

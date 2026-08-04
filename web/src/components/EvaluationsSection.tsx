@@ -1,8 +1,10 @@
 import { fmtDate } from "@/lib/dates";
 import type { PersonFull, RecurrenceRow } from "@/lib/person-view";
-import { addFreeEntry, fillSlot, deleteEntry } from "@/lib/eval-actions";
-import { RefreshCw, PenLine, Paperclip, FolderOpen } from "lucide-react";
+import { addFreeEntry, addInterview, fillSlot, deleteEntry } from "@/lib/eval-actions";
+import { RefreshCw, PenLine, Paperclip, FolderOpen, MessagesSquare } from "lucide-react";
 import { FileDrop } from "@/components/FileDrop";
+import { DateField } from "@/components/DateField";
+import { EVAL_SCALE, scoreLabel } from "@/lib/eval-scale";
 
 const inputCls = "rounded-md border border-border px-3 py-1.5 text-sm";
 
@@ -18,7 +20,15 @@ export function EvaluationsSection({
   today: Date;
 }) {
   const entryById = new Map(person.evalEntries.map((e) => [e.id, e]));
-  const freeEntries = person.evalEntries.filter((e) => e.recurringEventId == null);
+  // Two orthogonal questions, each asked where it belongs: recurringEventId
+  // separates plan occurrences, then kind splits what remains. Both lists run
+  // by EVENT date — a list of things that happened belongs in the order they
+  // happened, not the order someone typed them up.
+  const adHoc = person.evalEntries.filter((e) => e.recurringEventId == null);
+  const byEventDate = <T extends { eventDate: Date }>(rows: T[]) =>
+    [...rows].sort((a, b) => b.eventDate.getTime() - a.eventDate.getTime());
+  const freeEntries = byEventDate(adHoc.filter((e) => e.kind === "FREE"));
+  const interviews = byEventDate(adHoc.filter((e) => e.kind === "INTERVIEW"));
   // Show slots that are due/past or already filled; hide far-future noise beyond the next one per event.
   const slots = [...recurrences].sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime());
   const seenFutureOf = new Set<string>();
@@ -104,6 +114,85 @@ export function EvaluationsSection({
         )}
       </div>
 
+      {/* Ad-hoc interview summaries — their own list: a rated interview and a
+          note about a conference answer different questions, and one list would
+          make both harder to scan. */}
+      <div>
+        <h3 className="mb-2 flex items-center gap-1.5 font-medium">
+          <MessagesSquare className="h-4 w-4 text-brand-600" aria-hidden /> סיכומי ראיון
+        </h3>
+        {interviews.length === 0 ? (
+          <p className="text-sm text-muted">אין סיכומי ראיון.</p>
+        ) : (
+          <ul className="space-y-2">
+            {interviews.map((e) => (
+              <li key={e.id} className="rounded-md border border-border px-3 py-2 text-sm">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="flex flex-wrap items-center gap-2">
+                    <span className="font-medium">{e.title}</span>
+                    {/* the label always travels with the number — a bare 3 says nothing */}
+                    {e.score != null && (
+                      <span className="rounded-full bg-brand-50 px-2 py-0.5 text-xs font-medium text-brand-800">
+                        {scoreLabel(e.score)}
+                      </span>
+                    )}
+                  </span>
+                  <span className="flex items-center gap-2">
+                    <span className="text-xs text-muted">{fmtDate(e.eventDate)}</span>
+                    {editing && (
+                      <form action={deleteEntry}>
+                        <input type="hidden" name="personId" value={person.id} />
+                        <input type="hidden" name="entryId" value={e.id} />
+                        <button className="text-xs text-red-600 hover:underline">מחק</button>
+                      </form>
+                    )}
+                  </span>
+                </div>
+                {e.content && <p className="mt-1 whitespace-pre-wrap">{e.content}</p>}
+                <AttachmentLinks attachments={e.attachments} />
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {editing && (
+          <form action={addInterview} className="mt-3 flex flex-wrap items-end gap-2 rounded-md border border-dashed border-border p-3">
+            <input type="hidden" name="personId" value={person.id} />
+            <div className="flex flex-col">
+              <label className="mb-1 text-sm text-muted">נושא</label>
+              <input name="title" required placeholder="למשל: ראיון אמצע שנה" className={inputCls} />
+            </div>
+            <div className="flex flex-col">
+              <label className="mb-1 text-sm text-muted">תאריך הראיון</label>
+              <DateField name="eventDate" defaultDate={today} className={inputCls + " text-end"} />
+            </div>
+            <div className="flex flex-col">
+              <label className="mb-1 text-sm text-muted">דירוג (אופציונלי)</label>
+              <select name="score" defaultValue="" className={inputCls}>
+                {/* an explicit empty option, so "not rated" is a choice rather than an oversight */}
+                <option value="">ללא דירוג</option>
+                {EVAL_SCALE.map((s) => (
+                  <option key={s.value} value={s.value}>
+                    {s.value} · {s.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex min-w-64 flex-1 flex-col">
+              <label className="mb-1 text-sm text-muted">סיכום</label>
+              <textarea name="content" rows={2} className={inputCls} />
+            </div>
+            <div className="flex flex-col">
+              <label className="mb-1 text-sm text-muted">קובץ (אופציונלי)</label>
+              <FileDrop name="file" label="גרור/י קובץ" className="min-w-48" />
+            </div>
+            <button className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700">
+              הוסף סיכום ראיון
+            </button>
+          </form>
+        )}
+      </div>
+
       {/* Free-form entries */}
       <div>
         <h3 className="mb-2 flex items-center gap-1.5 font-medium"><PenLine className="h-4 w-4 text-brand-600" aria-hidden /> חופשי</h3>
@@ -116,7 +205,7 @@ export function EvaluationsSection({
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="font-medium">{e.title}</span>
                   <span className="flex items-center gap-2">
-                    <span className="text-xs text-muted">{fmtDate(e.createdAt)}</span>
+                    <span className="text-xs text-muted">{fmtDate(e.eventDate)}</span>
                     {editing && (
                       <form action={deleteEntry}>
                         <input type="hidden" name="personId" value={person.id} />
@@ -143,6 +232,10 @@ export function EvaluationsSection({
             <div className="flex min-w-64 flex-1 flex-col">
               <label className="mb-1 text-sm text-muted">תוכן</label>
               <textarea name="content" rows={2} className={inputCls} />
+            </div>
+            <div className="flex flex-col">
+              <label className="mb-1 text-sm text-muted">תאריך האירוע</label>
+              <DateField name="eventDate" defaultDate={today} className={inputCls + " text-end"} />
             </div>
             <div className="flex flex-col">
               <label className="mb-1 text-sm text-muted">קובץ (אופציונלי)</label>

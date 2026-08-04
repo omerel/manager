@@ -332,6 +332,11 @@ Machine-to-machine interfaces — the backup bundle and the data handed to the a
 - **WHEN** the application is opened on a machine whose locale is US English
 - **THEN** date fields still show and accept `dd/mm/yyyy`
 
+#### Scenario: Choosing from a calendar
+
+- **WHEN** a user picks a date from the calendar rather than typing it
+- **THEN** the field shows the chosen date as `dd/mm/yyyy`, and that is what is submitted — the calendar writes into the field and is never itself the value
+
 #### Scenario: An impossible date
 
 - **WHEN** a user enters `31/02/2026`

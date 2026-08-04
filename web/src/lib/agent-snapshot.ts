@@ -7,6 +7,7 @@ import { computePersonGaps, GAP_META } from "@/lib/gaps";
 import { KIND_LABEL } from "@/lib/org";
 import { STATUS_LABEL } from "@/lib/people";
 import { addMonths } from "@/lib/dates";
+import { scoreLabel } from "@/lib/eval-scale";
 import { resolveUpload } from "@/lib/storage";
 import { extractTextFromFile } from "@/lib/doc-text";
 
@@ -157,7 +158,15 @@ export async function exportScopedSnapshot(visibility: Visibility, today: Date):
       חוות_דעת_ואירועים: p.evalEntries.map((e) => ({
         כותרת: e.title,
         תוכן: e.content,
-        תאריך: e.createdAt.toISOString().slice(0, 10),
+        // the kind and the assessment are here because the agent is the only
+        // surface that aggregates across people — structuring an assessment and
+        // then hiding it from the thing that can answer "מי קיבל ראיון מתחת
+        // למצופה השנה" would defeat the reason for structuring it
+        סוג: e.recurringEventId ? "מופע מהתכנית" : e.kind === "INTERVIEW" ? "סיכום ראיון" : "רשומה חופשית",
+        הערכה: scoreLabel(e.score), // the label, never a bare number
+        // the date the event HAPPENED, not when it was typed
+        תאריך: e.eventDate.toISOString().slice(0, 10),
+        נרשם_בתאריך: e.createdAt.toISOString().slice(0, 10),
         קבצים: e.attachments.map((a) => ({
           שם_קובץ: a.filename,
           נתיב: attachmentRel.get(a.id) ?? null, // readable copy inside the snapshot
