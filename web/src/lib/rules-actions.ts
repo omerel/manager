@@ -37,6 +37,7 @@ export async function createRule(formData: FormData) {
       name,
       text,
       schedule,
+      emailOnRun: str(formData.get("emailOnRun")) === "on",
       nextRunAt: schedule === "NONE" ? null : nextRunFrom(new Date(), schedule as "DAILY" | "WEEKLY" | "MONTHLY"),
     },
   });
@@ -64,6 +65,7 @@ export async function updateRule(formData: FormData) {
   redirect(`/rules/${rule.id}${textChanged && rule.pinnedAt ? "?unpinned=1" : ""}`);
 }
 
+/** Schedule and the email toggle live together — both are "when/how this rule reaches me". */
 export async function updateRuleSchedule(formData: FormData) {
   const { rule } = await myRule(str(formData.get("ruleId")));
   const schedule = scheduleOf(formData.get("schedule"));
@@ -71,6 +73,7 @@ export async function updateRuleSchedule(formData: FormData) {
     where: { id: rule.id },
     data: {
       schedule,
+      emailOnRun: str(formData.get("emailOnRun")) === "on",
       nextRunAt: schedule === "NONE" ? null : nextRunFrom(new Date(), schedule as "DAILY" | "WEEKLY" | "MONTHLY"),
     },
   });

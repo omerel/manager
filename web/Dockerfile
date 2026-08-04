@@ -27,9 +27,12 @@ ENV DEBIAN_FRONTEND=noninteractive
 # fonts-noto: Hebrew rendering in PDF export (Chromium print)
 # poppler-utils: pdftotext/pdftoppm — document text extraction
 # tesseract + heb/eng: OCR fallback for scanned documents and images
+# python3: runs docker/emailer.py — absent here, mail works in dev and dies with
+#          ENOENT in the delivered image, discovered only when a user clicks send
 RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates \
       fonts-noto fonts-noto-color-emoji \
       poppler-utils tesseract-ocr tesseract-ocr-heb tesseract-ocr-eng \
+      python3 \
  && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
  && apt-get install -y --no-install-recommends nodejs \
  && rm -rf /var/lib/apt/lists/*

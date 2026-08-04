@@ -47,6 +47,12 @@ export default async function RulesPage() {
               <option value="MONTHLY">חודשי</option>
             </select>
           </div>
+          <div className="flex flex-col justify-end">
+            <label className="mb-1.5 flex items-center gap-2 text-sm">
+              <input type="checkbox" name="emailOnRun" />
+              שלח את התוצר למייל שלי בכל הרצה
+            </label>
+          </div>
         </div>
         <div className="flex flex-col">
           <label htmlFor="text" className="mb-1 text-sm text-muted">ניסוח החוק</label>

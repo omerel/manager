@@ -99,6 +99,10 @@ model Rule {
   text      String // the verbal rule
   schedule  RuleSchedule @default(NONE)
   nextRunAt DateTime? // when the next chronic run is due
+  /// Mail each run's output to the rule's OWNER — the only address consistent
+  /// with a rules page that is private even from the Admin. Default false, so
+  /// no rule that predates the field starts emailing without being asked.
+  emailOnRun Boolean  @default(false)
   // Pinning ("deterministic" = fidelity to the approved output, not necessarily no-LLM)
   pinnedAt        DateTime?
   realizationKind RealizationKind?

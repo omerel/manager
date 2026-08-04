@@ -2,6 +2,7 @@ import { execFile } from "child_process";
 import { writeFile } from "fs/promises";
 import path from "path";
 import { prisma } from "@/lib/prisma";
+import { sendReport } from "@/lib/emailer";
 import { computeVisibility, type SessionUser } from "@/lib/access";
 import { exportScopedSnapshot, removeSnapshot } from "@/lib/agent-snapshot";
 import { runClaudeRaw } from "@/lib/agent";
@@ -43,6 +44,30 @@ function runNodeScript(scriptSource: string, cwd: string, todayIso: string): Pro
 }
 
 /** Execute a rule against an existing job row (background-safe). */
+/**
+ * Mail a completed run to the rule's OWNER, if the rule asks for it.
+ *
+ * `emailOnRun` is re-read here rather than captured when the run started, so
+ * switching it off stops the next email even for a run already in flight.
+ *
+ * A scheduled run may finish with nobody watching, so a failed send is appended
+ * to the run record: it surfaces on the rules page, where the owner goes to read
+ * the output anyway. A silent failure would be worse than not sending at all,
+ * because they would believe the report went out.
+ */
+async function mailIfAsked(ruleId: string, output: string, runId: string): Promise<void> {
+  const rule = await prisma.rule.findUnique({
+    where: { id: ruleId },
+    select: { emailOnRun: true, name: true, user: { select: { email: true } } },
+  });
+  if (!rule?.emailOnRun) return;
+
+  const title = `${rule.name} · ${new Date().toISOString().slice(0, 10)}`;
+  const result = await sendReport({ title, body: output, to: rule.user.email });
+  const note = result.ok ? `\n\n---\n_נשלח למייל: ${rule.user.email}_` : `\n\n---\n_${result.reason}_`;
+  await prisma.agentRun.update({ where: { id: runId }, data: { output: output + note } });
+}
+
 export async function executeRuleJob(user: SessionUser, rule: Rule, runId: string): Promise<void> {
   const started = Date.now();
   const today = new Date();
@@ -73,6 +98,7 @@ ${rule.goldenOutput ?? ""}
       where: { id: runId },
       data: { status: "SUCCEEDED", output, durationMs: Date.now() - started },
     });
+    await mailIfAsked(rule.id, output, runId);
   } catch (e) {
     await prisma.agentRun.update({
       where: { id: runId },

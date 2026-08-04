@@ -124,6 +124,10 @@ export default async function RuleDetailPage({
               <option value="WEEKLY">שבועי</option>
               <option value="MONTHLY">חודשי</option>
             </select>
+            <label className="flex items-center gap-1.5 text-sm text-muted">
+              <input type="checkbox" name="emailOnRun" defaultChecked={rule.emailOnRun} />
+              שלח למייל שלי בכל הרצה
+            </label>
             <button className="rounded-md border border-border px-2 py-1 text-sm hover:bg-slate-50">עדכן</button>
           </form>
           {rule.nextRunAt && <span className="text-xs text-muted">ריצה כרונית הבאה: {fmtDate(rule.nextRunAt)}</span>}

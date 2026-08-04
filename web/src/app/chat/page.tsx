@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/session";
 import { computeVisibility } from "@/lib/access";
 import { askQuestion, deleteChatRun } from "@/lib/chat-actions";
+import { EmailRunButton } from "@/components/EmailRunButton";
 import { saveQuestionAsRule } from "@/lib/rules-actions";
 import { fmtDate } from "@/lib/dates";
 import { QuestionInput, type Mentionable } from "@/components/QuestionInput";
@@ -83,6 +84,7 @@ export default async function ChatPage({ searchParams }: { searchParams: Promise
                 <span className="flex items-center gap-2">
                   <a href={`/runs/${run.id}/download?format=md`} className="rounded-md border border-border bg-card px-2 py-1 text-xs hover:bg-slate-50">⬇ MD</a>
                   <a href={`/runs/${run.id}/download?format=pdf`} className="rounded-md border border-border bg-card px-2 py-1 text-xs hover:bg-slate-50">⬇ PDF</a>
+                  <EmailRunButton runId={run.id} />
                   <form action={saveQuestionAsRule}>
                     <input type="hidden" name="runId" value={run.id} />
                     <button className="rounded-md border border-border bg-card px-3 py-1 text-xs hover:bg-slate-50">
