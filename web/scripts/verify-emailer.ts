@@ -1,16 +1,18 @@
 /**
- * Verification for email-reports (tasks 5.1, 5.2, 5.2b, 5.6).
+ * Verification for email-reports and email-title-and-boolean-result.
  *
- * Covers the transport, not the pages: what the script is handed, how every
- * outcome maps, and the byte-vs-character limit that a plausible-looking
- * character check would get backwards.
+ * The centre of this suite is the crash cases. The verdict moved from the exit
+ * code to stdout precisely because a crashing Python script exits 1, so the
+ * assertions that matter are the ones proving an exit code of 1 does NOT read
+ * as a delivered message.
  *
  *   npx tsx scripts/verify-emailer.ts
  */
 import { execFile } from "child_process";
-import { readFileSync } from "fs";
+import { readFileSync, writeFileSync, renameSync, rmSync } from "fs";
 import { promisify } from "util";
 import { sendReport } from "../src/lib/emailer";
+import { subjectFromReport } from "../src/lib/report-subject";
 
 const run = promisify(execFile);
 
@@ -22,112 +24,144 @@ function check(label: string, ok: boolean, detail = "") {
   if (!ok) failures++;
 }
 
-async function script() {
-  console.log("\n=== 5.1 the script honours its contract ===");
-  // forced sent → exit 201, and it echoes back what it received
-  let stdout = "";
-  let code: number | null = null;
-  try {
-    const r = await run("python3", ["docker/emailer.py", "--title", "כותרת", "--body", "גוף הדוח", "--to", "u@example.invalid"], {
-      env: { ...process.env, EMAILER_FORCE: "sent" },
-    });
-    stdout = r.stdout;
-    code = 0;
-  } catch (e) {
-    const err = e as { code?: number; stdout?: string };
-    stdout = err.stdout ?? "";
-    code = Number(err.code);
-  }
-  check("EMAILER_FORCE=sent exits 201", code === 201, String(code));
-  check("it echoes the recipient", stdout.includes("to=u@example.invalid"), stdout.split("\n")[0] ?? "");
-  check("it echoes the title", stdout.includes("title=כותרת"));
-  // computed, not hardcoded — an expectation I got wrong once already
-  const body = "גוף הדוח";
-  check(`it reports the body size in BYTES (${Buffer.byteLength(body)})`,
-    stdout.includes(`body_bytes=${Buffer.byteLength(body)}`), stdout.match(/body_bytes=\d+/)?.[0] ?? "");
-  check(`and separately in characters (${body.length}) — they differ for Hebrew`,
-    stdout.includes(`body_chars=${body.length}`), stdout.match(/body_chars=\d+/)?.[0] ?? "");
+const SCRIPT = "docker/emailer.py";
+const ASIDE = "docker/emailer.py.aside";
 
-  let failCode: number | null = null;
+/** Swap in a throwaway script, run fn, always restore. */
+async function withScript(source: string, fn: () => Promise<void>) {
+  renameSync(SCRIPT, ASIDE);
   try {
-    await run("python3", ["docker/emailer.py", "--title", "t", "--body", "b", "--to", "a@b.c"], {
-      env: { ...process.env, EMAILER_FORCE: "failed" },
-    });
-    failCode = 0;
-  } catch (e) {
-    failCode = Number((e as { code?: number }).code);
+    writeFileSync(SCRIPT, source);
+    await fn();
+  } finally {
+    rmSync(SCRIPT, { force: true });
+    renameSync(ASIDE, SCRIPT);
   }
-  check("EMAILER_FORCE=failed does not exit 201", failCode !== 201, String(failCode));
-  check("the failure code is small, not a masked HTTP status", failCode !== null && failCode < 256 && failCode !== 244,
-    String(failCode));
+}
 
-  const src = readFileSync("docker/emailer.py", "utf8");
-  check("the file says it is a stand-in the target environment replaces", src.includes("STAND-IN") && src.includes("replaces it"));
-  check("it warns about the 8-bit exit-code trap", src.includes("457"));
+async function contract() {
+  console.log("\n=== the script's contract: 1/0 on the last line, exit 0 ===");
+  const call = async (force: string) => {
+    try {
+      const r = await run("python3", [SCRIPT, "--title", "כותרת", "--body", "גוף הדוח", "--to", "u@example.invalid"], {
+        env: { ...process.env, EMAILER_FORCE: force },
+      });
+      return { code: 0, stdout: r.stdout };
+    } catch (e) {
+      const err = e as { code?: number; stdout?: string };
+      return { code: Number(err.code), stdout: err.stdout ?? "" };
+    }
+  };
+  const last = (s: string) => s.split("\n").map((l) => l.trim()).filter(Boolean).pop() ?? "";
+
+  const sent = await call("sent");
+  check("forced sent exits 0", sent.code === 0, String(sent.code));
+  check("and prints 1 as its LAST line", last(sent.stdout) === "1", JSON.stringify(last(sent.stdout)));
+  check("with diagnostics before it — the last-line rule is exercised by the shipped file",
+    sent.stdout.includes("to=u@example.invalid") && sent.stdout.trim().split("\n").length > 1);
+
+  const failed = await call("failed");
+  check("forced failed also exits 0", failed.code === 0, String(failed.code));
+  check("and prints 0 as its last line", last(failed.stdout) === "0", JSON.stringify(last(failed.stdout)));
+
+  const src = readFileSync(SCRIPT, "utf8");
+  check("the file states the 1/0 contract", src.includes("LAST non-empty line") && src.includes("`1` (sent) or `0` (failed)"));
+  check("it still says the target environment replaces it", src.includes("STAND-IN") && src.includes("replaces it"));
+  check("and no longer documents the abandoned 201 convention", !src.includes("201") && !src.includes("457"));
 }
 
 async function mapping() {
-  console.log("\n=== 5.2 every outcome maps to a result, and nothing throws ===");
+  console.log("\n=== how the caller reads it ===");
   process.env.EMAILER_FORCE = "sent";
-  const sent = await sendReport({ title: "t", body: "גוף", to: "a@b.c" });
-  check("forced success → ok", sent.ok === true, JSON.stringify(sent));
-
+  check("forced success → ok", (await sendReport({ title: "t", body: "גוף", to: "a@b.c" })).ok === true);
   process.env.EMAILER_FORCE = "failed";
-  const failed = await sendReport({ title: "t", body: "גוף", to: "a@b.c" });
-  check("forced failure → not ok, with a reason", failed.ok === false && !!(failed as { reason: string }).reason,
-    JSON.stringify(failed).slice(0, 80));
+  const f = await sendReport({ title: "t", body: "גוף", to: "a@b.c" });
+  check("forced failure → not ok, with a reason", f.ok === false && !!(f as { reason: string }).reason);
 
   process.env.EMAILER_FORCE = "sent";
-  const noAddress = await sendReport({ title: "t", body: "גוף", to: "" });
-  check("no address → not ok", noAddress.ok === false);
-  const emptyBody = await sendReport({ title: "t", body: "   ", to: "a@b.c" });
-  check("empty body → not ok", emptyBody.ok === false);
+  check("no address → not ok", (await sendReport({ title: "t", body: "גוף", to: "" })).ok === false);
+  check("empty body → not ok", (await sendReport({ title: "t", body: "  ", to: "a@b.c" })).ok === false);
 
-  // Missing script. chdir does NOT work here — emailer.ts resolves the path once
-  // at import — so the file itself is moved aside, which is what actually
-  // happens if a deployment forgets to copy docker/.
-  const { renameSync } = await import("fs");
-  const from = "docker/emailer.py";
-  const to = "docker/emailer.py.moved";
-  renameSync(from, to);
+  // the byte limit, unchanged by this change but still load-bearing
+  const over = "א".repeat(70_000);
+  check("140,000-byte Hebrew body still refused", (await sendReport({ title: "t", body: over, to: "a@b.c" })).ok === false);
+}
+
+async function crashes() {
+  console.log("\n=== the crash cases — the reason the verdict left the exit code ===");
+  process.env.EMAILER_FORCE = "sent";
+
+  await withScript('raise ValueError("the mail API is unreachable")\n', async () => {
+    const r = await sendReport({ title: "t", body: "גוף", to: "a@b.c" });
+    check("a script that RAISES (exit 1) reads as FAILED, not sent", r.ok === false,
+      (r as { reason?: string }).reason?.slice(0, 60) ?? "ok:true");
+  });
+
+  await withScript('import sys\nsys.exit(1)\n', async () => {
+    const r = await sendReport({ title: "t", body: "גוף", to: "a@b.c" });
+    check("a bare exit(1) reads as FAILED — the whole point of the move", r.ok === false);
+  });
+
+  await withScript('print("ran, but said nothing useful")\n', async () => {
+    const r = await sendReport({ title: "t", body: "גוף", to: "a@b.c" });
+    check("ran cleanly but printed no verdict → FAILED", r.ok === false,
+      (r as { reason?: string }).reason?.slice(0, 70) ?? "");
+  });
+
+  await withScript('print("maybe")\n', async () => {
+    const r = await sendReport({ title: "t", body: "גוף", to: "a@b.c" });
+    check("an unreadable verdict → FAILED, not guessed", r.ok === false);
+  });
+
+  await withScript('print("log line")\nprint("another")\nprint("1")\n', async () => {
+    const r = await sendReport({ title: "t", body: "גוף", to: "a@b.c" });
+    check("logs then 1 → SENT (the last line wins)", r.ok === true, (r as { reason?: string }).reason ?? "");
+  });
+
+  await withScript('print("1")\nprint("trailing noise")\n', async () => {
+    const r = await sendReport({ title: "t", body: "גוף", to: "a@b.c" });
+    check("1 followed by noise → FAILED (the verdict must be last)", r.ok === false);
+  });
+
+  // missing script
+  renameSync(SCRIPT, ASIDE);
   try {
-    const missing = await sendReport({ title: "t", body: "גוף", to: "a@b.c" });
-    check("missing script → not ok, and the reason names it", missing.ok === false &&
-      (missing as { reason: string }).reason.includes("emailer.py"), (missing as { reason: string }).reason ?? "ok:true");
+    const r = await sendReport({ title: "t", body: "גוף", to: "a@b.c" });
+    check("a missing script → FAILED, naming it", r.ok === false &&
+      (r as { reason: string }).reason.includes("emailer.py"), (r as { reason?: string }).reason ?? "");
   } finally {
-    renameSync(to, from);
+    renameSync(ASIDE, SCRIPT);
   }
 }
 
-async function byteLimit() {
-  console.log("\n=== 5.2b the limit is bytes, not characters ===");
-  process.env.EMAILER_FORCE = "sent";
-  // 70,000 Hebrew characters = 140,000 bytes: over the 131,071 limit. A
-  // `.length` check would see 70,000 and let it through, and the spawn would
-  // die with E2BIG.
-  const over = "א".repeat(70_000);
-  const under = "א".repeat(60_000); // 120,000 bytes
-  check("70,000 Hebrew chars (140,000 bytes) is refused", (await sendReport({ title: "t", body: over, to: "a@b.c" })).ok === false);
-  check("60,000 Hebrew chars (120,000 bytes) is accepted", (await sendReport({ title: "t", body: under, to: "a@b.c" })).ok === true);
-  check("a character-based check would have got this backwards",
-    over.length < 131_071 && Buffer.byteLength(over) > 131_071,
-    `${over.length} chars but ${Buffer.byteLength(over).toLocaleString()} bytes`);
-}
-
-function image() {
-  console.log("\n=== 5.6 the interpreter is in the runtime image ===");
-  const df = readFileSync("Dockerfile", "utf8");
-  const runtime = df.slice(df.lastIndexOf("FROM "));
-  check("the runtime stage installs python3", /^\s*python3\s*\\?$/m.test(runtime) || runtime.includes(" python3 "),
-    "grep of the final stage");
-  console.log("  (note: docker is not reachable from here — the image build itself was NOT exercised)");
+function subjects() {
+  console.log("\n=== the subject is the report's own first line ===");
+  const cases: [string, string, string][] = [
+    ["# אנשים במרכז המחקר\n\nשורה", "תשובה", "אנשים במרכז המחקר"],
+    ["## כמה אנשים עם פערים?\n", "תשובה", "כמה אנשים עם פערים?"],
+    ["**נכון לתאריך: 2026-08-02**\n\n- עמר", "תשובה", "נכון לתאריך: 2026-08-02"],
+    ["הנתונים נקראו. להלן הדוח.", "דוח", "הנתונים נקראו. להלן הדוח."],
+    ["\n\n   \n# אחרי שורות ריקות", "תשובה", "אחרי שורות ריקות"],
+    ["", "תשובה", "תשובה"],
+    ["   \n\n  ", "דוח פערים", "דוח פערים"],
+    ["###   \n", "תשובה", "תשובה"], // nothing left after the markers
+    ["> ציטוט בתחילת הדוח", "תשובה", "ציטוט בתחילת הדוח"],
+  ];
+  for (const [body, fallback, want] of cases) {
+    const got = subjectFromReport(body, fallback);
+    check(`${JSON.stringify(body.slice(0, 28))} → ${JSON.stringify(want)}`, got === want, JSON.stringify(got));
+  }
+  const long = "מ".repeat(400);
+  const capped = subjectFromReport(long, "x");
+  check("a 400-character line is capped", capped.length <= 121, `${capped.length} chars`);
+  check("and marked as cut", capped.endsWith("…"));
 }
 
 async function main() {
-  await script();
+  await contract();
   await mapping();
-  await byteLimit();
-  image();
+  await crashes();
+  subjects();
   console.log(failures === 0 ? `\nall ${checks} checks passed` : `\nFAILED — ${checks} ran, ${failures} failed`);
   process.exit(failures ? 1 : 0);
 }

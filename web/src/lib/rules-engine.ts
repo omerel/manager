@@ -3,6 +3,7 @@ import { writeFile } from "fs/promises";
 import path from "path";
 import { prisma } from "@/lib/prisma";
 import { sendReport } from "@/lib/emailer";
+import { subjectFromReport } from "@/lib/report-subject";
 import { computeVisibility, type SessionUser } from "@/lib/access";
 import { exportScopedSnapshot, removeSnapshot } from "@/lib/agent-snapshot";
 import { runClaudeRaw } from "@/lib/agent";
@@ -62,7 +63,7 @@ async function mailIfAsked(ruleId: string, output: string, runId: string): Promi
   });
   if (!rule?.emailOnRun) return;
 
-  const title = `${rule.name} · ${new Date().toISOString().slice(0, 10)}`;
+  const title = subjectFromReport(output, rule.name);
   const result = await sendReport({ title, body: output, to: rule.user.email });
   const note = result.ok ? `\n\n---\n_נשלח למייל: ${rule.user.email}_` : `\n\n---\n_${result.reason}_`;
   await prisma.agentRun.update({ where: { id: runId }, data: { output: output + note } });

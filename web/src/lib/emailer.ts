@@ -4,9 +4,16 @@ import path from "path";
 /**
  * Send a produced report by email, through `docker/emailer.py`.
  *
- * The script is a stand-in that the target environment replaces; the contract
- * is the three flags and exit code 201 for sent. Nothing here depends on how
- * delivery actually happens.
+ * The script is a stand-in that the target environment replaces. The contract
+ * is the three flags plus a verdict of `1` or `0` on the LAST non-empty line of
+ * stdout; anything before it is diagnostics the script is free to log.
+ *
+ * Success requires BOTH a normal exit AND a printed `1`. The exit code is not
+ * the verdict, and could not be: a crashing Python script exits 1 (an unhandled
+ * exception and a syntax error both do), so an exit code of 1 meaning "sent"
+ * would report every crash of a real implementation as a delivered message.
+ * A verdict on stdout cannot be produced by accident — a script that dies
+ * prints nothing, and that reads as failure without enumerating why.
  *
  * Never throws. A send is an addition to an action that already succeeded —
  * the user's answer exists whether or not the mail went out — so the outcome is
@@ -15,8 +22,15 @@ import path from "path";
 
 export type SendResult = { ok: true } | { ok: false; reason: string };
 
-const SENT_CODE = 201;
+const SENT = "1";
+const FAILED = "0";
 const TIMEOUT_MS = 30_000;
+
+/** The verdict is the last non-empty line, so a script may log before it. */
+function verdictOf(stdout: string): string | null {
+  const lines = stdout.split("\n").map((l) => l.trim()).filter(Boolean);
+  return lines.length ? lines[lines.length - 1] : null;
+}
 
 /**
  * Linux caps a SINGLE argument at MAX_ARG_STRLEN — 32 pages, 131,072 bytes,
@@ -59,23 +73,32 @@ export async function sendReport({
       "python3",
       [SCRIPT, "--title", title, "--body", body, "--to", to],
       { timeout: TIMEOUT_MS, maxBuffer: 1024 * 1024 },
-      (err, _stdout, stderr) => {
-        // success is exactly 201; every other outcome is a failure with a reason
-        // an operator can act on
-        if (!err) return resolve({ ok: false, reason: "שליחת המייל נכשלה (הסקריפט לא החזיר 201)." });
-
-        // execFile reports a non-zero exit as `code`, typed as string but a
-        // number at runtime for a plain exit status — compare loosely on purpose
-        const e = err as Error & { code?: number | string; killed?: boolean };
-        if (Number(e.code) === SENT_CODE) return resolve({ ok: true });
-        if (e.code === "ENOENT") {
-          return resolve({ ok: false, reason: "שליחת המייל נכשלה: python3 או docker/emailer.py לא נמצאו." });
+      (err, stdout, stderr) => {
+        // the script did not run to completion: it crashed, was missing, or was
+        // killed. It printed no verdict, so this is a failure whatever the code.
+        if (err) {
+          const e = err as Error & { code?: number | string; killed?: boolean };
+          if (e.code === "ENOENT") {
+            return resolve({ ok: false, reason: "שליחת המייל נכשלה: python3 או docker/emailer.py לא נמצאו." });
+          }
+          if (e.killed) return resolve({ ok: false, reason: "שליחת המייל נכשלה: הסקריפט לא הסתיים בזמן." });
+          const detail = (stderr || "").trim().split("\n").pop() ?? "";
+          return resolve({
+            ok: false,
+            reason: `שליחת המייל נכשלה (הסקריפט הסתיים בשגיאה ${String(e.code ?? "לא ידועה")})${detail ? ` — ${detail}` : ""}.`,
+          });
         }
-        if (e.killed) return resolve({ ok: false, reason: "שליחת המייל נכשלה: הסקריפט לא הסתיים בזמן." });
-        const detail = (stderr || "").trim().split("\n").pop() ?? "";
+
+        const verdict = verdictOf(stdout ?? "");
+        if (verdict === SENT) return resolve({ ok: true });
+        if (verdict === FAILED) {
+          const detail = (stderr || "").trim().split("\n").pop() ?? "";
+          return resolve({ ok: false, reason: `שליחת המייל נכשלה${detail ? ` — ${detail}` : "."}` });
+        }
+        // ran cleanly but said nothing we understand — refused rather than guessed
         return resolve({
           ok: false,
-          reason: `שליחת המייל נכשלה (קוד ${String(e.code ?? "לא ידוע")})${detail ? ` — ${detail}` : ""}.`,
+          reason: `שליחת המייל נכשלה: הסקריפט לא החזיר 1 או 0${verdict ? ` (התקבל ״${verdict.slice(0, 40)}״)` : " (לא הודפס דבר)"}.`,
         });
       },
     );
