@@ -7,6 +7,7 @@ import { requireAdmin, requireEditForNode, requireEditForPerson } from "@/lib/au
 import type { EmploymentStatus, FieldType } from "@/generated/prisma/client";
 import { composeFullName } from "@/lib/person-name";
 import { deleteUploadDir } from "@/lib/storage";
+import { logActivity } from "@/lib/activity-log";
 import { monthsSince } from "@/lib/waivers";
 import { parseIsraeliDate } from "@/lib/dates";
 
@@ -42,12 +43,16 @@ export async function addFieldDef(formData: FormData) {
   const count = await prisma.personFieldDef.count();
   const key = `f${count + 1}_${label.replace(/\s+/g, "_")}`;
   await prisma.personFieldDef.create({ data: { key, label, type, required, options, order: count } });
+  await logActivity({ action: "schema.field.add", description: `הוסיף שדה כרטיס ״${label}״`, subjectType: "schema" });
   revalidatePath("/people/card-schema");
 }
 
 export async function removeFieldDef(formData: FormData) {
   await requireAdmin();
-  await prisma.personFieldDef.delete({ where: { id: str(formData.get("id")) } });
+  const fieldId = str(formData.get("id"));
+  const gone = await prisma.personFieldDef.findUnique({ where: { id: fieldId }, select: { label: true } });
+  await prisma.personFieldDef.delete({ where: { id: fieldId } });
+  await logActivity({ action: "schema.field.delete", description: `מחק את שדה הכרטיס ״${gone?.label ?? fieldId}״`, subjectType: "schema" });
   revalidatePath("/people/card-schema");
   revalidatePath("/hierarchy");
 }
@@ -68,6 +73,7 @@ export async function updateFieldDef(formData: FormData) {
           .filter(Boolean)
       : [];
   await prisma.personFieldDef.update({ where: { id }, data: { label, type, required, options } });
+  await logActivity({ action: "schema.field.update", description: `ערך את שדה הכרטיס ״${label}״`, subjectType: "schema" });
   revalidatePath("/people/card-schema");
   revalidatePath("/hierarchy");
   redirect("/people/card-schema");
@@ -139,6 +145,8 @@ export async function reassignTeam(formData: FormData) {
   const team = await prisma.orgNode.findUnique({ where: { id: teamId } });
   if (!team || team.kind !== "TEAM") throw new Error("יש לשייך לצוות (צומת מסוג צוות).");
   await prisma.person.update({ where: { id: personId }, data: { teamId } });
+  const moved = await prisma.person.findUnique({ where: { id: personId }, select: { fullName: true } });
+  await logActivity({ action: "person.reassign", description: `שייך את ${moved?.fullName ?? personId} ל${team.name}`, subjectType: "person", subjectId: personId });
   revalidatePath(`/people/${personId}`);
   revalidatePath("/people");
 }
@@ -188,6 +196,8 @@ export async function createPerson(formData: FormData) {
   const draftId = str(formData.get("draftId"));
   if (draftId) await prisma.personDraft.deleteMany({ where: { id: draftId } });
 
+  // before the redirect: redirect() throws to unwind, so anything after it never runs
+  await logActivity({ action: "person.create", description: `יצר את ${person.fullName}`, subjectType: "person", subjectId: person.id });
   redirect(`/people/${person.id}`);
 }
 
@@ -223,6 +233,12 @@ export async function updatePerson(formData: FormData) {
     prisma.personFieldValue.deleteMany({ where: { personId } }),
     prisma.personFieldValue.createMany({ data: values.map((v) => ({ personId, ...v })) }),
   ]);
+  await logActivity({
+    action: "person.update",
+    description: `ערך את ${composeFullName(firstName, lastName)}`,
+    subjectType: "person",
+    subjectId: personId,
+  });
   revalidatePath(`/people/${personId}`);
 }
 
@@ -425,6 +441,8 @@ export async function unassignPlan(formData: FormData) {
     });
   }
   await prisma.person.update({ where: { id: personId }, data: { assignedPlanId: null } });
+  const off = await prisma.person.findUnique({ where: { id: personId }, select: { fullName: true } });
+  await logActivity({ action: "plan.unassign", description: `סיים את שיוך המסלול של ${off?.fullName ?? personId}`, subjectType: "person", subjectId: personId });
   revalidatePath(`/people/${personId}`);
   revalidatePath("/");
 }
@@ -446,7 +464,9 @@ export async function removePerson(formData: FormData) {
   const personId = str(formData.get("personId"));
   const person = await prisma.person.findUnique({
     where: { id: personId },
-    select: { id: true, assignedPlanId: true, planAssignments: { select: { planId: true } } },
+    // fullName is read for the activity entry: after the delete there is
+    // nothing left to name them by
+    select: { id: true, fullName: true, assignedPlanId: true, planAssignments: { select: { planId: true } } },
   });
   if (!person) throw new Error("איש לא נמצא.");
 
@@ -465,6 +485,8 @@ export async function removePerson(formData: FormData) {
 
   // after the commit, and best-effort — see deleteUploadDir
   await deleteUploadDir(personId);
+
+  await logActivity({ action: "person.delete", description: `מחק את ${person.fullName}`, subjectType: "person", subjectId: personId });
 
   revalidatePath("/people");
   revalidatePath("/plans");
@@ -485,6 +507,9 @@ export async function setPointDone(formData: FormData) {
     create: { personId, pointEventId, doneOn, note },
     update: { doneOn, note },
   });
+  const ev = await prisma.pointEvent.findUnique({ where: { id: pointEventId }, select: { label: true } });
+  const who = await prisma.person.findUnique({ where: { id: personId }, select: { fullName: true } });
+  await logActivity({ action: "progress.point", description: `סימן ״${ev?.label ?? "אירוע"}״ כבוצע עבור ${who?.fullName ?? personId}`, subjectType: "person", subjectId: personId });
   revalidatePath(`/people/${personId}`);
 }
 
@@ -508,5 +533,8 @@ export async function setMetricReading(formData: FormData) {
     create: { personId, metricId, value, asOf, note },
     update: { value, asOf, note },
   });
+  const metric = await prisma.cumulativeMetric.findUnique({ where: { id: metricId }, select: { name: true, unit: true } });
+  const person2 = await prisma.person.findUnique({ where: { id: personId }, select: { fullName: true } });
+  await logActivity({ action: "progress.metric", description: `רשם ${value} ${metric?.unit ?? ""} ב״${metric?.name ?? "מדד"}״ עבור ${person2?.fullName ?? personId}`, subjectType: "person", subjectId: personId });
   revalidatePath(`/people/${personId}`);
 }

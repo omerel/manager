@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/authz";
+import { logActivity } from "@/lib/activity-log";
 import { hashPassword } from "@/lib/password";
 import type { AccessLevel, Role } from "@/generated/prisma/client";
 
@@ -36,7 +37,8 @@ export async function createUser(formData: FormData) {
   if (existing) throw new Error("כבר קיים משתמש עם אימייל זה.");
 
   const username = await uniqueUsername(email);
-  await prisma.user.create({ data: { name, email, username, passwordHash: hashPassword(password), role } });
+  const created = await prisma.user.create({ data: { name, email, username, passwordHash: hashPassword(password), role } });
+  await logActivity({ action: "user.create", description: `יצר משתמש ${name} (${role === "ADMIN" ? "אדמין" : "מנהל"})`, subjectType: "user", subjectId: created.id });
   revalidatePath("/access");
   revalidatePath("/", "layout"); // refresh the header's user list
 }
@@ -51,6 +53,7 @@ export async function updateUserProfile(formData: FormData) {
   const clash = await prisma.user.findFirst({ where: { email, id: { not: userId } } });
   if (clash) throw new Error("כבר קיים משתמש עם אימייל זה.");
   await prisma.user.update({ where: { id: userId }, data: { name, email } });
+  await logActivity({ action: "user.update", description: `ערך את פרטי המשתמש ${name}`, subjectType: "user", subjectId: userId });
   revalidatePath("/access");
   revalidatePath("/", "layout");
   redirect("/access");
@@ -60,7 +63,9 @@ export async function deleteUser(formData: FormData) {
   const me = await requireAdmin();
   const id = str(formData.get("userId"));
   if (id === me.id) throw new Error("לא ניתן למחוק את המשתמש הפעיל.");
+  const doomed = await prisma.user.findUnique({ where: { id }, select: { name: true } });
   await prisma.user.delete({ where: { id } }); // grants cascade
+  await logActivity({ action: "user.delete", description: `מחק את המשתמש ${doomed?.name ?? id}`, subjectType: "user", subjectId: id });
   revalidatePath("/access");
   revalidatePath("/", "layout");
 }
@@ -78,6 +83,16 @@ export async function addGrant(formData: FormData) {
     create: { userId, nodeId, level },
     update: { level },
   });
+  const [u, n] = await Promise.all([
+    prisma.user.findUnique({ where: { id: userId }, select: { name: true } }),
+    prisma.orgNode.findUnique({ where: { id: nodeId }, select: { name: true } }),
+  ]);
+  await logActivity({
+    action: "grant.add",
+    description: `נתן ל${u?.name ?? userId} הרשאת ${level === "EDIT" ? "עריכה" : "צפייה"} על ${n?.name ?? nodeId}`,
+    subjectType: "user",
+    subjectId: userId,
+  });
   revalidatePath("/access");
   revalidatePath("/", "layout");
 }
@@ -85,7 +100,17 @@ export async function addGrant(formData: FormData) {
 export async function removeGrant(formData: FormData) {
   await requireAdmin();
   const id = str(formData.get("grantId"));
+  // read before the delete: afterwards there is nothing to name
+  const g = await prisma.accessGrant.findUnique({
+    where: { id },
+    select: { user: { select: { name: true } }, node: { select: { name: true } } },
+  });
   await prisma.accessGrant.delete({ where: { id } });
+  await logActivity({
+    action: "grant.remove",
+    description: `הסיר הרשאה של ${g?.user.name ?? "משתמש"} על ${g?.node.name ?? "מסגרת"}`,
+    subjectType: "user",
+  });
   revalidatePath("/access");
   revalidatePath("/", "layout");
 }

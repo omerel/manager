@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/session";
 import { getLogoPath, getSystemName, DEFAULT_SYSTEM_NAME } from "@/lib/branding";
@@ -21,9 +22,14 @@ export default async function SystemSettingsPage({
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">הגדרות מערכת</h1>
-        <p className="mt-1 text-muted">מיתוג ותצורה כלל-מערכתית (אדמין בלבד).</p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold">הגדרות מערכת</h1>
+          <p className="mt-1 text-muted">מיתוג ותצורה כלל-מערכתית (אדמין בלבד).</p>
+        </div>
+        <Link href="/system/activity" className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-stone-50">
+          יומן פעילות
+        </Link>
       </div>
 
       <section className="space-y-4 rounded-xl border border-border/70 bg-card p-5 shadow-sm">

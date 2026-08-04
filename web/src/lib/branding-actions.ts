@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { logActivity } from "@/lib/activity-log";
 import { requireAdmin } from "@/lib/authz";
 import { saveUpload, deleteUpload } from "@/lib/storage";
 import { getLogoPath, setLogoPath, setSystemName } from "@/lib/branding";
@@ -8,6 +9,7 @@ import { getLogoPath, setLogoPath, setSystemName } from "@/lib/branding";
 export async function updateSystemName(formData: FormData) {
   await requireAdmin();
   await setSystemName(String(formData.get("systemName") ?? ""));
+  await logActivity({ action: "branding.name", description: "שינה את שם המערכת", subjectType: "system" });
   revalidatePath("/", "layout");
 }
 
@@ -20,6 +22,7 @@ export async function uploadLogo(formData: FormData) {
   const { storagePath } = await saveUpload("branding", file);
   await setLogoPath(storagePath);
   await deleteUpload(previous); // the replaced logo is unreferenced from here on
+  await logActivity({ action: "branding.logo", description: "עדכן את לוגו המערכת", subjectType: "system" });
   revalidatePath("/", "layout");
 }
 
@@ -28,5 +31,6 @@ export async function resetLogo() {
   const previous = await getLogoPath();
   await setLogoPath(null);
   await deleteUpload(previous);
+  await logActivity({ action: "branding.logo", description: "איפס את לוגו המערכת", subjectType: "system" });
   revalidatePath("/", "layout");
 }

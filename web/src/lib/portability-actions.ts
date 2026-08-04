@@ -1,5 +1,7 @@
 "use server";
 
+import { logActivity } from "@/lib/activity-log";
+
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/authz";
@@ -21,6 +23,11 @@ export async function importBundle(formData: FormData) {
     const buf = Buffer.from(await file.arrayBuffer());
     const result = await importBundleBuffer(buf);
     revalidatePath("/", "layout");
+    await logActivity({
+      action: "config.import",
+      description: `ייבא חבילת ${result.scope === "config" ? "תצורה" : "גיבוי"}: ${result.counts.nodes} מסגרות · ${result.counts.plans} תכניות · ${result.counts.users} משתמשים · ${result.counts.people} אנשים`,
+      subjectType: "system",
+    });
     redirect(
       "/system?imported=" +
         encodeURIComponent(

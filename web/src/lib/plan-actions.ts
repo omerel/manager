@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/authz";
 import { nextColorKey } from "@/lib/palette";
 import { parseYearsMonths } from "@/lib/years-months";
+import { logActivity } from "@/lib/activity-log";
 import type { RecurringDisplay } from "@/generated/prisma/client";
 
 function int(v: FormDataEntryValue | null, fallback = 0): number {
@@ -38,6 +39,7 @@ export async function createPlan(formData: FormData) {
   await requireAdmin();
   const name = str(formData.get("name")) || "תכנית ללא שם";
   const plan = await prisma.careerPlan.create({ data: { name } });
+  await logActivity({ action: "plan.create", description: `יצר את תכנית ${name}`, subjectType: "plan", subjectId: plan.id });
   redirect(`/plans/${plan.id}`);
 }
 
@@ -47,6 +49,7 @@ export async function renamePlan(formData: FormData) {
   const name = str(formData.get("name"));
   if (!name) throw new Error("שם התכנית לא יכול להיות ריק.");
   await prisma.careerPlan.update({ where: { id: planId }, data: { name } });
+  await logActivity({ action: "plan.rename", description: `שינה שם תכנית ל${name}`, subjectType: "plan", subjectId: planId });
   revalidatePath(`/plans/${planId}`);
   revalidatePath("/plans");
 }
@@ -89,7 +92,14 @@ export async function copyPlan(formData: FormData) {
       },
     },
   });
+  await logActivity({ action: "plan.copy", description: `שכפל את תכנית ${src.name}`, subjectType: "plan", subjectId: copy.id });
   redirect(`/plans/${copy.id}`);
+}
+
+/** One sentence shape for every plan-item act, so the log reads the same way. */
+async function logItem(action: string, verb: string, planId: string) {
+  const plan = await prisma.careerPlan.findUnique({ where: { id: planId }, select: { name: true } });
+  await logActivity({ action, description: `${verb} בתכנית ${plan?.name ?? planId}`, subjectType: "plan", subjectId: planId });
 }
 
 export async function addPointEvent(formData: FormData) {
@@ -98,6 +108,7 @@ export async function addPointEvent(formData: FormData) {
   await prisma.pointEvent.create({
     data: { planId, label: str(formData.get("label")) || "אירוע", offsetMonths: offsetOf(formData, "offsetMonths", "מועד האירוע") },
   });
+  await logItem("plan.item.add", "הוסיף אירוע נקודתי", planId);
   revalidatePath(`/plans/${planId}`);
 }
 
@@ -114,6 +125,7 @@ export async function addCumulativeMetric(formData: FormData) {
       color: nextColorKey(existing),
     },
   });
+  await logItem("plan.item.add", "הוסיף מדד מצטבר", planId);
   revalidatePath(`/plans/${planId}`);
 }
 
@@ -127,6 +139,7 @@ export async function addCheckpoint(formData: FormData) {
       target: num(formData.get("target")),
     },
   });
+  await logItem("plan.item.add", "הוסיף יעד למדד", planId);
   revalidatePath(`/plans/${planId}`);
 }
 
@@ -168,6 +181,7 @@ export async function addRecurringEvent(formData: FormData) {
       color: nextColorKey(existing),
     },
   });
+  await logItem("plan.item.add", "הוסיף אירוע מחזורי", planId);
   revalidatePath(`/plans/${planId}`);
 }
 
@@ -182,6 +196,7 @@ export async function updatePointEvent(formData: FormData) {
     where: { id: str(formData.get("id")) },
     data: { label, offsetMonths: offsetOf(formData, "offsetMonths", "מועד האירוע") },
   });
+  await logItem("plan.item.update", "ערך אירוע נקודתי", planId);
   revalidatePath(`/plans/${planId}`);
 }
 
@@ -194,6 +209,7 @@ export async function updateCumulativeMetric(formData: FormData) {
     where: { id: str(formData.get("id")) },
     data: { name, unit: str(formData.get("unit")) || "יחידות" },
   });
+  await logItem("plan.item.update", "ערך מדד מצטבר", planId);
   revalidatePath(`/plans/${planId}`);
 }
 
@@ -204,6 +220,7 @@ export async function updateCheckpoint(formData: FormData) {
     where: { id: str(formData.get("id")) },
     data: { offsetMonths: offsetOf(formData, "offsetMonths", "מועד היעד"), target: num(formData.get("target")) },
   });
+  await logItem("plan.item.update", "ערך יעד למדד", planId);
   revalidatePath(`/plans/${planId}`);
 }
 
@@ -222,6 +239,7 @@ export async function updateRecurringEvent(formData: FormData) {
       display: displayFrom(formData),
     },
   });
+  await logItem("plan.item.update", "ערך אירוע מחזורי", planId);
   revalidatePath(`/plans/${planId}`);
 }
 
@@ -249,6 +267,7 @@ export async function deletePlanItem(formData: FormData) {
       await prisma.metricCheckpoint.deleteMany({ where: { id } });
       break;
   }
+  await logItem("plan.item.delete", "מחק פריט", planId);
   revalidatePath(`/plans/${planId}`);
 }
 
@@ -272,7 +291,9 @@ export async function removePlan(formData: FormData) {
   if (!plan) throw new Error("תכנית לא נמצאה.");
   if (!plan.isTemplate) throw new Error("לא ניתן למחוק מסלול אישי של עובד — סיום השיוך הוא הדרך להוציא אדם ממסלול.");
 
+  const named = await prisma.careerPlan.findUniqueOrThrow({ where: { id: planId }, select: { name: true } });
   await prisma.careerPlan.delete({ where: { id: planId } });
+  await logActivity({ action: "plan.delete", description: `מחק את תכנית ${named.name}`, subjectType: "plan", subjectId: planId });
 
   revalidatePath("/plans");
   revalidatePath("/people"); // the plan name there stops being a link

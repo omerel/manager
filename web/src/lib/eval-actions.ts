@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { formatYearsMonths } from "@/lib/years-months";
 import { requireEditForPerson } from "@/lib/authz";
+import { logActivity } from "@/lib/activity-log";
 import { saveUpload } from "@/lib/storage";
 
 function str(v: FormDataEntryValue | null): string {
@@ -43,6 +44,7 @@ export async function addFreeEntry(formData: FormData) {
     data: { personId, title: title || "רשומה", content: content || null },
   });
   await attachIfPresent(entry.id, personId, formData);
+  await logActivity({ action: "eval.add", description: `הוסיף חוות דעת עבור ${(await prisma.person.findUnique({ where: { id: personId }, select: { fullName: true } }))?.fullName ?? personId}`, subjectType: "person", subjectId: personId });
   done(personId);
 }
 
@@ -72,6 +74,7 @@ export async function fillSlot(formData: FormData) {
     update: { content: content || null },
   });
   await attachIfPresent(entry.id, personId, formData);
+  await logActivity({ action: "eval.fill", description: `מילא מופע חוות דעת עבור ${(await prisma.person.findUnique({ where: { id: personId }, select: { fullName: true } }))?.fullName ?? personId}`, subjectType: "person", subjectId: personId });
   done(personId);
 }
 
@@ -80,5 +83,6 @@ export async function deleteEntry(formData: FormData) {
   await requireEditForPerson(personId);
   const id = str(formData.get("entryId"));
   await prisma.evalEntry.deleteMany({ where: { id, personId } }); // attachments cascade
+  await logActivity({ action: "eval.delete", description: `מחק חוות דעת עבור ${(await prisma.person.findUnique({ where: { id: personId }, select: { fullName: true } }))?.fullName ?? personId}`, subjectType: "person", subjectId: personId });
   done(personId);
 }

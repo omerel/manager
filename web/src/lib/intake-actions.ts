@@ -12,6 +12,7 @@ import { stageUpload, materializeDocument, extractionFields } from "@/lib/doc-ex
 import { runExtraction } from "@/lib/agent";
 import { composeFullName } from "@/lib/person-name";
 import { proposeFieldUpdates } from "@/lib/proposals";
+import { logActivity } from "@/lib/activity-log";
 
 /**
  * Bulk intake: many documents, each representing one person.
@@ -62,6 +63,7 @@ export async function startIntake(formData: FormData) {
     await Promise.all(workers);
   });
 
+  await logActivity({ action: "intake.start", description: `העלה ${files.length} מסמכים לקליטה מרובה`, subjectType: "system" });
   redirect("/people");
 }
 
@@ -88,6 +90,7 @@ export async function dismissIntakeRun(formData: FormData) {
     await prisma.extractionProposal.deleteMany({ where: { personId: run.output.slice(7) } });
   }
   await prisma.agentRun.deleteMany({ where: { id: run.id } });
+  await logActivity({ action: "intake.dismiss", description: `ביטל את קליטת ${run.prompt}`, subjectType: "system" });
   revalidatePath("/people");
 }
 

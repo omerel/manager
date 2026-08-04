@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { logActivity } from "@/lib/activity-log";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/session";
@@ -41,6 +42,7 @@ export async function createRule(formData: FormData) {
       nextRunAt: schedule === "NONE" ? null : nextRunFrom(new Date(), schedule as "DAILY" | "WEEKLY" | "MONTHLY"),
     },
   });
+  await logActivity({ action: "rule.create", description: `יצר חוק ״${name}״`, subjectType: "rule", subjectId: rule.id });
   redirect(`/rules/${rule.id}`);
 }
 
@@ -132,6 +134,7 @@ export async function unpinRule(formData: FormData) {
 export async function deleteRule(formData: FormData) {
   const { rule } = await myRule(str(formData.get("ruleId")));
   await prisma.rule.delete({ where: { id: rule.id } }); // runs cascade
+  await logActivity({ action: "rule.delete", description: `מחק את החוק ״${rule.name}״`, subjectType: "rule", subjectId: rule.id });
   redirect("/rules");
 }
 

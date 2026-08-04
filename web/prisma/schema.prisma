@@ -11,6 +11,31 @@ datasource db {
   provider = "postgresql"
 }
 
+/// One thing a user did, for the Admin to investigate with.
+///
+/// `actorName` and `description` are SNAPSHOTS, deliberately denormalised: a log
+/// that re-rendered itself from live rows would say "מחק את (נמחק)" precisely in
+/// the case an investigation is about, and would silently rewrite its own
+/// history when someone is renamed. The value of an entry is what was true when
+/// it was written.
+///
+/// `subjectId` carries NO foreign key for the same reason — the most
+/// interesting entries point at rows that no longer exist, and a real FK would
+/// either block the deletion or cascade the evidence away.
+model ActivityLog {
+  id          String   @id @default(cuid())
+  actorId     String // no FK: an entry outlives the account that made it
+  actorName   String // as it read at the time
+  action      String // "person.delete", "grant.add", …
+  description String // one Hebrew sentence, composed at the moment of the act
+  subjectType String? // "person" | "plan" | "org" | "user" | …
+  subjectId   String?
+  createdAt   DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([actorId, createdAt])
+}
+
 // Generic system settings (branding etc.) — key/value, admin-managed.
 model AppSetting {
   key   String @id

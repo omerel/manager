@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/authz";
+import { logActivity } from "@/lib/activity-log";
 import type { OrgKind } from "@/generated/prisma/client";
 
 function str(v: FormDataEntryValue | null): string {
@@ -56,7 +57,8 @@ export async function addOrgNode(formData: FormData) {
   const kind = kindRaw;
 
   if (kind === "CENTER") {
-    await prisma.orgNode.create({ data: { name, kind, parentId: null } });
+    const created = await prisma.orgNode.create({ data: { name, kind, parentId: null } });
+    await logActivity({ action: "org.create", description: `יצר ${KIND_LABEL[kind]} ${name}`, subjectType: "org", subjectId: created.id });
   } else {
     if (!parentId) throw new Error("יש לבחור מסגרת אב.");
     const parent = await prisma.orgNode.findUnique({ where: { id: parentId } });
@@ -64,7 +66,8 @@ export async function addOrgNode(formData: FormData) {
     if (!parent || parent.kind !== expected) {
       throw new Error(`מסגרת אב של ${KIND_LABEL[kind]} חייבת להיות ${KIND_LABEL[expected]}.`);
     }
-    await prisma.orgNode.create({ data: { name, kind, parentId } });
+    const created = await prisma.orgNode.create({ data: { name, kind, parentId } });
+    await logActivity({ action: "org.create", description: `יצר ${KIND_LABEL[kind]} ${name}`, subjectType: "org", subjectId: created.id });
   }
   revalidatePath("/hierarchy");
   revalidatePath("/", "layout");
@@ -133,6 +136,7 @@ export async function updateOrgNode(_prev: OrgEditState, formData: FormData): Pr
   }
 
   await prisma.orgNode.update({ where: { id }, data: { name, kind, parentId } });
+  await logActivity({ action: "org.update", description: `ערך את ${KIND_LABEL[kind]} ${name}`, subjectType: "org", subjectId: id });
   revalidatePath("/hierarchy");
   revalidatePath("/", "layout");
   return { savedAt: Date.now() };
@@ -152,6 +156,12 @@ export async function removeOrgNode(formData: FormData) {
   const ids = await subtreeIds(id);
   // delete deepest-first so no parent disappears before its children
   await prisma.$transaction(ids.reverse().map((nodeId) => prisma.orgNode.delete({ where: { id: nodeId } })));
+  await logActivity({
+    action: "org.delete",
+    description: `מחק את ${KIND_LABEL[node.kind]} ${node.name}${ids.length > 1 ? ` ו-${ids.length - 1} מסגרות תחתיה` : ""}`,
+    subjectType: "org",
+    subjectId: id,
+  });
 
   revalidatePath("/hierarchy");
   revalidatePath("/people");

@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/session";
 import { requireAdmin } from "@/lib/authz";
+import { logActivity } from "@/lib/activity-log";
 import { hashPassword, verifyPassword } from "@/lib/password";
 import { SESSION_COOKIE, SESSION_TTL_MS, createSessionToken } from "@/lib/auth";
 
@@ -69,5 +70,8 @@ export async function adminResetPassword(formData: FormData) {
   const next = str(formData.get("password"));
   if (next.length < 6) throw new Error("סיסמה קצרה מדי (מינימום 6 תווים).");
   await prisma.user.update({ where: { id: userId }, data: { passwordHash: hashPassword(next) } });
+  const target = await prisma.user.findUnique({ where: { id: userId }, select: { name: true } });
+  // the act is recorded; the password itself never is
+  await logActivity({ action: "user.reset-password", description: `איפס סיסמה של ${target?.name ?? userId}`, subjectType: "user", subjectId: userId });
   revalidatePath("/access");
 }
