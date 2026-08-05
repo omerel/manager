@@ -6,6 +6,14 @@ import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/authz";
 import { logActivity } from "@/lib/activity-log";
 import { hashPassword } from "@/lib/password";
+import {
+  assertCanCommand,
+  assertFrameworkFree,
+  assertGrantIsRemovable,
+  commandedPath,
+  frameworkTakenMessage,
+  isCommandConflict,
+} from "@/lib/commander";
 import type { AccessLevel, Role } from "@/generated/prisma/client";
 
 function str(v: FormDataEntryValue | null): string {
@@ -23,12 +31,24 @@ async function uniqueUsername(email: string): Promise<string> {
   return candidate;
 }
 
+/**
+ * Create a user, optionally with a first access grant and a commanded framework.
+ *
+ * The first grant is here for one reason: a new user has no grants at all, and
+ * a command may not be given to someone who cannot see the framework. Without a
+ * grant in the same form, the command field could never be filled at creation —
+ * it would be a field that only ever refuses. The grant stays optional; a user
+ * with no access is still a legitimate thing to create.
+ */
 export async function createUser(formData: FormData) {
   await requireAdmin();
   const name = str(formData.get("name")) || "משתמש";
   const email = str(formData.get("email"));
   const password = str(formData.get("password"));
   const role = (str(formData.get("role")) === "ADMIN" ? "ADMIN" : "MANAGER") as Role;
+  const grantNodeId = str(formData.get("grantNodeId"));
+  const grantLevel = (str(formData.get("grantLevel")) === "EDIT" ? "EDIT" : "VIEW") as AccessLevel;
+  const commandsNodeId = str(formData.get("commandsNodeId")) || null;
   if (!name) throw new Error("חובה להזין שם.");
   if (!email) throw new Error("חובה להזין אימייל.");
   if (!password) throw new Error("חובה להזין סיסמה.");
@@ -36,14 +56,61 @@ export async function createUser(formData: FormData) {
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) throw new Error("כבר קיים משתמש עם אימייל זה.");
 
+  if (commandsNodeId) {
+    const node = await prisma.orgNode.findUnique({ where: { id: commandsNodeId }, select: { id: true } });
+    if (!node) throw new Error("המסגרת שנבחרה לפיקוד אינה קיימת.");
+    await assertFrameworkFree(commandsNodeId);
+    // The prospective grants, not the stored ones — there are none yet.
+    await assertCanCommand(role, grantNodeId ? [{ nodeId: grantNodeId, level: grantLevel }] : [], commandsNodeId, { atCreation: true });
+  }
+
   const username = await uniqueUsername(email);
-  const created = await prisma.user.create({ data: { name, email, username, passwordHash: hashPassword(password), role } });
+  let created;
+  try {
+    // One transaction: a user who was supposed to arrive with access and
+    // responsibility must not arrive with only some of it.
+    created = await prisma.$transaction(async (tx) => {
+      const u = await tx.user.create({
+        data: { name, email, username, passwordHash: hashPassword(password), role, commandsNodeId },
+      });
+      if (grantNodeId) await tx.accessGrant.create({ data: { userId: u.id, nodeId: grantNodeId, level: grantLevel } });
+      return u;
+    });
+  } catch (e) {
+    // Two Admins in the same moment: the index refused, and the message must
+    // match the one the ordinary check produces.
+    if (commandsNodeId && isCommandConflict(e)) throw new Error(await frameworkTakenMessage(commandsNodeId));
+    throw e;
+  }
+
   await logActivity({ action: "user.create", description: `יצר משתמש ${name} (${role === "ADMIN" ? "אדמין" : "מנהל"})`, subjectType: "user", subjectId: created.id });
+  if (grantNodeId) {
+    const n = await prisma.orgNode.findUnique({ where: { id: grantNodeId }, select: { name: true } });
+    await logActivity({
+      action: "grant.add",
+      description: `נתן ל${name} הרשאת ${grantLevel === "EDIT" ? "עריכה" : "צפייה"} על ${n?.name ?? grantNodeId}`,
+      subjectType: "user",
+      subjectId: created.id,
+    });
+  }
+  if (commandsNodeId) {
+    await logActivity({
+      action: "user.command.set",
+      description: `מינה את ${name} למפקד ${await commandedPath(commandsNodeId)}`,
+      subjectType: "user",
+      subjectId: created.id,
+    });
+  }
   revalidatePath("/access");
   revalidatePath("/", "layout"); // refresh the header's user list
 }
 
-/** Admin edit of a user's name/email. The username (login id) stays stable. */
+/**
+ * Admin edit of a user's name, email and commanded framework. The username
+ * (login id) stays stable, and so does the role: there is no path in the system
+ * that changes a role after creation, which is what keeps an Admin — who sees
+ * the whole tree — from silently losing sight of the framework they command.
+ */
 export async function updateUserProfile(formData: FormData) {
   await requireAdmin();
   const userId = str(formData.get("userId"));
@@ -52,8 +119,40 @@ export async function updateUserProfile(formData: FormData) {
   if (!name || !email) throw new Error("חובה להזין שם ואימייל.");
   const clash = await prisma.user.findFirst({ where: { email, id: { not: userId } } });
   if (clash) throw new Error("כבר קיים משתמש עם אימייל זה.");
-  await prisma.user.update({ where: { id: userId }, data: { name, email } });
+
+  const before = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { role: true, commandsNodeId: true, grants: { select: { nodeId: true, level: true } } },
+  });
+  if (!before) throw new Error("משתמש לא נמצא.");
+
+  // Absent field → leave the command alone; present but empty → clear it.
+  const commandTouched = formData.has("commandsNodeId");
+  const commandsNodeId = commandTouched ? str(formData.get("commandsNodeId")) || null : before.commandsNodeId;
+  const commandChanged = commandsNodeId !== before.commandsNodeId;
+
+  if (commandChanged && commandsNodeId) {
+    const node = await prisma.orgNode.findUnique({ where: { id: commandsNodeId }, select: { id: true } });
+    if (!node) throw new Error("המסגרת שנבחרה לפיקוד אינה קיימת.");
+    await assertFrameworkFree(commandsNodeId, userId);
+    await assertCanCommand(before.role, before.grants, commandsNodeId);
+  }
+
+  try {
+    await prisma.user.update({ where: { id: userId }, data: { name, email, commandsNodeId } });
+  } catch (e) {
+    if (commandsNodeId && isCommandConflict(e)) throw new Error(await frameworkTakenMessage(commandsNodeId));
+    throw e;
+  }
+
   await logActivity({ action: "user.update", description: `ערך את פרטי המשתמש ${name}`, subjectType: "user", subjectId: userId });
+  if (commandChanged) {
+    await logActivity(
+      commandsNodeId
+        ? { action: "user.command.set", description: `מינה את ${name} למפקד ${await commandedPath(commandsNodeId)}`, subjectType: "user", subjectId: userId }
+        : { action: "user.command.clear", description: `הסיר מ${name} את הפיקוד על ${await commandedPath(before.commandsNodeId)}`, subjectType: "user", subjectId: userId },
+    );
+  }
   revalidatePath("/access");
   revalidatePath("/", "layout");
   redirect("/access");
@@ -105,6 +204,10 @@ export async function removeGrant(formData: FormData) {
     where: { id },
     select: { user: { select: { name: true } }, node: { select: { name: true } } },
   });
+  // A commander must be able to see what they command. Removing the grant that
+  // makes that true is refused while the command stands — the Admin clears the
+  // command first, deliberately, rather than as a side effect of this form.
+  await assertGrantIsRemovable(id);
   await prisma.accessGrant.delete({ where: { id } });
   await logActivity({
     action: "grant.remove",

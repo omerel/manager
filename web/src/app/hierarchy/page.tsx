@@ -13,11 +13,13 @@ export default async function HierarchyPage() {
   const me = await getSessionUser();
   if (me.role !== "ADMIN") redirect("/"); // exposed to admin only
 
-  const [nodes, people, enumFields] = await Promise.all([
+  const [nodes, people, enumFields, commanders] = await Promise.all([
     prisma.orgNode.findMany(),
     prisma.person.findMany({ select: { teamId: true } }),
     prisma.personFieldDef.findMany({ where: { type: "ENUM" }, orderBy: { order: "asc" } }),
+    prisma.user.findMany({ where: { commandsNodeId: { not: null } }, select: { name: true, commandsNodeId: true } }),
   ]);
+  const commanderOf = new Map(commanders.map((c) => [c.commandsNodeId!, c.name]));
 
   const directCount = new Map<string, number>();
   for (const p of people) {
@@ -31,6 +33,7 @@ export default async function HierarchyPage() {
     kind: n.kind,
     parentId: n.parentId,
     direct: directCount.get(n.id) ?? 0,
+    commander: commanderOf.get(n.id) ?? null,
   }));
   const unassigned = people.filter((p) => !p.teamId).length;
 

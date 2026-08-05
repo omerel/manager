@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/session";
-import { computeVisibility } from "@/lib/access";
+import { computeVisibility, visibilityFrom } from "@/lib/access";
 import { KIND_LABEL } from "@/lib/org";
+import { pathResolver } from "@/lib/commander";
 import { LevelBadge } from "@/components/OrgTree";
 import { createUser, addGrant, removeGrant, deleteUser, updateUserProfile } from "@/lib/access-actions";
 import { adminResetPassword } from "@/lib/auth-actions";
@@ -17,7 +18,7 @@ export default async function AccessPage({ searchParams }: { searchParams: Promi
     getSessionUser(),
     prisma.user.findMany({
       orderBy: [{ role: "asc" }, { name: "asc" }],
-      include: { grants: { include: { node: true } } },
+      include: { grants: { include: { node: true } }, commandsNode: true },
     }),
     prisma.orgNode.findMany(),
   ]);
@@ -38,6 +39,20 @@ export default async function AccessPage({ searchParams }: { searchParams: Promi
   const nodeOptions = nodes
     .map((n) => ({ id: n.id, label: `${KIND_LABEL[n.kind]}: ${n.name}` }))
     .sort((a, b) => a.label.localeCompare(b.label, "he"));
+
+  // Commands are labelled by full path, not by name: names repeat between
+  // branches, and picking the wrong "צוות תשתיות" fails silently — it breaks
+  // nothing, it just records the wrong person as responsible.
+  const resolvePath = pathResolver(nodes);
+  const frameworkOptions = nodes
+    .map((n) => ({ id: n.id, path: resolvePath(n.id) }))
+    .sort((a, b) => a.path.localeCompare(b.path, "he"));
+
+  // What each user may be given to command: only what they can already see.
+  // The very same function the server action checks against — the chooser must
+  // not offer a value the action would refuse.
+  const visibleTo = (u: (typeof allUsers)[number]) =>
+    visibilityFrom(nodes, { id: u.id, name: u.name, role: u.role, grants: u.grants }).nodeIds;
 
   return (
     <div className="space-y-6">
@@ -74,10 +89,48 @@ export default async function AccessPage({ searchParams }: { searchParams: Promi
               <option value="ADMIN">אדמין</option>
             </select>
           </div>
+          <div className="flex flex-col">
+            <label htmlFor="grantNodeId" className="mb-1 text-sm text-muted">
+              הרשאה ראשונה
+            </label>
+            <select id="grantNodeId" name="grantNodeId" defaultValue="" className={inputCls}>
+              <option value="">ללא</option>
+              {frameworkOptions.map((n) => (
+                <option key={n.id} value={n.id}>
+                  {n.path}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex flex-col">
+            <label htmlFor="grantLevel" className="mb-1 text-sm text-muted">
+              רמה
+            </label>
+            <select id="grantLevel" name="grantLevel" defaultValue="VIEW" className={inputCls}>
+              <option value="VIEW">צפייה</option>
+              <option value="EDIT">עריכה</option>
+            </select>
+          </div>
+          <div className="flex flex-col">
+            <label htmlFor="commandsNodeId" className="mb-1 text-sm text-muted">
+              מסגרת בפיקוד
+            </label>
+            <select id="commandsNodeId" name="commandsNodeId" defaultValue="" className={inputCls}>
+              <option value="">ללא</option>
+              {frameworkOptions.map((n) => (
+                <option key={n.id} value={n.id}>
+                  {n.path}
+                </option>
+              ))}
+            </select>
+          </div>
           <button className="rounded-md bg-brand-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-brand-700">
             צור משתמש
           </button>
-          <p className="w-full text-xs text-muted">שם המשתמש (username) ייגזר אוטומטית מהאימייל עד ה־@.</p>
+          <p className="w-full text-xs text-muted">
+            שם המשתמש (username) ייגזר אוטומטית מהאימייל עד ה־@. הפיקוד אינו מקנה גישה אלא מותנה בה: המסגרת שבפיקוד חייבת
+            להיות בתוך ההרשאה הראשונה (אדמין רואה את כל העץ). לכל מסגרת מפקד אחד לכל היותר.
+          </p>
         </form>
       )}
 
@@ -99,6 +152,22 @@ export default async function AccessPage({ searchParams }: { searchParams: Promi
                       <label className="mb-1 text-xs text-muted">אימייל</label>
                       <input name="email" type="email" defaultValue={u.email} required className={inputCls} />
                     </div>
+                    <div className="flex flex-col">
+                      <label className="mb-1 text-xs text-muted">מסגרת בפיקוד</label>
+                      {/* Only frameworks this user can already see — plus whatever
+                          they hold today, so a command that drifted out of reach
+                          can still be read and cleared here. */}
+                      <select name="commandsNodeId" defaultValue={u.commandsNodeId ?? ""} className={inputCls}>
+                        <option value="">ללא</option>
+                        {frameworkOptions
+                          .filter((n) => visibleTo(u).has(n.id) || n.id === u.commandsNodeId)
+                          .map((n) => (
+                            <option key={n.id} value={n.id}>
+                              {n.path}
+                            </option>
+                          ))}
+                      </select>
+                    </div>
                     <button className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700">
                       שמור
                     </button>
@@ -107,7 +176,8 @@ export default async function AccessPage({ searchParams }: { searchParams: Promi
                     </Link>
                   </form>
                   <p className="mt-1 text-xs text-muted">
-                    שם המשתמש להתחברות ({u.username ?? "—"}) נשאר קבוע גם אם האימייל משתנה.
+                    שם המשתמש להתחברות ({u.username ?? "—"}) נשאר קבוע גם אם האימייל משתנה. ברשימת הפיקוד מוצגות רק מסגרות
+                    שהמשתמש רואה — כדי לפקד על מסגרת אחרת, יש לתת עליה הרשאה תחילה.
                   </p>
                 </div>
               ) : (
@@ -123,6 +193,19 @@ export default async function AccessPage({ searchParams }: { searchParams: Promi
                   </span>
                   <span className="text-xs text-muted">{u.email}</span>
                   {u.username && <span className="text-xs text-muted">· {u.username}</span>}
+                  {u.commandsNode && (
+                    <span className="rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-900">
+                      מפקד: {resolvePath(u.commandsNodeId)}
+                    </span>
+                  )}
+                  {/* Appointment requires access, but a framework MOVED in the tree
+                      can drift out of the commander's reach afterwards. That is
+                      shown, never silently repaired. */}
+                  {u.commandsNodeId && !visibleTo(u).has(u.commandsNodeId) && (
+                    <span className="rounded bg-red-100 px-2 py-0.5 text-xs text-red-800">
+                      אין הרשאה על המסגרת שבפיקודו
+                    </span>
+                  )}
                   {isAdmin && (
                     <Link href={`/access?edit=${u.id}`} className="text-xs text-brand-700 hover:underline">
                       ערוך

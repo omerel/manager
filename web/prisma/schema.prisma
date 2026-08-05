@@ -73,6 +73,13 @@ model User {
   passwordHash     String? // real auth is deferred (task 0.2); stored hashed as a placeholder
   role             Role
   grants           AccessGrant[]
+  // The framework this user commands, if any. `@unique` on a NULLABLE column is
+  // the whole enforcement: Postgres treats NULLs as distinct, so any number of
+  // users may command nothing while a given framework can be claimed only once.
+  // onDelete: SetNull — deleting a framework releases the command; it must never
+  // delete the person who commanded it.
+  commandsNode     OrgNode?      @relation("FrameworkCommander", fields: [commandsNodeId], references: [id], onDelete: SetNull)
+  commandsNodeId   String?       @unique
   agentRuns        AgentRun[]
   rules            Rule[]
   createdAt        DateTime      @default(now())
@@ -158,8 +165,9 @@ model OrgNode {
   parent   OrgNode?      @relation("OrgTree", fields: [parentId], references: [id])
   parentId String?
   children OrgNode[]     @relation("OrgTree")
-  people   Person[]
-  grants   AccessGrant[]
+  people    Person[]
+  grants    AccessGrant[]
+  commander User?         @relation("FrameworkCommander")
 }
 
 // --- Career plans (templates, relative to unit placement). Admin-authored. ---

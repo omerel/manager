@@ -58,7 +58,18 @@ export type Visibility = {
  * Admins see the whole tree with EDIT.
  */
 export async function computeVisibility(user: SessionUser): Promise<Visibility> {
-  const nodes = await loadNodes();
+  return visibilityFrom(await loadNodes(), user);
+}
+
+/**
+ * The same computation, over nodes the caller has already loaded.
+ *
+ * Exists so a page that has the tree in hand can answer "what can this user
+ * see?" for many users without a query each — and, more importantly, without a
+ * second copy of the subtree walk. `computeVisibility` is now a thin wrapper on
+ * this, so there is exactly one definition of visibility in the system.
+ */
+export function visibilityFrom(nodes: OrgNode[], user: SessionUser): Visibility {
   const subtree = buildSubtreeIndex(nodes);
 
   const nodeIds = new Set<string>();

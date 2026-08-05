@@ -13,6 +13,8 @@ export type HierarchyNode = {
   parentId: string | null;
   /** people attached directly to this node (teams only, in practice) */
   direct: number;
+  /** name of the user who commands this framework, if anyone does */
+  commander?: string | null;
 };
 
 type ParentOption = { id: string; label: string };
@@ -94,6 +96,9 @@ function ViewRow({
         <span className="text-xs text-muted">{KIND_LABEL[node.kind]}</span>
         <span className="font-medium">{node.name}</span>
         <span className="text-xs text-muted">{`· ${plural(total, "איש", "אנשים")}`}</span>
+        {node.commander && (
+          <span className="rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-900">מפקד: {node.commander}</span>
+        )}
       </span>
       <div className="flex items-center gap-1">
         <button
