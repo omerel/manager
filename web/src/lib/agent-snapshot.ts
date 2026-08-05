@@ -3,14 +3,34 @@ import { tmpdir } from "os";
 import path from "path";
 import { prisma } from "@/lib/prisma";
 import type { Visibility } from "@/lib/access";
+import type { FieldType } from "@/generated/prisma/client";
 import { computePersonGaps, GAP_META } from "@/lib/gaps";
 import { KIND_LABEL } from "@/lib/org";
 import { STATUS_LABEL } from "@/lib/people";
-import { addMonths, formatIsraeliDate, todayMarker } from "@/lib/dates";
+import { addMonths, formatIsraeliDate, todayMarker, parseIsraeliDate } from "@/lib/dates";
+import { ageFromBirthDate } from "@/lib/person-name";
 import { stripMentions } from "@/lib/mentions";
 import { scoreLabel } from "@/lib/eval-scale";
 import { resolveUpload } from "@/lib/storage";
 import { extractTextFromFile } from "@/lib/doc-text";
+
+/**
+ * A configurable field's value as the snapshot should carry it.
+ *
+ * Date fields are stored exactly as they were typed — `dd/mm/yyyy` — while every
+ * other date in this file is ISO. The comment on תאריך_גיוס promises the agent
+ * a copy with "no reading convention to get wrong"; a day-first value sitting
+ * among ISO ones breaks that promise silently, and `03/08` read as 3 August or
+ * 8 March is the exact confusion this system was built to remove.
+ *
+ * A value that cannot be read as a date is carried through untouched rather
+ * than guessed at — the same choice `formatFieldValue` makes for the screen.
+ */
+function snapshotFieldValue(type: FieldType, value: string): string {
+  if (type !== "DATE") return value;
+  const d = parseIsraeliDate(value);
+  return d ? d.toISOString().slice(0, 10) : value;
+}
 
 /**
  * Export a read-only snapshot of the career data — clipped to the user's
@@ -114,6 +134,15 @@ export async function exportScopedSnapshot(visibility: Visibility, today: Date, 
     return {
       שם: p.fullName,
       מסגרת: pathOf(p.teamId),
+      // Was missing entirely, and is why this file grew a verification suite: a
+      // hand-written mapping silently omits whatever nobody typed into it, and
+      // 34 of 41 people had a date of birth the agent could not see.
+      תאריך_לידה: p.birthDate?.toISOString().slice(0, 10) ?? null,
+      // Carried rather than left to the agent: ageFromBirthDate counts whole
+      // months and handles the end of a month in a particular way, so an agent
+      // computing its own age would land a day out and read as contradicting
+      // the person's card.
+      גיל: ageFromBirthDate(p.birthDate),
       // ISO on purpose: this is a machine interface. The UI is dd/mm/yyyy, but
       // a snapshot the agent reasons over must have no reading convention to
       // get wrong — and the agent is told, in the extraction prompt, that the
@@ -123,7 +152,10 @@ export async function exportScopedSnapshot(visibility: Visibility, today: Date, 
       תאריך_הצבה_ביחידה: p.placementDate.toISOString().slice(0, 10),
       סטטוס: STATUS_LABEL[p.status],
       סיום_שירות: p.endOfServiceDate?.toISOString().slice(0, 10) ?? null,
-      פרטים_נוספים: Object.fromEntries(p.fieldValues.map((fv) => [fv.field.label, fv.value])),
+      // Values only; which fields EXIST is in schema.json, because a field
+      // nobody has filled would otherwise be indistinguishable from a field
+      // that does not exist — two very different answers to a question.
+      פרטים_נוספים: Object.fromEntries(p.fieldValues.map((fv) => [fv.field.label, snapshotFieldValue(fv.field.type, fv.value)])),
       מסלולים_קודמים: p.planAssignments.map((a) => ({
         שם_תכנית: a.templateName,
         משויך_מ: a.assignedAt.toISOString().slice(0, 10),
@@ -190,6 +222,17 @@ export async function exportScopedSnapshot(visibility: Visibility, today: Date, 
 
   await writeFile(path.join(dir, "org.json"), JSON.stringify(visibleNodes, null, 2), "utf8");
   await writeFile(path.join(dir, "people.json"), JSON.stringify(peopleOut, null, 2), "utf8");
+  // WHICH FIELDS EXIST — separate from the values above, on purpose.
+  const fieldDefs = await prisma.personFieldDef.findMany({ orderBy: { order: "asc" } });
+  const TYPE_LABEL: Record<FieldType, string> = { TEXT: "טקסט", DATE: "תאריך", NUMBER: "מספר", ENUM: "בחירה" };
+  const schemaOut = fieldDefs.map((f) => ({
+    שדה: f.label,
+    סוג: TYPE_LABEL[f.type],
+    חובה: f.required,
+    ...(f.type === "ENUM" ? { אפשרויות: f.options } : {}),
+  }));
+  await writeFile(path.join(dir, "schema.json"), JSON.stringify(schemaOut, null, 2), "utf8");
+
   const queriesOut = await exportQueries(userId, today);
   await writeFile(path.join(dir, "queries.json"), JSON.stringify(queriesOut, null, 2), "utf8");
   await writeFile(
@@ -200,8 +243,9 @@ export async function exportScopedSnapshot(visibility: Visibility, today: Date, 
       `נכון לתאריך: ${today.toISOString().slice(0, 10)}`,
       "",
       "- `org.json` — המסגרות שבראות המשתמש (מרכז ▸ תחום ▸ מדור ▸ צוות).",
-      "- `people.json` — האנשים שבראות: פרטים, תכנית קריירה, התקדמות, פערים, חוות דעת.",
+      "- `people.json` — האנשים שבראות: פרטים (כולל תאריך לידה וגיל), תכנית קריירה, התקדמות, פערים, חוות דעת. כל התאריכים בפורמט yyyy-mm-dd.",
       "- `files/` — תוכן הקבצים המצורפים לחוות הדעת, כטקסט מחולץ (.txt). הנתיב מופיע בשדה `נתיב` ב-people.json — קרא אותו כשהשאלה נוגעת לתוכן הקובץ. אין צורך (ואין אפשרות) להריץ סקריפטים: הטקסט כבר חולץ.",
+      "- `schema.json` — השדות המוגדרים בכרטיס האדם: שם, סוג, ואפשרויות בשדה בחירה. **שדה שמופיע כאן ואינו מופיע ב-`פרטים_נוספים` של אף אדם — קיים ופשוט לא מולא.** זו תשובה אחרת מ״אין שדה כזה״.",
       "- `queries.json` — שאילתות המפקד של המשתמש עצמו: מה שלח למסגרות שתחתיו ומה נשאל מלמעלה, על תשובותיהן.",
       "",
       "הנתונים כוללים רק את מה שהמשתמש המפעיל רשאי לראות.",
