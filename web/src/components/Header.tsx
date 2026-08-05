@@ -7,6 +7,7 @@ import { devSwitchEnabled } from "@/lib/auth";
 import { getLogoPath, getSystemName } from "@/lib/branding";
 import { AppLogo } from "@/components/Logo";
 import { NavLinks, type NavItem } from "@/components/NavLinks";
+import { queryBadge } from "@/lib/queries";
 import { AdminMenu } from "@/components/AdminMenu";
 import { UserSwitcher } from "@/components/UserSwitcher";
 
@@ -37,6 +38,20 @@ export async function Header() {
     );
   }
 
+  // The queries page belongs to the chain of command: it appears only for a
+  // user who commands a framework, carrying a count of what awaits them.
+  const commanded = await prisma.user.findUnique({ where: { id: current.id }, select: { commandsNodeId: true } });
+  const badge = await queryBadge(commanded?.commandsNodeId ?? null);
+  const badgeTitle = [
+    badge.awaitingMyAnswer ? `${badge.awaitingMyAnswer} ממתינות לתשובתך` : "",
+    badge.newAnswers ? `${badge.newAnswers} תשובות חדשות` : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  const navItems: NavItem[] = commanded?.commandsNodeId
+    ? [...NAV_ITEMS, { href: "/queries", label: "שאילתות", icon: "queries", badge: badge.total, badgeTitle }]
+    : NAV_ITEMS;
+
   const showSwitcher = devSwitchEnabled();
   const users = showSwitcher ? await prisma.user.findMany({ orderBy: { role: "asc" } }) : [];
 
@@ -48,7 +63,7 @@ export async function Header() {
             <AppLogo logoPath={logoPath} size={32} />
             <span className="text-lg font-bold text-white">{systemName}</span>
           </Link>
-          <NavLinks items={NAV_ITEMS} />
+          <NavLinks items={navItems} />
         </div>
 
         <div className="flex items-center gap-2">

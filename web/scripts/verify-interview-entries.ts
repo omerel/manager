@@ -102,7 +102,7 @@ async function main() {
       id: admin.id, name: admin.name, role: admin.role,
       grants: admin.grants.map((g) => ({ nodeId: g.nodeId, level: g.level })),
     });
-    const dir = await exportScopedSnapshot(vis, new Date("2026-08-04T00:00:00Z"));
+    const dir = await exportScopedSnapshot(vis, new Date("2026-08-04T00:00:00Z"), admin.id);
     const { readFile } = await import("fs/promises");
     const json = await readFile(`${dir}/people.json`, "utf8");
     check("the snapshot names the entry kind", json.includes("סיכום ראיון"), "");

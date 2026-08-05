@@ -121,7 +121,7 @@ ${fields
 export async function executeChatJob(user: SessionUser, question: string, runId: string): Promise<void> {
   const started = Date.now();
   const visibility = await computeVisibility(user);
-  const dir = await exportScopedSnapshot(visibility, new Date());
+  const dir = await exportScopedSnapshot(visibility, new Date(), user.id);
   try {
     const { output } = await runClaude(`${CHAT_INSTRUCTIONS}\n${question}`, dir);
     await prisma.agentRun.update({

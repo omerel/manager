@@ -29,12 +29,20 @@ export function DateField({
   defaultDate,
   required,
   className,
+  minDate,
 }: {
   name: string;
   label?: string;
   defaultDate?: Date | string | null;
   required?: boolean;
   className?: string;
+  /**
+   * Earliest selectable day. The native calendar greys out everything before
+   * it, so a field that cannot mean a past date does not offer one. The text
+   * input still accepts anything typed — this narrows the easy path, it is not
+   * the guard. The server remains the guard.
+   */
+  minDate?: Date;
 }) {
   const textRef = useRef<HTMLInputElement>(null);
   const pickerRef = useRef<HTMLInputElement>(null);
@@ -134,6 +142,7 @@ export function DateField({
       <input
         ref={pickerRef}
         type="date"
+        min={minDate ? minDate.toISOString().slice(0, 10) : undefined}
         tabIndex={-1}
         aria-hidden
         className="pointer-events-none absolute left-2 h-0 w-0 opacity-0"

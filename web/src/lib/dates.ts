@@ -51,6 +51,19 @@ export function parseIsraeliDate(raw: string | null | undefined): Date | null {
   return date;
 }
 
+/**
+ * Today as a day marker, in the same shape stored dates use: UTC midnight of
+ * the calendar day.
+ *
+ * Built from the LOCAL calendar parts, not from `toISOString()`. The server
+ * runs at UTC+3, so between midnight and 03:00 the UTC date is still
+ * yesterday's — and a deadline compared that way would stay open for three
+ * hours after it expired, every single night.
+ */
+export function todayMarker(now: Date = new Date()): Date {
+  return new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+}
+
 /** `dd/mm/yyyy` — the form dates are entered and exported in. */
 export function formatIsraeliDate(d: Date | null | undefined): string {
   if (!d) return "";

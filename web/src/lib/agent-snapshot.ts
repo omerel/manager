@@ -6,7 +6,8 @@ import type { Visibility } from "@/lib/access";
 import { computePersonGaps, GAP_META } from "@/lib/gaps";
 import { KIND_LABEL } from "@/lib/org";
 import { STATUS_LABEL } from "@/lib/people";
-import { addMonths } from "@/lib/dates";
+import { addMonths, formatIsraeliDate, todayMarker } from "@/lib/dates";
+import { stripMentions } from "@/lib/mentions";
 import { scoreLabel } from "@/lib/eval-scale";
 import { resolveUpload } from "@/lib/storage";
 import { extractTextFromFile } from "@/lib/doc-text";
@@ -15,8 +16,20 @@ import { extractTextFromFile } from "@/lib/doc-text";
  * Export a read-only snapshot of the career data — clipped to the user's
  * visibility — into a fresh temp dir. The agent works only on this copy:
  * scope inheritance and read-only-ness are enforced structurally.
+ *
+ * TWO SCOPES, and they are not the same shape:
+ *
+ *   career data  → clipped by `visibility` (the org tree, via access grants)
+ *   queries      → clipped by `userId` (the command chain, via who asked whom)
+ *
+ * A commander can see a whole domain's career data and still have no business
+ * reading an exchange between that domain and its sections. So the second scope
+ * takes a user, not a Visibility, and it is deliberately NOT folded into
+ * `Visibility` — the moment it is, the narrower rule inherits the wider one's
+ * reach. `userId` is required rather than optional so that a call site which
+ * forgets it fails to compile instead of silently shipping no queries.
  */
-export async function exportScopedSnapshot(visibility: Visibility, today: Date): Promise<string> {
+export async function exportScopedSnapshot(visibility: Visibility, today: Date, userId: string): Promise<string> {
   const dir = await mkdtemp(path.join(tmpdir(), "agent-snap-"));
 
   const teamIds = [...visibility.nodeIds];
@@ -177,6 +190,8 @@ export async function exportScopedSnapshot(visibility: Visibility, today: Date):
 
   await writeFile(path.join(dir, "org.json"), JSON.stringify(visibleNodes, null, 2), "utf8");
   await writeFile(path.join(dir, "people.json"), JSON.stringify(peopleOut, null, 2), "utf8");
+  const queriesOut = await exportQueries(userId, today);
+  await writeFile(path.join(dir, "queries.json"), JSON.stringify(queriesOut, null, 2), "utf8");
   await writeFile(
     path.join(dir, "README.md"),
     [
@@ -187,13 +202,72 @@ export async function exportScopedSnapshot(visibility: Visibility, today: Date):
       "- `org.json` — המסגרות שבראות המשתמש (מרכז ▸ תחום ▸ מדור ▸ צוות).",
       "- `people.json` — האנשים שבראות: פרטים, תכנית קריירה, התקדמות, פערים, חוות דעת.",
       "- `files/` — תוכן הקבצים המצורפים לחוות הדעת, כטקסט מחולץ (.txt). הנתיב מופיע בשדה `נתיב` ב-people.json — קרא אותו כשהשאלה נוגעת לתוכן הקובץ. אין צורך (ואין אפשרות) להריץ סקריפטים: הטקסט כבר חולץ.",
+      "- `queries.json` — שאילתות המפקד של המשתמש עצמו: מה שלח למסגרות שתחתיו ומה נשאל מלמעלה, על תשובותיהן.",
       "",
       "הנתונים כוללים רק את מה שהמשתמש המפעיל רשאי לראות.",
+      "שים לב: `queries.json` נחתך אחרת מן השאר — לפי שרשרת הפיקוד ולא לפי ההיררכיה. שאילתא בין מסגרות אחרות אינה כאן גם אם הן בראות המשתמש, וזה נכון ולא חסר.",
     ].join("\n"),
     "utf8",
   );
 
   return dir;
+}
+
+/**
+ * The user's own commander queries — what their framework asked, and what it
+ * was asked. Nothing else: not a sibling's answer, not an exchange one level
+ * down, and not another user's queries even for the Admin. The same rule the
+ * page enforces, applied to the copy the agent reasons over.
+ */
+async function exportQueries(userId: string, today: Date) {
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { commandsNodeId: true } });
+  const mine = user?.commandsNodeId;
+  if (!mine) return { שאילתות_ששלחתי: [], שאילתות_שקיבלתי: [] };
+
+  const open = (due: Date) => (todayMarker(today).getTime() <= due.getTime() ? "פתוחה" : "סגורה");
+
+  const [sent, received] = await Promise.all([
+    prisma.query.findMany({
+      where: { senderNodeId: mine },
+      orderBy: { createdAt: "desc" },
+      include: { targets: { include: { node: { select: { name: true } }, answeredBy: { select: { name: true } } } } },
+    }),
+    prisma.queryTarget.findMany({
+      where: { nodeId: mine },
+      orderBy: { query: { createdAt: "desc" } },
+      include: { query: { include: { sender: { select: { name: true } } } } },
+    }),
+  ]);
+
+  return {
+    שאילתות_ששלחתי: sent.map((q) => ({
+      כותרת: q.title,
+      // tags flattened to plain `@name`: the agent reads this text, it does not
+      // render it, and raw `@[name](id)` would only get quoted back at the user
+      תוכן: stripMentions(q.body),
+      תאריך_אחרון: formatIsraeliDate(q.dueDate),
+      מצב: open(q.dueDate),
+      נשלחה: formatIsraeliDate(q.createdAt),
+      נמענים: q.targets.map((t) => ({
+        מסגרת: t.node.name,
+        הגיב: !!t.answer,
+        תשובה: stripMentions(t.answer),
+        משיב: t.answeredBy?.name ?? null,
+        מועד_תשובה: t.answeredAt ? formatIsraeliDate(t.answeredAt) : null,
+        עודכן: t.updatedAt ? formatIsraeliDate(t.updatedAt) : null,
+      })),
+    })),
+    שאילתות_שקיבלתי: received.map((t) => ({
+      כותרת: t.query.title,
+      תוכן: stripMentions(t.query.body),
+      מאת: t.query.sender.name,
+      תאריך_אחרון: formatIsraeliDate(t.query.dueDate),
+      מצב: open(t.query.dueDate),
+      התשובה_שלי: stripMentions(t.answer),
+      מועד_תשובה: t.answeredAt ? formatIsraeliDate(t.answeredAt) : null,
+      עודכן: t.updatedAt ? formatIsraeliDate(t.updatedAt) : null,
+    })),
+  };
 }
 
 export async function removeSnapshot(dir: string) {

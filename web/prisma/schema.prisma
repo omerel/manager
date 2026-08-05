@@ -80,6 +80,8 @@ model User {
   // delete the person who commanded it.
   commandsNode     OrgNode?      @relation("FrameworkCommander", fields: [commandsNodeId], references: [id], onDelete: SetNull)
   commandsNodeId   String?       @unique
+  authoredQueries  Query[]       @relation("QueryAuthor")
+  queryAnswers     QueryTarget[] @relation("QueryAnswerer")
   agentRuns        AgentRun[]
   rules            Rule[]
   createdAt        DateTime      @default(now())
@@ -157,6 +159,63 @@ model AccessGrant {
   @@unique([userId, nodeId])
 }
 
+/// A question one commander puts to the commanders exactly one level below.
+///
+/// Anchored to FRAMEWORKS at both ends, not to people. The requirement that a
+/// target framework with no commander still shows up as a row nobody can fill
+/// settles it: a query that can be addressed to an empty framework is addressed
+/// to the framework. `authorId` is credit, not ownership — replacing a commander
+/// must never orphan a query, on either end.
+///
+/// There is no `closed` flag on purpose. Whether a query is open is derived from
+/// `dueDate`, which the sender may move at any time; a stored flag would need an
+/// unlock path, a re-lock path, and would drift on every edit.
+model Query {
+  id           String        @id @default(cuid())
+  /// the framework that asked — deleting it takes its queries with it
+  sender       OrgNode       @relation("QuerySender", fields: [senderNodeId], references: [id], onDelete: Cascade)
+  senderNodeId String
+  /// who actually wrote it; deleting the user leaves the query readable
+  author       User?         @relation("QueryAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  authorId     String?
+  title        String
+  body         String
+  dueDate      DateTime
+  createdAt    DateTime      @default(now())
+  /// set when the deadline is moved, so receivers can see that it changed
+  dueChangedAt DateTime?
+  /// the sender ended it early — before the deadline, answers or no answers
+  closedAt     DateTime?
+  targets      QueryTarget[]
+}
+
+/// One row per addressed framework — created whether or not anyone commands it.
+model QueryTarget {
+  id           String    @id @default(cuid())
+  query        Query     @relation(fields: [queryId], references: [id], onDelete: Cascade)
+  queryId      String
+  node         OrgNode   @relation("QueryTargetNode", fields: [nodeId], references: [id], onDelete: Cascade)
+  nodeId       String
+  answer       String? // null = has not responded
+  /// who wrote the answer; deleting them leaves the answer text intact
+  answeredBy   User?     @relation("QueryAnswerer", fields: [answeredById], references: [id], onDelete: SetNull)
+  answeredById String?
+  answeredAt   DateTime? // first answer
+  updatedAt    DateTime? // last revision — absent when never revised
+  remindedAt   DateTime?
+  /// Has the SENDER seen this answer yet? Set false by every answer and every
+  /// revision, and true when the sender next opens the page. This is what the
+  /// header badge counts on the asking side — "new since I looked" is a fact
+  /// about the reader, and cannot be derived from the answer's timestamps.
+  seenBySender Boolean   @default(false)
+  /// outcome of the last mail to this framework. Delivery happens after the
+  /// response, so the sender is not watching; a failure has to be kept to be seen.
+  mailOk       Boolean?
+  mailError    String?
+
+  @@unique([queryId, nodeId])
+}
+
 // Strict tree: CENTER > DOMAIN > SECTION > TEAM. People attach to TEAM nodes.
 model OrgNode {
   id       String        @id @default(cuid())
@@ -168,6 +227,8 @@ model OrgNode {
   people    Person[]
   grants    AccessGrant[]
   commander User?         @relation("FrameworkCommander")
+  sentQueries    Query[]       @relation("QuerySender")
+  queryTargets   QueryTarget[] @relation("QueryTargetNode")
 }
 
 // --- Career plans (templates, relative to unit placement). Admin-authored. ---

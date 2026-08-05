@@ -8,6 +8,7 @@ import {
   Map,
   MessageCircleQuestion,
   ScrollText,
+  Send,
   type LucideIcon,
 } from "lucide-react";
 
@@ -17,9 +18,10 @@ const ICONS: Record<string, LucideIcon> = {
   plans: Map,
   chat: MessageCircleQuestion,
   rules: ScrollText,
+  queries: Send,
 };
 
-export type NavItem = { href: string; label: string; icon: keyof typeof ICONS };
+export type NavItem = { href: string; label: string; icon: keyof typeof ICONS; badge?: number; badgeTitle?: string };
 
 /** Nav items with an active-state pill (path-prefix matching). */
 export function NavLinks({ items }: { items: NavItem[] }) {
@@ -39,6 +41,14 @@ export function NavLinks({ items }: { items: NavItem[] }) {
           >
             <Icon className="h-4 w-4" aria-hidden />
             {item.label}
+            {!!item.badge && (
+              <span
+                className="rounded-full bg-amber-400 px-1.5 text-xs font-semibold text-amber-950"
+                title={item.badgeTitle || `${item.badge} פריטים ממתינים`}
+              >
+                {item.badge}
+              </span>
+            )}
           </Link>
         );
       })}

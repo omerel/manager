@@ -73,7 +73,7 @@ export async function executeRuleJob(user: SessionUser, rule: Rule, runId: strin
   const started = Date.now();
   const today = new Date();
   const visibility = await computeVisibility(user);
-  const dir = await exportScopedSnapshot(visibility, today);
+  const dir = await exportScopedSnapshot(visibility, today, user.id);
   try {
     let output: string;
     if (rule.pinnedAt && rule.realizationKind === "SCRIPT" && rule.realization) {
@@ -126,7 +126,7 @@ export async function executeRule(user: SessionUser, rule: Rule): Promise<string
  */
 export async function pinRule(user: SessionUser, rule: Rule, approvedOutput: string): Promise<void> {
   const visibility = await computeVisibility(user);
-  const dir = await exportScopedSnapshot(visibility, new Date());
+  const dir = await exportScopedSnapshot(visibility, new Date(), user.id);
   try {
     const prompt = `משימת "קיבוע חוק" במערכת ניהול קריירה.
 בתיקייה הנוכחית: org.json, people.json — מבנה הנתונים שהחוק רץ עליו (קרא אותם כדי להבין את הסכימה).
