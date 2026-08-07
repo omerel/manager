@@ -41,23 +41,51 @@ user-switcher (impersonation). Leave it unset in any real deployment.
 
 ## What the app shows
 
+- **Career plans as the contract** — a plan is a template of offsets from a person's
+  **unit placement date**: point events, cumulative metrics with checkpoints, and
+  recurring events that unroll from a start offset. Offsets are written
+  `years.months` (`3.4` = 3 years 4 months) and resolve through the placement
+  date alone (`src/lib/plans.ts`, `years-months.ts`).
+- **Assignment carries history** — assigning a plan copies it per person and *ends*
+  the previous assignment rather than deleting it, so milestones, readings and
+  filed evaluations survive a transfer. Items predating the assignment are
+  waived and marked, never counted (`plan-assignment.ts`, `waivers.ts`).
+- **The gap engine** — every plan item resolves to a date and a state:
+  🟢 met · ⬜ future · 🟡 approaching · 🔴 overdue. Rolled up the org tree and
+  filterable by framework and gap kind (`gaps.ts`, `gap-dashboard.ts`).
+- **People** — a scoped list with a career-plan column and a filter on every
+  column, plus a person card holding details, plan, progress and evaluations.
+- **Evaluations & interviews** — recurring occurrences are slots awaiting content;
+  interviews carry a five-point assessment and the date they happened. Documents
+  attach to the record (`eval-actions.ts`, `eval-scale.ts`).
+- **Commander queries** — a commander asks a chosen set of commanded frameworks a
+  question with a deadline, answers gather in one place, and only the two
+  frameworks involved can read it (`queries.ts`).
+- **The agent** — free-form questions over a permission-clipped snapshot,
+  read-only (`Read,Grep,Glob`, no shell). A good answer can be pinned as a
+  deterministic rule that reruns instantly, and reports export to MD/PDF or go
+  out by email (`agent.ts`, `rules-engine.ts`, `emailer.ts`).
+- **Bulk intake** — drop many personnel documents at once; each is extracted
+  server-side (pdftotext / mammoth / SheetJS, OCR fallback) and queued for
+  field-by-field approval. Nothing is written without a human accepting it.
 - **Access control** — a user's visibility is the union of their granted org-tree
-  subtrees (`src/lib/access.ts`). The dashboard, rollups, people list, and the
-  agent all re-clip per signed-in user.
-- **Org tree + rollup** — `center ▸ domain ▸ section ▸ team ▸ person`, with a headcount
-  rolled up the tree (`src/lib/org.ts`).
-- **People** — a scoped list and a person card. Opening a person outside your scope 404s.
-- **Users & grants** — `/access` shows the role + grant model.
+  subtrees (`access.ts`); command of a framework is separate from visibility of it
+  (`commander.ts`). The dashboard, rollups, people list and agent all re-clip per
+  signed-in user.
+- **Activity log** — `/system/activity`: who changed what and when, for the Admin
+  to investigate with.
 
 ## Handy scripts
 
-| script            | what it does                                  |
-|-------------------|-----------------------------------------------|
-| `npm run db:up`   | start the Postgres container (needs sudo)     |
-| `npm run db:down` | remove the Postgres container                 |
-| `npm run db:reset`| drop + re-migrate + re-seed                   |
-| `npm run db:seed` | re-seed demo data                             |
-| `npm run dev`     | dev server                                    |
+| script                | what it does                                      |
+|-----------------------|---------------------------------------------------|
+| `npm run dev`         | dev server on :4321                               |
+| `npm run db:up`       | start the Postgres container (needs sudo)         |
+| `npm run db:down`     | remove the Postgres container                     |
+| `npm run db:reset`    | drop + re-migrate + re-seed                       |
+| `npm run db:seed`     | re-seed the baseline fixture                      |
+| `npm run demo:data`   | add a representative organisation (additive)      |
+| `npx tsx scripts/verify-*.ts` | the verification suites — each asserts one capability end to end |
 
 ## Deployment (air-gapped, Docker / OpenShift)
 
@@ -101,8 +129,3 @@ populate the system.
   your org's own CLI build, bind-mount it over `/usr/bin/claude`.
 - Serving through a route/proxy? set `ALLOWED_ORIGINS` to its hostname(s).
 
-## Not yet built (next phases)
-
-Career plans (point / cumulative / recurring events), progress recording, evaluations &
-files, the gap engine, PDF ingestion, and the read-only agent (rules + chat). See
-`tasks.md` in the change folder for the full sequence.

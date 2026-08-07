@@ -6,6 +6,7 @@ import { startIntake, dismissIntakeRun } from "@/lib/intake-actions";
 import { SubmitButton } from "@/components/SubmitButton";
 import { FileDrop } from "@/components/FileDrop";
 import { AutoRefresh } from "@/components/AutoRefresh";
+import { INTAKE_NEW_PERSON_LABEL, intakeUpdateLabel } from "@/lib/intake-labels";
 
 /**
  * Bulk intake, rendered ON the people page (admin only): drop many personnel
@@ -144,7 +145,7 @@ function ResultLink({
         className="flex items-center gap-1.5 rounded-md bg-brand-600 px-3 py-1 text-xs font-medium text-white hover:bg-brand-700"
       >
         <UserPlus className="h-3.5 w-3.5" aria-hidden />
-        אישור — עובד חדש
+        {INTAKE_NEW_PERSON_LABEL}
       </Link>
     );
   }
@@ -158,7 +159,7 @@ function ResultLink({
         className="flex items-center gap-1.5 rounded-md bg-amber-600 px-3 py-1 text-xs font-medium text-white hover:bg-amber-700"
       >
         <UserCog className="h-3.5 w-3.5" aria-hidden />
-        אישור — עדכון ל{name}
+        {intakeUpdateLabel(name)}
       </Link>
     );
   }

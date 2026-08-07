@@ -12,6 +12,7 @@ import { writeFile, mkdir, rm } from "fs/promises";
 import path from "path";
 import { chromium, type BrowserContext } from "playwright";
 import { prisma } from "../src/lib/prisma";
+import { INTAKE_NEW_PERSON_LABEL, intakeUpdateLabel } from "../src/lib/intake-labels";
 import { hashPassword } from "../src/lib/password";
 
 const BASE = process.env.BASE_URL ?? "http://localhost:4321";
@@ -140,12 +141,12 @@ async function main() {
     // ---- queue links ----
     await page.reload();
     const text = (await page.locator("body").textContent()) ?? "";
-    check("queue links an update to the matched person by name", text.includes("עדכון לאדוה זילברמן"));
-    check("queue links the new-person draft", text.includes("עובד חדש — לאישור"));
+    check("queue links an update to the matched person by name", text.includes(intakeUpdateLabel("אדוה זילברמן")));
+    check("queue links the new-person draft", text.includes(INTAKE_NEW_PERSON_LABEL));
 
     // ---- 3.3 complete an approval from the queue ----
     console.log("\n=== 3.3 approving a ready item ===");
-    await page.getByRole("link", { name: "עובד חדש — לאישור" }).first().click();
+    await page.getByRole("link", { name: INTAKE_NEW_PERSON_LABEL }).first().click();
     await page.waitForURL((u) => u.pathname.endsWith("/people/new"), { timeout: 15000 });
     const prefilled = await page.locator('input[name="firstName"]').inputValue();
     check("the form is prefilled from the document", prefilled.length > 0, prefilled);

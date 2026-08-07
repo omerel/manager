@@ -30,7 +30,9 @@ export default async function NewPersonPage({
     orderBy: { createdAt: "desc" },
   });
   const jobStatus = extractRun ? effectiveStatus(extractRun) : null;
-  const jobRecent = !!extractRun && Date.now() - extractRun.createdAt.getTime() < STALE_MS;
+  // one clock per request, as computePersonGaps(person, today) already does
+  const now = new Date();
+  const jobRecent = !!extractRun && now.getTime() - extractRun.createdAt.getTime() < STALE_MS;
   // job finished with a draft → jump to the pre-filled form (only if the draft still exists)
   if (!draftId && jobRecent && jobStatus === "SUCCEEDED" && extractRun!.output) {
     const exists = await prisma.personDraft.findFirst({ where: { id: extractRun!.output, createdBy: user.id }, select: { id: true } });

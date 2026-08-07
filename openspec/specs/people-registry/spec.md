@@ -8,7 +8,7 @@
 
 ### Requirement: Configurable person-card field schema
 
-The set of personal-detail fields on a person's card SHALL be a schema defined by the Admin (מנהלן), not a fixed form. This schema also defines the "required fields" that agent-assisted PDF ingestion attempts to extract. Recruitment date SHALL always be part of the schema because it anchors the plan timeline.
+The set of personal-detail fields on a person's card SHALL be a schema defined by the Admin (מנהלן), not a fixed form. This schema also defines the "required fields" that agent-assisted PDF ingestion attempts to extract. Recruitment date SHALL always be part of the schema as the person's service history; it is not what plan offsets resolve through — the unit placement date is the plan anchor.
 
 Where the schema page tells the Admin which fields are fixed and therefore not theirs to define, that list SHALL match the fields the person form actually renders, and SHALL be stated once so the page cannot present two different lists. A field the Admin is told is fixed but is not shown, or is shown but not named, misinforms the only decision the page exists to support: what still needs adding.
 
@@ -22,7 +22,7 @@ A field of type DATE SHALL be entered and displayed under the same Israeli date 
 #### Scenario: Recruitment date is mandatory in the schema
 
 - **WHEN** the Admin configures the person-card schema
-- **THEN** the schema SHALL always include recruitment date, since plan offsets anchor to it
+- **THEN** the schema SHALL always include recruitment date as service history, while plan offsets continue to resolve through the unit placement date alone
 
 #### Scenario: The fixed fields are named accurately
 

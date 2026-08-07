@@ -13,6 +13,7 @@
  *   npx tsx --env-file=.env scripts/verify-delete-authz.ts
  */
 import { readFile } from "fs/promises";
+import { readLabeledFields } from "./form-labels";
 import { chromium, type BrowserContext } from "playwright";
 import { prisma } from "../src/lib/prisma";
 import { hashPassword } from "../src/lib/password";
@@ -44,12 +45,12 @@ async function login(ctx: BrowserContext, username: string) {
  * constant the page reads would pass no matter how wrong both were.
  */
 async function readFormLabels(): Promise<Set<string>> {
-  const src = await readFile(new URL("../src/components/PersonFormFields.tsx", import.meta.url), "utf8");
+  // extraction is shared (scripts/form-labels.ts); this suite wants the field
+  // name as the card-schema page lists it, so every parenthetical goes
   const labels = new Set<string>();
-  for (const m of src.matchAll(/<Labeled label="([^"]+)">/g)) {
-    const label = m[1];
+  for (const { label } of await readLabeledFields()) {
     if (label.startsWith("גיל")) continue; // derived, not a field — asserted separately
-    labels.add(label.replace(/\s*\(.*\)\s*$/, "")); // drop the "(עוגן התכנית)" style hints
+    labels.add(label.replace(/\s*\(.*\)\s*$/, ""));
   }
   return labels;
 }

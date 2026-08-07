@@ -20,15 +20,13 @@ export function canSendFrom(kind: OrgKind): boolean {
 }
 
 /**
- * Any commander can RECEIVE. This used to exclude the center — reasoned from
- * "nobody is above them" — but recipients are chosen now and may come from any
- * direction, so being addressable follows from being commanded, not from rank.
- * Sending and receiving are different questions: `canSendFrom` still refuses
- * teams.
+ * There is deliberately NO `canReceiveAt`. Receiving used to exclude the center
+ * — reasoned from "nobody is above them" — but recipients are chosen now and may
+ * come from any direction, so being addressable follows from being commanded,
+ * not from rank. A predicate that always returned true only invited someone to
+ * restore a condition that was removed on purpose; the for-me panel is simply
+ * always present. Sending is a different question, and still refuses teams.
  */
-export function canReceiveAt(_kind: OrgKind): boolean {
-  return true;
-}
 
 /**
  * Open through the END of the due date, unless the sender ended it early.

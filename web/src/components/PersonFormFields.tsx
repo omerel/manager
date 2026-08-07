@@ -63,7 +63,7 @@ export function PersonFormFields({
           ))}
         </select>
       </Labeled>
-      <Labeled label="תאריך סיום שירות (תת״ש) — אופציונלי">
+      <Labeled label="תאריך סיום שירות (תת״ש)" hint="אופציונלי">
         <DateField name="endOfServiceDate" defaultDate={core?.endOfServiceDate} className={inputCls} />
       </Labeled>
 
@@ -101,10 +101,19 @@ export function PersonFormFields({
   );
 }
 
-function Labeled({ label, children }: { label: string; children: React.ReactNode }) {
+/**
+ * `label` is the field's name and nothing else — it is matched against the
+ * canonical list in `person-schema.ts`, so a qualifier baked into it makes the
+ * form and the card-schema page disagree about what the field is called. Say
+ * the qualifier in `hint`.
+ */
+function Labeled({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-col">
-      <label className="mb-1 text-sm text-muted">{label}</label>
+      <label className="mb-1 text-sm text-muted">
+        {label}
+        {hint && <span className="text-xs"> — {hint}</span>}
+      </label>
       {children}
     </div>
   );

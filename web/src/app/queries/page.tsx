@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/session";
 import { KIND_LABEL } from "@/lib/org-kinds";
 import { pathResolver } from "@/lib/commander";
-import { canSendFrom, canReceiveAt, isOpen, recipientsOf, commandedFrameworks } from "@/lib/queries";
+import { canSendFrom, isOpen, recipientsOf, commandedFrameworks } from "@/lib/queries";
 import { fmtDate, formatIsraeliDate, todayMarker } from "@/lib/dates";
 import { DateField } from "@/components/DateField";
 import { ConfirmSubmit } from "@/components/ConfirmSubmit";
@@ -126,7 +126,6 @@ export default async function QueriesPage({ searchParams }: { searchParams: Prom
 
   const today = todayMarker();
   const canSend = canSendFrom(me.commandsNode.kind);
-  const canReceive = canReceiveAt(me.commandsNode.kind);
 
   // Open queries first — they are what needs acting on; closed ones collapse
   // below them. The sort is stable, so inside each group the newest-first

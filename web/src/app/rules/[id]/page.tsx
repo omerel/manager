@@ -37,8 +37,11 @@ export default async function RuleDetailPage({
   const liveJob = rule.runs.find((r) => effectiveStatus(r) === "RUNNING");
   const pinning = liveJob?.kind === "PIN";
   const latestPin = rule.runs.find((r) => r.kind === "PIN");
+  // one clock per request, as computePersonGaps(person, today) already does
+  const now = new Date();
   const pinFailed =
-    !rule.pinnedAt && latestPin && effectiveStatus(latestPin) === "FAILED" && Date.now() - latestPin.createdAt.getTime() < STALE_MS;
+    !rule.pinnedAt && latestPin && effectiveStatus(latestPin) === "FAILED" &&
+    now.getTime() - latestPin.createdAt.getTime() < STALE_MS;
 
   return (
     <div className="space-y-6">

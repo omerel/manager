@@ -22,7 +22,6 @@ import { effectiveStatus, staleError, STALE_MS } from "@/lib/jobs";
 import { versionedUrl } from "@/lib/upload-version";
 import {
   updatePerson,
-  assignPlan,
   unassignPlan,
   setPointDone,
   clearPointDone,
@@ -94,7 +93,7 @@ export default async function PersonPage({
     extractJob?.status === "SUCCEEDED" &&
     extractRun.output === "0" &&
     !proposal &&
-    Date.now() - extractRun.createdAt.getTime() < STALE_MS;
+    today.getTime() - extractRun.createdAt.getTime() < STALE_MS;
 
   return (
     <div className="space-y-8">

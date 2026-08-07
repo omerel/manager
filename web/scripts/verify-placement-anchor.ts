@@ -33,13 +33,25 @@ async function main() {
   const { computePersonGaps } = await import("../src/lib/gaps");
   const TODAY = new Date("2026-08-03T00:00:00Z");
 
-  // a person with a plan that actually has items to move
+  // A subject the strong claim is meant to hold for, picked deterministically so
+  // regenerating the demo data cannot silently hand over a different one:
+  //   · plan items to move at all;
+  //   · NO end-of-service date — occurrences clip at it, and a clipped list
+  //     breaks the index-paired comparison below for a reason that is about the
+  //     fixture, not about the anchor;
+  //   · no waiver overrides, which would hide items from the timeline.
   const subject = await prisma.person.findFirstOrThrow({
-    where: { assignedPlan: { pointEvents: { some: {} } } },
+    where: {
+      assignedPlan: { pointEvents: { some: {} } },
+      endOfServiceDate: null,
+      planAssignments: { none: { endedAt: null, waivers: { some: {} } } },
+    },
+    orderBy: { id: "asc" },
     select: { id: true, fullName: true, recruitmentDate: true, placementDate: true },
   });
   const control = await prisma.person.findFirstOrThrow({
-    where: { id: { not: subject.id }, assignedPlan: { isNot: null } },
+    where: { id: { not: subject.id }, assignedPlan: { isNot: null }, endOfServiceDate: null },
+    orderBy: { id: "asc" },
     select: { id: true, fullName: true },
   });
 
@@ -113,8 +125,12 @@ async function main() {
       const p = await prisma.person.findUniqueOrThrow({ where: { id: subject.id }, select: { placementDate: true, recruitmentDate: true } });
       const fromPlacement = monthsSince(p.placementDate, TODAY);
       const fromRecruitment = monthsSince(p.recruitmentDate, TODAY);
-      check("the two axes genuinely differ for this fixture", fromPlacement !== fromRecruitment,
-        `placement ${fromPlacement} vs recruitment ${fromRecruitment}`);
+      // Precondition, asserted rather than assumed: the comparison below only
+      // means anything if recruitment is genuinely EARLIER than the synthetic
+      // placement, and the plan has items in the band between them. Otherwise a
+      // reshuffled fixture fails as though the anchor were broken.
+      check("fixture is suitable: recruitment precedes the synthetic placement",
+        fromRecruitment > fromPlacement, `placement ${fromPlacement} vs recruitment ${fromRecruitment}`);
 
       const { buildAssignmentPreview } = await import("../src/lib/plan-assignment");
       const tpl = await prisma.careerPlan.findFirstOrThrow({ where: { isTemplate: true }, select: { id: true } });
@@ -127,6 +143,8 @@ async function main() {
       // the old axis would have waived, which is the whole point of the move.
       const waivedNow = preview?.items.filter((i) => i.waivedByDefault).length ?? 0;
       const waivedOnOldAxis = preview?.items.filter((i) => i.offsetMonths <= fromRecruitment).length ?? 0;
+      check("fixture is suitable: the plan has items between the two axes",
+        waivedOnOldAxis > 0, `${waivedOnOldAxis} items at or before month ${fromRecruitment}`);
       check("far fewer items are waived than on the recruitment axis",
         waivedNow < waivedOnOldAxis, `${waivedNow} waived now vs ${waivedOnOldAxis} on the old axis`);
       check("every still-waived item genuinely predates the placement line",

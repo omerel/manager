@@ -20,7 +20,6 @@ import { prisma } from "@/lib/prisma";
 import { hashPassword } from "@/lib/password";
 import { todayMarker } from "@/lib/dates";
 import {
-  canReceiveAt,
   canSendFrom,
   commandedFrameworks,
   isOpen,
@@ -117,13 +116,15 @@ async function mkQuery(senderNodeId: string, targets: string[], dueDate: Date, a
  * direction. Sending did not flip — a team still only answers.
  */
 function capability() {
-  console.log("\n=== who may send, who may receive ===");
+  console.log("\n=== who may send ===");
+  // Receiving has no predicate to test: it follows from being commanded, and
+  // `recipientRules` below proves it against real frameworks — including a
+  // center, addressed from beneath it. A tautological `canReceiveAt(kind)`
+  // check used to stand here and could only ever agree with itself.
   check("a center commander sends", canSendFrom("CENTER"));
-  check("and, now that recipients are chosen, may also RECEIVE", canReceiveAt("CENTER"));
-  check("a team commander receives", canReceiveAt("TEAM"));
-  check("and still has nobody below to send to", !canSendFrom("TEAM"));
+  check("a team commander has nobody below to send to", !canSendFrom("TEAM"));
   for (const k of ["DOMAIN", "SECTION"] as const) {
-    check(`a ${k} commander does both`, canSendFrom(k) && canReceiveAt(k));
+    check(`a ${k} commander sends`, canSendFrom(k));
   }
 }
 
@@ -140,6 +141,14 @@ async function recipientRules(f: Fx) {
   check("commanding it makes it addressable from anywhere", await validRecipient(f.d1, f.d2));
   check("including from below — a section may address a domain", await validRecipient(f.s1, f.d2));
   check("a framework that does not exist never qualifies", !(await validRecipient(f.d1, "no-such-node")));
+
+  // the rank rule the removed predicate used to assert, tested for real: a
+  // center is addressable once commanded, including from a section below it
+  const top = await mkUser("centerboss", f.center);
+  check("a commanded CENTER is a valid recipient", await validRecipient(f.d1, f.center));
+  check("including from a section beneath it", await validRecipient(f.s1, f.center));
+  await prisma.user.delete({ where: { id: top.id } });
+  check("and stops qualifying the moment nobody commands it", !(await validRecipient(f.d1, f.center)));
 
   const offered = await commandedFrameworks();
   check("the ‎@‎ list offers exactly the commanded frameworks", offered.some((o) => o.nodeId === f.d2));

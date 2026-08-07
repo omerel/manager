@@ -16,6 +16,7 @@
  *   npx tsx scripts/verify-agent-snapshot.ts
  */
 import { readFile } from "fs/promises";
+import { readLabeledFields } from "./form-labels";
 import { prisma } from "@/lib/prisma";
 import { computeVisibility } from "@/lib/access";
 import { exportScopedSnapshot, removeSnapshot } from "@/lib/agent-snapshot";
@@ -50,13 +51,11 @@ const CARD_TO_SNAPSHOT: Record<string, string> = {
 
 /** The labels the card actually renders, read from its source. */
 async function cardFields(): Promise<string[]> {
-  const src = await readFile(new URL("../src/components/PersonFormFields.tsx", import.meta.url), "utf8");
-  const labels: string[] = [];
-  for (const m of src.matchAll(/<Labeled label="([^"]+)">/g)) {
-    // drop the parenthetical hints — "(מחושב מתאריך הלידה)", "— אופציונלי"
-    labels.push(m[1].replace(/\s*—.*$/, "").replace(/\s*\(מחושב[^)]*\)\s*$/, "").replace(/\s*\(עוגן[^)]*\)\s*$/, "").trim());
-  }
-  return labels;
+  // extraction is shared (scripts/form-labels.ts); the normalisation below is
+  // this suite's own — it wants the name a snapshot key maps to
+  return (await readLabeledFields()).map((f) =>
+    f.label.replace(/\s*\(מחושב[^)]*\)\s*$/, "").replace(/\s*\(עוגן[^)]*\)\s*$/, "").trim(),
+  );
 }
 
 async function buildSnapshot() {

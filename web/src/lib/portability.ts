@@ -69,6 +69,13 @@ export async function dumpTables(scope: BundleScope): Promise<Tables> {
     tables.planAssignment = await prisma.planAssignment.findMany();
     tables.planWaiver = await prisma.planWaiver.findMany();
     tables.planCarryOver = await prisma.planCarryOver.findMany();
+    // commander queries: a restore rebuilds every OrgNode, and Query cascades on
+    // its sender — so without these the round trip destroys the correspondence
+    tables.query = await prisma.query.findMany();
+    tables.queryTarget = await prisma.queryTarget.findMany();
+    // the audit trail. It has no foreign keys by design, precisely so an entry
+    // outlives what it describes; that is worth nothing if a restore drops it.
+    tables.activityLog = await prisma.activityLog.findMany();
   }
   return tables;
 }
@@ -140,6 +147,9 @@ async function restoreDb(bundle: Bundle): Promise<Record<string, number>> {
     prisma.personDraft.deleteMany(),
     prisma.extractionProposal.deleteMany(),
     // reverse dependency order
+    prisma.queryTarget.deleteMany(),
+    prisma.query.deleteMany(),
+    prisma.activityLog.deleteMany(), // no FKs; order is free
     prisma.planCarryOver.deleteMany(),
     prisma.planWaiver.deleteMany(),
     prisma.planAssignment.deleteMany(),
@@ -183,6 +193,10 @@ async function restoreDb(bundle: Bundle): Promise<Record<string, number>> {
           prisma.planAssignment.createMany({ data: rows(t, "planAssignment") }),
           prisma.planWaiver.createMany({ data: rows(t, "planWaiver") }),
           prisma.planCarryOver.createMany({ data: rows(t, "planCarryOver") }),
+          // after orgNode and user exist: query needs its sender, target needs both
+          prisma.query.createMany({ data: rows(t, "query") }),
+          prisma.queryTarget.createMany({ data: rows(t, "queryTarget") }),
+          prisma.activityLog.createMany({ data: rows(t, "activityLog") }),
         ]
       : []),
   ];
