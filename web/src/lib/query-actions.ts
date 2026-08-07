@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/session";
 import { parseIsraeliDate, formatIsraeliDate, todayMarker } from "@/lib/dates";
 import { commandedPath } from "@/lib/commander";
-import { canSendFrom, isOpen, mayRead, recipientsOf } from "@/lib/queries";
+import { canSendFrom, isOpen, mayRead, recipientsOf, validRecipient } from "@/lib/queries";
 import { sendReport } from "@/lib/emailer";
 import { stripMentions } from "@/lib/mentions";
 
@@ -87,9 +87,24 @@ export async function createQuery(formData: FormData) {
   if (!dueDate) throw new Error("חובה להזין תאריך אחרון למילוי בפורמט dd/mm/yyyy.");
   if (dueDate.getTime() < todayMarker().getTime()) throw new Error("התאריך האחרון למילוי כבר עבר.");
 
-  const recipients = await recipientsOf(me.commandsNodeId);
-  if (recipients.length === 0) {
-    throw new Error(`אין מסגרות תחת ${me.commandsNode.name}, ולכן אין למי לשלוח שאילתא.`);
+  // Recipients are CHOSEN now; the level below is only the form's default.
+  // The absence of the field entirely (an old form, a hand-built POST) falls
+  // back to that same default, so untouched behaviour is untouched.
+  const chosen = formData.getAll("recipients").map((v) => String(v).trim()).filter(Boolean);
+  const defaults = await recipientsOf(me.commandsNodeId);
+  const recipientIds = chosen.length > 0 || formData.has("recipientsExplicit")
+    ? [...new Set(chosen)]
+    : defaults.map((r) => r.nodeId);
+
+  if (recipientIds.length === 0) {
+    throw new Error("שאילתא צריכה נמען אחד לפחות — סמן מסגרת מהרשימה או הוסף מפקד עם @.");
+  }
+  // The form offers only legal recipients, but the form is a convenience and
+  // this is the rule: a direct child, or a commanded framework anywhere.
+  for (const id of recipientIds) {
+    if (!(await validRecipient(me.commandsNodeId, id))) {
+      throw new Error("אחד הנמענים אינו חוקי — נמען הוא מסגרת בת ישירה, או מסגרת מפוקדת בכל מקום בעץ.");
+    }
   }
 
   const query = await prisma.query.create({
@@ -99,17 +114,17 @@ export async function createQuery(formData: FormData) {
       title,
       body,
       dueDate,
-      // a row per framework — including frameworks nobody commands, which is
-      // exactly how the sender gets to see that nobody can answer for them
-      targets: { create: recipients.map((r) => ({ nodeId: r.nodeId })) },
+      // a row per chosen framework — a child with no commander stays choosable,
+      // which is exactly how the sender sees that nobody can answer for it
+      targets: { create: recipientIds.map((nodeId) => ({ nodeId })) },
     },
-    include: { targets: true },
+    include: { targets: { include: { node: { select: { commander: { select: { email: true } } } } } } },
   });
 
   const senderPath = await commandedPath(me.commandsNodeId);
   for (const t of query.targets) {
-    const who = recipients.find((r) => r.nodeId === t.nodeId)?.commander;
-    if (who?.email) mailTarget(t.id, who.email, title, notificationBody("new", query, senderPath));
+    const email = t.node.commander?.email;
+    if (email) mailTarget(t.id, email, title, notificationBody("new", query, senderPath));
   }
 
   revalidatePath("/queries");

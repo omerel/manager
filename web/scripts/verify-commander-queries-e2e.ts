@@ -100,14 +100,18 @@ async function main() {
     await teamPage.goto(`${BASE}/queries`);
     check("a team commander gets no create form — nobody below them",
       (await teamPage.locator('button:text("שלח שאילתא")').count()) === 0);
-    check("but does get the received section", (await fullText(teamPage)).includes("שאילתות רמה ממונה"));
+    check("but does get the received section, under its new name", (await fullText(teamPage)).includes("שאילתות עבורי"));
 
     console.log("\n=== sending ===");
     const dom = await signIn(browser, `${TAG}-dom`);
     await dom.goto(`${BASE}/queries`);
     check("a domain commander gets the create form", (await dom.locator('button:text("שלח שאילתא")').count()) === 1);
-    check("and no received section — nothing is addressed to them yet, but the heading exists",
-      (await fullText(dom)).includes("שאילתות רמה ממונה"));
+    check("and the for-me panel exists for them too — anyone may be addressed now",
+      (await fullText(dom)).includes("שאילתות עבורי"));
+    check("the recipients arrive pre-checked, the whole level below",
+      (await dom.locator('form:has(button:text("שלח שאילתא")) input[type="checkbox"]:checked').count()) === 2,
+      `${await dom.locator('form:has(button:text("שלח שאילתא")) input[type="checkbox"]:checked').count()} of 2`);
+    check("the uncommanded section is flagged in the checklist", (await fullText(dom)).includes("אין מפקד"));
 
     await dom.fill('input[name="title"]', `${TAG} מצב הסמכות`);
     await dom.fill('textarea[name="body"]', "נא לדווח על מצב ההסמכות ברבעון.");
@@ -117,7 +121,9 @@ async function main() {
 
     const q = await prisma.query.findFirst({ where: { title: `${TAG} מצב הסמכות` }, include: { targets: true } });
     check("the query was created", !!q);
-    check("with one row per section, exactly one level down", q?.targets.length === 2, `${q?.targets.length} targets`);
+    check("an UNTOUCHED form reaches exactly the audience the automatic rule reached — one row per section",
+      q?.targets.length === 2 && [sec1.id, sec2.id].every((id) => q!.targets.some((t) => t.nodeId === id)),
+      `${q?.targets.length} targets`);
     check("and not for the team two levels down", !q?.targets.some((t) => t.nodeId === team.id));
 
     const listed = await fullText(dom);
@@ -204,6 +210,8 @@ async function main() {
 
     console.log("\n=== closed means closed, and reopening restores it ===");
     await sec.goto(`${BASE}/queries`);
+    // the closed query folds now — expand every fold so its text is readable
+    for (const d of await sec.locator("details").all()) await d.evaluate((el) => ((el as HTMLDetailsElement).open = true));
     const secClosed = await fullText(sec);
     const stillEditable = await sec.locator('textarea[name="answer"]').count();
     check("the target can no longer edit", stillEditable === 0, stillEditable === 0 ? "form gone" : "FORM STILL PRESENT");
@@ -213,6 +221,7 @@ async function main() {
       !/שאילתות\s*[1-9]/.test(secClosed) ? "badge clear" : "BADGE STILL COUNTING");
 
     await dom.goto(`${BASE}/queries`);
+    for (const d of await dom.locator("details").all()) await d.evaluate((el) => ((el as HTMLDetailsElement).open = true));
     await dom.locator('button:text("פתח מחדש")').first().click();
     await dom.waitForTimeout(2000);
     check("reopening clears the early close",
@@ -246,6 +255,112 @@ async function main() {
     check("the team commander still has no send form", teamCmd.commandsNodeId === team.id);
     await teamPage.goto(`${BASE}/queries`);
     check("confirmed in the page", (await teamPage.locator('button:text("שלח שאילתא")').count()) === 0);
+    console.log("\n=== choosing recipients ===");
+    // uncheck ONE default recipient and prove that framework got nothing
+    await dom.goto(`${BASE}/queries`);
+    const form = dom.locator('form:has(button:text("שלח שאילתא"))');
+    await form.locator('input[name="title"]').fill(`${TAG} ממוקדת`);
+    await form.locator('textarea[name="body"]').fill("רק למדור אחד.");
+    await form.locator('input[name="dueDate"]').fill(inDays(6));
+    // uncheck the box whose label names sec2
+    await form.locator(`label:has-text("${TAG} מדור ב") input[type="checkbox"]`).uncheck();
+    await form.locator('button:text("שלח שאילתא")').click();
+    await dom.waitForTimeout(2500);
+    const narrow = await prisma.query.findFirstOrThrow({ where: { title: `${TAG} ממוקדת` }, include: { targets: true } });
+    check("only the checked framework is a target", narrow.targets.length === 1 && narrow.targets[0].nodeId === sec1.id,
+      `${narrow.targets.length} targets`);
+    check("the unchecked one got NOTHING — no row, no trace",
+      (await prisma.queryTarget.count({ where: { queryId: narrow.id, nodeId: sec2.id } })) === 0);
+
+    // unchecking EVERYTHING is refused, not silently defaulted
+    await dom.goto(`${BASE}/queries`);
+    const form2 = dom.locator('form:has(button:text("שלח שאילתא"))');
+    await form2.locator('input[name="title"]').fill(`${TAG} ריקה`);
+    await form2.locator('textarea[name="body"]').fill("בלי נמענים.");
+    await form2.locator('input[name="dueDate"]').fill(inDays(6));
+    for (const box of await form2.locator('input[type="checkbox"]').all()) await box.uncheck();
+    await form2.locator('button:text("שלח שאילתא")').click();
+    await dom.waitForTimeout(2000);
+    check("no recipients → refused", (await prisma.query.count({ where: { title: `${TAG} ריקה` } })) === 0);
+    check("with a message asking for one", (await fullText(dom)).includes("נמען אחד לפחות"));
+
+    console.log("\n=== ‎@‎ reaches across the tree ===");
+    // the TEAM commander (below sec1, another branch relative to sec2) becomes addressable
+    await dom.goto(`${BASE}/queries`);
+    const form3 = dom.locator('form:has(button:text("שלח שאילתא"))');
+    await form3.locator('input[name="title"]').fill(`${TAG} חוצת-ענף`);
+    await form3.locator('textarea[name="body"]').fill("גם לצוות, שאינו בדרגה שמתחתי.");
+    await form3.locator('input[name="dueDate"]').fill(inDays(6));
+    await form3.locator('input[placeholder*="הוסף מפקד"]').fill(`${TAG} צוות`);
+    await dom.waitForTimeout(600);
+    await dom.locator(`button:has-text("${TAG} צוות")`).last().click();
+    await dom.waitForTimeout(400);
+    await form3.locator('button:text("שלח שאילתא")').click();
+    await dom.waitForTimeout(2500);
+    const cross = await prisma.query.findFirstOrThrow({ where: { title: `${TAG} חוצת-ענף` }, include: { targets: true } });
+    check("the ‎@‎-added framework is a target alongside the defaults",
+      cross.targets.some((t) => t.nodeId === team.id) && cross.targets.length === 3, `${cross.targets.length} targets`);
+    await teamPage.goto(`${BASE}/queries`);
+    const teamSees2 = await fullText(teamPage);
+    check("its commander sees the query in שאילתות עבורי — two levels below the sender",
+      teamSees2.includes(`${TAG} חוצת-ענף`));
+    await teamPage.locator('form:has(button:text("שלח תשובה")) textarea[name="answer"]').first().fill("תשובת הצוות.");
+    await teamPage.locator('button:text("שלח תשובה")').first().click();
+    await teamPage.waitForTimeout(2000);
+    const teamRow = await prisma.queryTarget.findFirstOrThrow({ where: { queryId: cross.id, nodeId: team.id } });
+    check("they can answer it", teamRow.answer === "תשובת הצוות.");
+    await dom.goto(`${BASE}/queries`);
+    check("and the sender reads the answer and the tally counts it",
+      (await fullText(dom)).includes("תשובת הצוות."));
+
+    console.log("\n=== the two panels, the fold, and the side chooser ===");
+    // close one query so the fold has something real to show — and note the
+    // marker: the edit-content disclosure is ALSO a <details>, so the folded
+    // queries carry data-folded-query and the checks select on that, not on
+    // the tag
+    await dom.goto(`${BASE}/queries`);
+    await dom.locator(`div.rounded-xl:has-text("${TAG} ממוקדת") button:text("סגור שאילתא")`).first().click();
+    await dom.waitForTimeout(2000);
+    await dom.goto(`${BASE}/queries`);
+    const layoutText = await fullText(dom);
+    check("both panels are present", layoutText.includes("השאילתות שלי") && layoutText.includes("שאילתות עבורי"));
+    const folded = await dom.locator("details[data-folded-query]").count();
+    check("the closed query renders folded", folded === 1, `${folded} folded`);
+    check("with the green check on its summary line",
+      (await dom.locator('details[data-folded-query] summary svg').count()) >= 1);
+    const kinds = await dom
+      .locator('section:has(h2:text("השאילתות שלי")) > div.rounded-xl, section:has(h2:text("השאילתות שלי")) > details[data-folded-query]')
+      .evaluateAll((els) => els.map((el) => el.tagName));
+    const firstDetails = kinds.indexOf("DETAILS");
+    check("open queries come before folded ones", firstDetails === kinds.length - 1 && kinds.lastIndexOf("DIV") < firstDetails,
+      kinds.join(","));
+    const firstFold = dom.locator("details[data-folded-query]").first();
+    await firstFold.locator("> summary").click();
+    await dom.waitForTimeout(300);
+    check("expanding a folded query reveals its actions",
+      (await firstFold.locator('button:text("פתח מחדש"), button:text("סגור שאילתא"), button:text("מחק שאילתא")').count()) > 0,
+      "reopen/delete reachable inside the fold");
+
+    // the side chooser: assert on the section headings, not on page text —
+    // the chooser's own option labels contain both panel names
+    const mineHeading = 'section h2:text-is("השאילתות שלי")';
+    const formeHeading = 'section h2:text-is("שאילתות עבורי")';
+    await dom.goto(`${BASE}/queries?side=mine`);
+    check("side=mine hides the for-me panel",
+      (await dom.locator(mineHeading).count()) === 1 && (await dom.locator(formeHeading).count()) === 0);
+    await dom.goto(`${BASE}/queries?side=forme`);
+    check("side=forme hides mine",
+      (await dom.locator(formeHeading).count()) === 1 && (await dom.locator(mineHeading).count()) === 0);
+    await dom.reload();
+    await dom.waitForTimeout(1000);
+    check("the side choice survives a reload", (await dom.locator(mineHeading).count()) === 0);
+    // reopen the query we closed, so later sections meet the state they expect
+    for (const d of await dom.locator("details[data-folded-query]").all()) await d.evaluate((el) => ((el as HTMLDetailsElement).open = true));
+    await dom.goto(`${BASE}/queries`);
+    for (const d of await dom.locator("details[data-folded-query]").all()) await d.evaluate((el) => ((el as HTMLDetailsElement).open = true));
+    await dom.locator('button:text("פתח מחדש")').first().click();
+    await dom.waitForTimeout(1500);
+
     console.log("\n=== tagging a person ===");
     // a person inside sec1, visible to both the domain and the section commander
     const person = await prisma.person.create({

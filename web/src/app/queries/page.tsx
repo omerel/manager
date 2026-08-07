@@ -1,15 +1,16 @@
 import Link from "next/link";
 import { after } from "next/server";
-import { AlertTriangle, MailWarning, UserX, Sparkles } from "lucide-react";
+import { AlertTriangle, CheckCircle2, MailWarning, UserX, Sparkles } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/session";
 import { KIND_LABEL } from "@/lib/org-kinds";
 import { pathResolver } from "@/lib/commander";
-import { canSendFrom, canReceiveAt, isOpen } from "@/lib/queries";
+import { canSendFrom, canReceiveAt, isOpen, recipientsOf, commandedFrameworks } from "@/lib/queries";
 import { fmtDate, formatIsraeliDate, todayMarker } from "@/lib/dates";
 import { DateField } from "@/components/DateField";
 import { ConfirmSubmit } from "@/components/ConfirmSubmit";
 import { MentionTextarea, type MentionablePerson } from "@/components/MentionTextarea";
+import { RecipientPicker, type AddableFramework, type DefaultRecipient } from "@/components/RecipientPicker";
 import { MentionText, type MentionDirectory } from "@/components/MentionText";
 import { mentionedIds } from "@/lib/mentions";
 import { computeVisibility } from "@/lib/access";
@@ -17,8 +18,9 @@ import { createQuery, answerQuery, updateQueryDue, updateQueryContent, remindTar
 
 const inputCls = "rounded-md border border-border px-3 py-1.5 text-sm";
 
-export default async function QueriesPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
-  const { q: rawQuery } = await searchParams;
+export default async function QueriesPage({ searchParams }: { searchParams: Promise<{ q?: string; side?: string }> }) {
+  const { q: rawQuery, side: rawSide } = await searchParams;
+  const side = rawSide === "mine" || rawSide === "forme" ? rawSide : "all";
   const query = (rawQuery ?? "").trim();
   const session = await getSessionUser();
   const me = await prisma.user.findUnique({
@@ -126,6 +128,29 @@ export default async function QueriesPage({ searchParams }: { searchParams: Prom
   const canSend = canSendFrom(me.commandsNode.kind);
   const canReceive = canReceiveAt(me.commandsNode.kind);
 
+  // Open queries first — they are what needs acting on; closed ones collapse
+  // below them. The sort is stable, so inside each group the newest-first
+  // ordering from the database survives.
+  const openFirst = <T,>(arr: T[], opened: (x: T) => boolean) =>
+    [...arr].sort((a, b) => Number(opened(b)) - Number(opened(a)));
+  const sentSorted = openFirst(sent, (q) => isOpen(q));
+  const receivedSorted = openFirst(received, (t) => isOpen(t.query));
+
+  const showMine = canSend && side !== "forme";
+  const showForMe = side !== "mine"; // every commander may be addressed now
+
+  // the level below (the pre-checked default), and every commanded framework
+  // anywhere (what ‎@‎ may add)
+  const [defaults, commanded] = canSend
+    ? await Promise.all([recipientsOf(mine), commandedFrameworks()])
+    : [[], []];
+  const defaultRecipients: DefaultRecipient[] = defaults.map((r) => ({
+    nodeId: r.nodeId, name: r.name, kind: r.kind, commanderName: r.commander?.name ?? null,
+  }));
+  const addableFrameworks: AddableFramework[] = commanded
+    .filter((c) => c.nodeId !== mine)
+    .map((c) => ({ nodeId: c.nodeId, path: c.path, kind: c.kind, commanderName: c.commander!.name }));
+
   return (
     <div className="space-y-6">
       <div>
@@ -144,8 +169,13 @@ export default async function QueriesPage({ searchParams }: { searchParams: Prom
           placeholder="חיפוש לפי כותרת, תוכן, תשובה או מסגרת…"
           className={`w-80 bg-card ${inputCls}`}
         />
+        <select name="side" defaultValue={side} className={`bg-card ${inputCls}`}>
+          <option value="all">שני הצדדים</option>
+          <option value="mine">רק השאילתות שלי</option>
+          <option value="forme">רק שאילתות עבורי</option>
+        </select>
         <button className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-slate-50">חפש</button>
-        {query && (
+        {(query || side !== "all") && (
           <Link href="/queries" className="rounded-md px-3 py-1.5 text-sm text-muted hover:underline">
             נקה
           </Link>
@@ -172,30 +202,32 @@ export default async function QueriesPage({ searchParams }: { searchParams: Prom
               <label htmlFor="body" className="mb-1 text-sm text-muted">תוכן קצר</label>
               <MentionTextarea name="body" people={mentionable} required rows={3} className={`${inputCls} w-full`} />
             </div>
+            <RecipientPicker defaults={defaultRecipients} addable={addableFrameworks} />
             <button className="rounded-md bg-brand-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-brand-700">
               שלח שאילתא
             </button>
             <p className="text-xs text-muted">
-              השאילתא נשלחת למסגרות שדרגה אחת מתחתיך בלבד, ולמפקדיהן נשלח מייל. התאריך ניתן לשינוי גם אחר כך. הקלד ‎@‎ כדי
-              לתייג אדם — לחיצה על התיוג תפתח את כרטיסו בלשונית חדשה.
+              ברירת המחדל: כל הדרגה שמתחתיך. אפשר להסיר, ואפשר לצרף ב-‎@‎ מפקד של כל מסגרת בעץ. למפקדי הנמענים נשלח מייל.
+              בגוף הטקסט, ‎@‎ מתייג אדם — לחיצה על התיוג תפתח את כרטיסו בלשונית חדשה.
             </p>
           </form>
         </section>
       )}
 
-      {canSend && (
+      <div className={`grid grid-cols-1 gap-6 ${showMine && showForMe ? "xl:grid-cols-2" : ""}`}>
+      {showMine && (
         <section className="space-y-3">
           <h2 className="font-semibold">השאילתות שלי</h2>
           {sent.length === 0 ? (
             <p className="text-muted">{query ? `אין שאילתות ששלחת התואמות ל״${query}״.` : "טרם שלחת שאילתות."}</p>
           ) : (
-            sent.map((q) => {
+            sentSorted.map((q) => {
               const open = isOpen(q);
               const pending = q.targets.filter((t) => !t.answer).length;
               const answered = q.targets.length - pending;
               const frozen = q.targets.some((t) => t.answer);
-              return (
-                <div key={q.id} className="rounded-xl border border-border/70 bg-card p-4 shadow-sm">
+              const inner = (
+                <>
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <span className="flex items-center gap-2">
                       <span className="font-semibold">{q.title}</span>
@@ -322,23 +354,49 @@ export default async function QueriesPage({ searchParams }: { searchParams: Prom
                       </p>
                     )}
                   </div>
-                </div>
+                </>
+              );
+              // Open: a full card, prominent. Closed: folded to one summary
+              // line — a green check, the title, the tally — expanding to the
+              // same card with every action (reopen, delete, read) intact.
+              if (open) {
+                return (
+                  <div key={q.id} className="rounded-xl border border-border/70 bg-card p-4 shadow-sm">
+                    {inner}
+                  </div>
+                );
+              }
+              return (
+                <details key={q.id} data-folded-query className="rounded-xl border border-border/70 bg-card shadow-sm">
+                  <summary className="flex cursor-pointer select-none flex-wrap items-center gap-2 px-4 py-2.5 text-sm hover:bg-stone-50">
+                    <CheckCircle2 className="h-4 w-4 shrink-0 text-green-600" aria-hidden />
+                    <span className="font-medium">{q.title}</span>
+                    <span className="text-xs text-muted">
+                      {answered}/{q.targets.length} הגיבו · עד {formatIsraeliDate(q.dueDate)}
+                    </span>
+                  </summary>
+                  <div className="border-t border-border/70 p-4">{inner}</div>
+                </details>
               );
             })
           )}
         </section>
       )}
 
-      {canReceive && (
+      {showForMe && (
         <section className="space-y-3">
-          <h2 className="font-semibold">שאילתות רמה ממונה</h2>
+          <h2 className="font-semibold">שאילתות עבורי</h2>
           {received.length === 0 ? (
-            <p className="text-muted">{query ? `אין שאילתות שקיבלת התואמות ל״${query}״.` : "לא התקבלו שאילתות."}</p>
+            <p className="text-muted">
+              {query
+                ? `אין שאילתות שקיבלת התואמות ל״${query}״.`
+                : "לא התקבלו שאילתות. כשמפקד כלשהו יפנה אל המסגרת שלך — מלמעלה, מהצד או מלמטה — השאילתא תופיע כאן."}
+            </p>
           ) : (
-            received.map((t) => {
+            receivedSorted.map((t) => {
               const open = isOpen(t.query);
-              return (
-                <div key={t.id} className="rounded-xl border border-border/70 bg-card p-4 shadow-sm">
+              const inner = (
+                <>
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <span className="flex items-center gap-2">
                       <span className="font-semibold">{t.query.title}</span>
@@ -389,12 +447,32 @@ export default async function QueriesPage({ searchParams }: { searchParams: Prom
                       )}
                     </div>
                   )}
-                </div>
+                </>
+              );
+              if (open) {
+                return (
+                  <div key={t.id} className="rounded-xl border border-border/70 bg-card p-4 shadow-sm">
+                    {inner}
+                  </div>
+                );
+              }
+              return (
+                <details key={t.id} data-folded-query className="rounded-xl border border-border/70 bg-card shadow-sm">
+                  <summary className="flex cursor-pointer select-none flex-wrap items-center gap-2 px-4 py-2.5 text-sm hover:bg-stone-50">
+                    <CheckCircle2 className="h-4 w-4 shrink-0 text-green-600" aria-hidden />
+                    <span className="font-medium">{t.query.title}</span>
+                    <span className="text-xs text-muted">
+                      {t.answer ? "נענתה" : "לא נענתה"} · עד {formatIsraeliDate(t.query.dueDate)}
+                    </span>
+                  </summary>
+                  <div className="border-t border-border/70 p-4">{inner}</div>
+                </details>
               );
             })
           )}
         </section>
       )}
+      </div>
     </div>
   );
 }

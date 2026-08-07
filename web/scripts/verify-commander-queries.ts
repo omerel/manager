@@ -19,7 +19,18 @@
 import { prisma } from "@/lib/prisma";
 import { hashPassword } from "@/lib/password";
 import { todayMarker } from "@/lib/dates";
-import { canReceiveAt, canSendFrom, isOpen, mayAnswer, mayRead, outstandingCount, queryBadge, recipientsOf } from "@/lib/queries";
+import {
+  canReceiveAt,
+  canSendFrom,
+  commandedFrameworks,
+  isOpen,
+  mayAnswer,
+  mayRead,
+  outstandingCount,
+  queryBadge,
+  recipientsOf,
+  validRecipient,
+} from "@/lib/queries";
 
 const TAG = "cqverify";
 const MAIL = `@${TAG}.invalid`;
@@ -98,16 +109,43 @@ async function mkQuery(senderNodeId: string, targets: string[], dueDate: Date, a
   });
 }
 
-/** 1 — who may send and who may receive. */
+/**
+ * 1 — who may send and who may receive.
+ *
+ * Receiving flipped when recipients became chosen: it used to exclude the
+ * center ("nobody above"), and now ANY commander may be addressed, from any
+ * direction. Sending did not flip — a team still only answers.
+ */
 function capability() {
   console.log("\n=== who may send, who may receive ===");
   check("a center commander sends", canSendFrom("CENTER"));
-  check("and has nobody above", !canReceiveAt("CENTER"));
+  check("and, now that recipients are chosen, may also RECEIVE", canReceiveAt("CENTER"));
   check("a team commander receives", canReceiveAt("TEAM"));
-  check("and has nobody below", !canSendFrom("TEAM"));
+  check("and still has nobody below to send to", !canSendFrom("TEAM"));
   for (const k of ["DOMAIN", "SECTION"] as const) {
     check(`a ${k} commander does both`, canSendFrom(k) && canReceiveAt(k));
   }
+}
+
+/** 1b — who may be a recipient of whose query. */
+async function recipientRules(f: Fx) {
+  console.log("\n=== a recipient is a child, or a commanded framework anywhere ===");
+  for (const n of [f.center, f.d2]) await releaseCommand(n);
+
+  check("a direct child qualifies even with NO commander", await validRecipient(f.d1, f.s1),
+    "the empty row tells the sender someone needs appointing");
+  check("an uncommanded framework elsewhere does NOT", !(await validRecipient(f.d1, f.d2)),
+    "a dead letter nobody could answer");
+  const boss = await mkUser("crossboss", f.d2);
+  check("commanding it makes it addressable from anywhere", await validRecipient(f.d1, f.d2));
+  check("including from below — a section may address a domain", await validRecipient(f.s1, f.d2));
+  check("a framework that does not exist never qualifies", !(await validRecipient(f.d1, "no-such-node")));
+
+  const offered = await commandedFrameworks();
+  check("the ‎@‎ list offers exactly the commanded frameworks", offered.some((o) => o.nodeId === f.d2));
+  check("and none of the uncommanded ones", !offered.some((o) => o.nodeId === f.center));
+  check("labelled by full path", offered.every((o) => o.commander && (o.path.includes("▸") || o.kind === "CENTER")));
+  await prisma.user.delete({ where: { id: boss.id } });
 }
 
 /** 2 — recipients are exactly one level down. */
@@ -434,6 +472,7 @@ async function main() {
   const f = await scaffold();
   try {
     capability();
+    await recipientRules(f);
     await recipients(f);
     derived();
     await audience(f);

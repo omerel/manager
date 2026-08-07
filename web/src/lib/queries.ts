@@ -14,12 +14,20 @@ import { pathResolver } from "@/lib/commander";
  * the sender ended it early. See `isOpen`.
  */
 
-/** A commander of a CENTER has nobody above; a commander of a TEAM has nobody below. */
+/** A commander of a TEAM has nobody below, so the lowest level only answers. */
 export function canSendFrom(kind: OrgKind): boolean {
   return kind !== "TEAM";
 }
-export function canReceiveAt(kind: OrgKind): boolean {
-  return kind !== "CENTER";
+
+/**
+ * Any commander can RECEIVE. This used to exclude the center — reasoned from
+ * "nobody is above them" — but recipients are chosen now and may come from any
+ * direction, so being addressable follows from being commanded, not from rank.
+ * Sending and receiving are different questions: `canSendFrom` still refuses
+ * teams.
+ */
+export function canReceiveAt(_kind: OrgKind): boolean {
+  return true;
 }
 
 /**
@@ -74,6 +82,41 @@ export async function recipientsOf(nodeId: string): Promise<Recipient[]> {
       commander: c.commander ?? null,
     }))
     .sort((a, b) => a.path.localeCompare(b.path, "he"));
+}
+
+/**
+ * Every framework that currently has a commander — what the ‎@‎ picker offers.
+ *
+ * Only commanded ones: the level-below checklist keeps showing uncommanded
+ * children as "אין מפקד" rows because there the absence is information, but an
+ * EXPLICITLY added target nobody can answer would just be a dead letter.
+ */
+export async function commandedFrameworks(): Promise<Recipient[]> {
+  const nodes = await prisma.orgNode.findMany({
+    include: { commander: { select: { id: true, name: true, email: true } } },
+  });
+  const resolve = pathResolver(nodes);
+  return nodes
+    .filter((n) => n.commander)
+    .map((n) => ({ nodeId: n.id, name: n.name, path: resolve(n.id), kind: n.kind, commander: n.commander! }))
+    .sort((a, b) => a.path.localeCompare(b.path, "he"));
+}
+
+/**
+ * May this framework be a recipient of a query from `senderNodeId`?
+ *
+ * Two doors in: a DIRECT CHILD (the default audience — commanded or not, since
+ * an empty child row tells the sender someone needs appointing), or any
+ * COMMANDED framework anywhere (the ‎@‎ route). Checked by the action, not only
+ * offered by the form: the form is a convenience, this is the rule.
+ */
+export async function validRecipient(senderNodeId: string, nodeId: string): Promise<boolean> {
+  const node = await prisma.orgNode.findUnique({
+    where: { id: nodeId },
+    select: { parentId: true, commander: { select: { id: true } } },
+  });
+  if (!node) return false;
+  return node.parentId === senderNodeId || !!node.commander;
 }
 
 /**
