@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { parseIsraeliDate } from "@/lib/dates";
 import { computeVisibility } from "@/lib/access";
 import { getSessionUser } from "@/lib/session";
-import { getEditableTeams } from "@/lib/people";
+import { getEnrollableTeams } from "@/lib/people";
 import { getFieldDefs } from "@/lib/person-schema";
 import { PersonFormFields } from "@/components/PersonFormFields";
 import { createPerson } from "@/lib/person-actions";
@@ -22,7 +22,7 @@ export default async function NewPersonPage({
   const { draft: draftId, extracting, busy } = await searchParams;
   const user = await getSessionUser();
   const visibility = await computeVisibility(user);
-  const [teams, defs] = await Promise.all([getEditableTeams(visibility), getFieldDefs()]);
+  const [teams, defs] = await Promise.all([getEnrollableTeams(visibility), getFieldDefs()]);
 
   // background new-person extraction job for this user
   const extractRun = await prisma.agentRun.findFirst({
@@ -63,7 +63,9 @@ export default async function NewPersonPage({
       </div>
 
       {teams.length === 0 ? (
-        <p className="text-muted">אין לך מסגרת עם הרשאת עריכה שאפשר לשייך אליה עובד.</p>
+        <p className="text-muted">
+          הוספת עובד מותרת למפקד מסגרת ברמת מדור ומעלה — אין לך מסגרת כזו שאפשר לשייך אליה עובד.
+        </p>
       ) : (
         <>
           {/* Create-from-document */}

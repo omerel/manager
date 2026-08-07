@@ -30,6 +30,9 @@ export type PeopleRow = {
   planName: string | null;
   planTemplateId: string | null;
   photoPath: string | null;
+  /** may the viewer remove this person — decided on the server by the same
+   *  predicate `removePerson` enforces, per row because it follows their team */
+  canDelete: boolean;
   /** counts the delete confirmation states; came down with the list, not on demand */
   impact: DeletionImpact;
 };
@@ -42,7 +45,10 @@ const EMPTY: Filters = { name: "", org: "", date: "", status: "", plan: "" };
 const has = (haystack: string, needle: string) =>
   haystack.toLowerCase().includes(needle.trim().toLowerCase());
 
-export function PeopleTable({ rows, admin = false }: { rows: PeopleRow[]; admin?: boolean }) {
+export function PeopleTable({ rows }: { rows: PeopleRow[] }) {
+  // the column exists when the viewer may delete anyone here; the control
+  // itself is then per row, because authority follows each person's team
+  const anyDeletable = rows.some((r) => r.canDelete);
   const [f, setF] = useState<Filters>(EMPTY);
   const [pendingDelete, setPendingDelete] = useState<PeopleRow | null>(null);
   const active = Object.values(f).some((v) => v !== "");
@@ -110,7 +116,7 @@ export function PeopleTable({ rows, admin = false }: { rows: PeopleRow[]; admin?
               <Th>מסלול קריירה</Th>
               <Th>תאריך גיוס</Th>
               <Th>סטטוס</Th>
-              {admin && <th className="px-4 py-2 text-start font-medium sr-only">פעולות</th>}
+              {anyDeletable && <th className="px-4 py-2 text-start font-medium sr-only">פעולות</th>}
             </tr>
             <tr className="border-t border-border">
               <Td>
@@ -142,7 +148,7 @@ export function PeopleTable({ rows, admin = false }: { rows: PeopleRow[]; admin?
                   ))}
                 </select>
               </Td>
-              {admin && <Td> </Td>}
+              {anyDeletable && <Td> </Td>}
             </tr>
           </thead>
           <tbody>
@@ -183,8 +189,9 @@ export function PeopleTable({ rows, admin = false }: { rows: PeopleRow[]; admin?
                 </td>
                 <td className="px-4 py-2.5">{p.recruitmentDateLabel}</td>
                 <td className="px-4 py-2.5">{p.statusLabel}</td>
-                {admin && (
+                {anyDeletable && (
                   <td className="px-4 py-2.5 text-end">
+                    {p.canDelete && (
                     <button
                       type="button"
                       onClick={() => setPendingDelete(p)}
@@ -193,6 +200,7 @@ export function PeopleTable({ rows, admin = false }: { rows: PeopleRow[]; admin?
                     >
                       <Trash2 className="h-3.5 w-3.5" aria-hidden />
                     </button>
+                    )}
                   </td>
                 )}
               </tr>

@@ -70,7 +70,9 @@ user-switcher (impersonation). Leave it unset in any real deployment.
   field-by-field approval. Nothing is written without a human accepting it.
 - **Access control** — a user's visibility is the union of their granted org-tree
   subtrees (`access.ts`); command of a framework is separate from visibility of it
-  (`commander.ts`). The dashboard, rollups, people list and agent all re-clip per
+  (`commander.ts`). Editing someone's details needs EDIT over their team, but
+  *enrolling* or *removing* a person needs an EDIT grant sitting on a section or
+  above — an establishment act, not data entry (`mayEstablishAt`). The dashboard, rollups, people list and agent all re-clip per
   signed-in user.
 - **Activity log** — `/system/activity`: who changed what and when, for the Admin
   to investigate with.

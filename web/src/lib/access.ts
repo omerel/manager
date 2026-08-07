@@ -42,12 +42,27 @@ function buildSubtreeIndex(nodes: OrgNode[]): Map<string, Set<string>> {
   return subtree;
 }
 
+/** Node kinds at section level and above — the ranks that carry establishment authority. */
+const ESTABLISHMENT_KINDS: ReadonlySet<string> = new Set(["SECTION", "DOMAIN", "CENTER"]);
+
 export type Visibility = {
   /** All node ids the user may see (union of granted subtrees; whole tree for admins). */
   nodeIds: Set<string>;
   /** Effective access level per visible node id. */
   levelOf: (nodeId: string) => AccessLevel | null;
   canEdit: (nodeId: string) => boolean;
+  /**
+   * May the user perform an establishment act here — enrolling a person into
+   * this framework, or removing one from it?
+   *
+   * Deliberately not called `canEditAt`: it answers a question `canEdit` cannot.
+   * A grant spreads its level down its whole subtree, so `canEdit(team)` is
+   * identical whether the grant sat on the team or on the section above it —
+   * the level map remembers *what* you may do at a node, never *where* the
+   * grant allowing it sits. This asks the second question: does the authority
+   * come from a grant at section level or above?
+   */
+  mayEstablishAt: (nodeId: string) => boolean;
   isAdmin: boolean;
 };
 
@@ -71,23 +86,31 @@ export async function computeVisibility(user: SessionUser): Promise<Visibility> 
  */
 export function visibilityFrom(nodes: OrgNode[], user: SessionUser): Visibility {
   const subtree = buildSubtreeIndex(nodes);
+  const kindOf = new Map(nodes.map((n) => [n.id, n.kind as string]));
 
   const nodeIds = new Set<string>();
   const level = new Map<string, AccessLevel>();
+  // Establishment authority is computed in this same walk, not by a second
+  // helper: a grant contributes to it only when the grant's OWN node is a
+  // section or above and its level is EDIT. Same subtree, different question.
+  const establish = new Set<string>();
 
   if (user.role === "ADMIN") {
     for (const n of nodes) {
       nodeIds.add(n.id);
       level.set(n.id, "EDIT");
+      establish.add(n.id);
     }
   } else {
     for (const grant of user.grants) {
+      const senior = grant.level === "EDIT" && ESTABLISHMENT_KINDS.has(kindOf.get(grant.nodeId) ?? "");
       for (const id of subtree.get(grant.nodeId) ?? []) {
         nodeIds.add(id);
         const current = level.get(id);
         if (!current || LEVEL_RANK[grant.level] > LEVEL_RANK[current]) {
           level.set(id, grant.level);
         }
+        if (senior) establish.add(id);
       }
     }
   }
@@ -96,6 +119,7 @@ export function visibilityFrom(nodes: OrgNode[], user: SessionUser): Visibility 
     nodeIds,
     levelOf: (id) => level.get(id) ?? null,
     canEdit: (id) => level.get(id) === "EDIT",
+    mayEstablishAt: (id) => establish.has(id),
     isAdmin: user.role === "ADMIN",
   };
 }

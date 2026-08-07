@@ -47,7 +47,7 @@ The end-of-service field SHALL be named with the term the organisation uses — 
 
 #### Scenario: Creating a person
 
-- **WHEN** an edit-level Manager creates a person with first name, last name, date of birth, recruitment date, unit placement date and team placement
+- **WHEN** a Manager with establishment authority creates a person with first name, last name, date of birth, recruitment date, unit placement date and team placement
 - **THEN** the system SHALL store the record and resolve their org path from the team
 
 #### Scenario: Age is derived
@@ -211,25 +211,60 @@ Each column of the people list SHALL be filterable, and the table SHALL narrow a
 - **WHEN** any combination of filters is applied
 - **THEN** the result is a subset of the people that user was already permitted to see
 
-### Requirement: An admin can delete a person from the people list
+### Requirement: Enrolling and removing a person are section-level acts
 
-The people list SHALL offer the Admin, and only the Admin, a control that deletes a person from the system. The control SHALL NOT appear for other roles, and the deletion SHALL be refused on the server when requested by a non-admin, so that hiding the control is presentation and not the protection itself.
+Creating a person SHALL require establishment authority over the team they are being placed on, and deleting a person SHALL require it over their team. Correcting an existing person's details SHALL NOT — it requires only edit rights over their team, which the commander closest to them holds.
+
+A person belonging to no team SHALL be removable by the Admin alone, there being no framework above them from which authority could derive.
+
+The controls for these acts SHALL be shown to a user exactly when that user may perform them.
+
+#### Scenario: A team commander corrects details but does not enrol
+
+- **WHEN** a Manager whose edit grant sits on a team opens a person on that team
+- **THEN** they may change that person's details, and are offered no control to add a person or to delete one
+
+#### Scenario: A section commander does both
+
+- **WHEN** a Manager holding edit on a section opens the people list
+- **THEN** they are offered the control to enrol a new person, and the control to delete a person beneath their section
+
+#### Scenario: The form offers only teams the user may enrol into
+
+- **WHEN** a Manager opens the new-person form
+- **THEN** the team choices are exactly the teams over which they hold establishment authority
+
+#### Scenario: An unassigned person is the Admin's alone
+
+- **WHEN** a person has no team and a Manager attempts to delete them
+- **THEN** the system SHALL refuse, and the Admin SHALL still be able to
+
+#### Scenario: The refusal holds regardless of what was displayed
+
+- **WHEN** a create or delete request arrives for a framework the sender lacks authority over
+- **THEN** the system SHALL refuse it on the server, whatever the interface offered
+
+### Requirement: Deleting a person from the people list
+
+The people list SHALL offer a control that deletes a person to the users who hold establishment authority over that person's framework — a commander with edit rights granted at section level or above, and the Admin. The control SHALL NOT appear for anyone else, and the deletion SHALL be refused on the server when requested by a user without that authority, so that hiding the control is presentation and not the protection itself.
+
+Because the authority follows each person's own framework, the control SHALL be decided per person and not per viewer: a commander may see it on one row and not on another.
 
 Deletion SHALL be distinct from departure. A person who has left service is recorded through their employment status and keeps their record; deleting a person is for a record that should not exist.
 
-#### Scenario: An admin deletes a person
+#### Scenario: A section commander deletes a person
 
-- **WHEN** the Admin confirms deletion of a person
+- **WHEN** a commander with establishment authority confirms deletion of a person beneath them
 - **THEN** the person disappears from the people list, from the gap dashboard and from every framework they were counted under
 
-#### Scenario: A manager cannot delete
+#### Scenario: A team commander cannot delete
 
-- **WHEN** a user who is not the Admin views the people list
-- **THEN** no delete control is offered for any person
+- **WHEN** a Manager whose edit grant sits on a team views the people list
+- **THEN** no delete control is offered for any person, including those on their own team
 
-#### Scenario: A non-admin submits the deletion directly
+#### Scenario: An unauthorized deletion submitted directly
 
-- **WHEN** a request to delete a person arrives from a user who is not the Admin
+- **WHEN** a request to delete a person arrives from a user without establishment authority over that person's framework
 - **THEN** the request is refused and the person remains in the system
 
 ### Requirement: Deleting a person leaves nothing behind

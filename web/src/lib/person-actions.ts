@@ -3,7 +3,13 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { requireAdmin, requireEditForNode, requireEditForPerson } from "@/lib/authz";
+import {
+  requireAdmin,
+  requireEditForNode,
+  requireEditForPerson,
+  requireEstablishForNode,
+  requireEstablishForPerson,
+} from "@/lib/authz";
 import type { EmploymentStatus, FieldType } from "@/generated/prisma/client";
 import { composeFullName } from "@/lib/person-name";
 import { deleteUploadDir } from "@/lib/storage";
@@ -153,7 +159,8 @@ export async function reassignTeam(formData: FormData) {
 
 export async function createPerson(formData: FormData) {
   const teamId = str(formData.get("teamId"));
-  await requireEditForNode(teamId);
+  // enrolling is an establishment act, not data entry — section level and above
+  await requireEstablishForNode(teamId);
 
   const team = await prisma.orgNode.findUnique({ where: { id: teamId } });
   if (!team || team.kind !== "TEAM") throw new Error("יש לשייך איש לצוות (צומת מסוג צוות).");
@@ -460,8 +467,8 @@ export async function unassignPlan(formData: FormData) {
  * already unreferenced when they go and no foreign key can fail midway.
  */
 export async function removePerson(formData: FormData) {
-  await requireAdmin();
   const personId = str(formData.get("personId"));
+  await requireEstablishForPerson(personId);
   const person = await prisma.person.findUnique({
     where: { id: personId },
     // fullName is read for the activity entry: after the delete there is

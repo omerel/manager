@@ -26,6 +26,8 @@ export type PersonRow = {
   /** the template that copy came from — null if it has since been deleted */
   planTemplateId: string | null;
   canEdit: boolean;
+  /** may the viewer remove this person — establishment authority over their team */
+  canDelete: boolean;
   impact: DeletionImpact;
 };
 
@@ -60,13 +62,39 @@ function canEditTeam(visibility: Visibility, teamId: string | null): boolean {
   return teamId ? visibility.canEdit(teamId) : visibility.isAdmin;
 }
 
-/** Teams the user may EDIT (for placing a new person), with their org path. */
-export async function getEditableTeams(visibility: Visibility): Promise<{ id: string; path: string }[]> {
+/**
+ * Can this user remove this person? Same predicate `requireEstablishForPerson`
+ * enforces, so a delete control is shown exactly when the action would accept
+ * it. Unassigned people have no framework above them, so they are admin-only.
+ */
+function canDeletePerson(visibility: Visibility, teamId: string | null): boolean {
+  return teamId ? visibility.mayEstablishAt(teamId) : visibility.isAdmin;
+}
+
+/** Teams matching a predicate, with their org path, sorted for a picker. */
+async function teamsWhere(allow: (nodeId: string) => boolean): Promise<{ id: string; path: string }[]> {
   const [nodes, resolvePath] = await Promise.all([prisma.orgNode.findMany(), buildPathResolver()]);
   return nodes
-    .filter((n) => n.kind === "TEAM" && visibility.canEdit(n.id))
+    .filter((n) => n.kind === "TEAM" && allow(n.id))
     .map((n) => ({ id: n.id, path: resolvePath(n.id) }))
     .sort((a, b) => a.path.localeCompare(b.path, "he"));
+}
+
+/** Teams the user may EDIT (for moving an existing person), with their org path. */
+export async function getEditableTeams(visibility: Visibility): Promise<{ id: string; path: string }[]> {
+  return teamsWhere(visibility.canEdit);
+}
+
+/**
+ * Teams the user may enrol a new person into.
+ *
+ * Reads the same predicate `requireEstablishForNode` enforces, so the picker
+ * cannot offer a team the action would refuse — the drift this change exists to
+ * prevent. Narrower than `getEditableTeams`: a team-level EDIT grant still
+ * moves people around, but does not enrol them.
+ */
+export async function getEnrollableTeams(visibility: Visibility): Promise<{ id: string; path: string }[]> {
+  return teamsWhere(visibility.mayEstablishAt);
 }
 
 /** People within the user's visibility. Admins also see unassigned people (teamId = null). */
@@ -103,6 +131,7 @@ export async function getVisiblePeople(visibility: Visibility): Promise<PersonRo
     planName: p.assignedPlan?.name ?? null,
     planTemplateId: p.assignedPlan?.sourceTemplateId ?? null,
     canEdit: canEditTeam(visibility, p.teamId),
+    canDelete: canDeletePerson(visibility, p.teamId),
     impact: {
       planAssignments: p._count.planAssignments,
       evalEntries: p._count.evalEntries,
@@ -159,6 +188,7 @@ export async function getVisiblePerson(id: string, visibility: Visibility): Prom
     planName: p.assignedPlan?.name ?? null,
     planTemplateId: p.assignedPlan?.sourceTemplateId ?? null,
     canEdit: canEditTeam(visibility, p.teamId),
+    canDelete: canDeletePerson(visibility, p.teamId),
     impact: {
       planAssignments: p._count.planAssignments,
       evalEntries: p._count.evalEntries,
