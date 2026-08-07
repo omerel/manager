@@ -10,6 +10,7 @@ import { NavLinks, type NavItem } from "@/components/NavLinks";
 import { queryBadge } from "@/lib/queries";
 import { AdminMenu } from "@/components/AdminMenu";
 import { UserSwitcher } from "@/components/UserSwitcher";
+import { roleLabel } from "@/lib/role-labels";
 
 const NAV_ITEMS: NavItem[] = [
   { href: "/", label: "דשבורד", icon: "dashboard" },
@@ -18,10 +19,6 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/chat", label: "דף שאלות", icon: "chat" },
   { href: "/rules", label: "דף חוקים", icon: "rules" },
 ];
-
-function roleLabel(role: string): string {
-  return role === "ADMIN" ? "אדמין" : "מנהל";
-}
 
 export async function Header() {
   const [current, logoPath, systemName] = await Promise.all([getSessionUserOrNull(), getLogoPath(), getSystemName()]);
@@ -38,17 +35,23 @@ export async function Header() {
     );
   }
 
-  // The queries page belongs to the chain of command: it appears only for a
-  // user who commands a framework, carrying a count of what awaits them.
-  const commanded = await prisma.user.findUnique({ where: { id: current.id }, select: { commandsNodeId: true } });
-  const badge = await queryBadge(commanded?.commandsNodeId ?? null);
+  // The queries page belongs to correspondents: a commander, who corresponds as
+  // their framework, or an HR user with a grant, who corresponds as themselves.
+  // The badge counts what awaits — for an HR user that is new answers only,
+  // since nobody addresses a person.
+  const commanded = await prisma.user.findUnique({
+    where: { id: current.id },
+    select: { commandsNodeId: true, role: true, _count: { select: { grants: true } } },
+  });
+  const lateral = commanded?.role === "HR" && (commanded?._count.grants ?? 0) > 0;
+  const badge = await queryBadge(commanded?.commandsNodeId ?? null, lateral ? current.id : null);
   const badgeTitle = [
     badge.awaitingMyAnswer ? `${badge.awaitingMyAnswer} ממתינות לתשובתך` : "",
     badge.newAnswers ? `${badge.newAnswers} תשובות חדשות` : "",
   ]
     .filter(Boolean)
     .join(" · ");
-  const navItems: NavItem[] = commanded?.commandsNodeId
+  const navItems: NavItem[] = commanded?.commandsNodeId || lateral
     ? [...NAV_ITEMS, { href: "/queries", label: "שאילתות", icon: "queries", badge: badge.total, badgeTitle }]
     : NAV_ITEMS;
 

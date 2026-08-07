@@ -5,6 +5,8 @@ import { Lock } from "lucide-react";
 
 const inputCls = "rounded-md border border-border px-3 py-1.5 text-sm";
 
+import { roleLabel } from "@/lib/role-labels";
+
 export default async function AccountPage({ searchParams }: { searchParams: Promise<{ error?: string; changed?: string }> }) {
   const { error, changed } = await searchParams;
   const me = await getSessionUser();
@@ -16,7 +18,7 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
         <h1 className="text-2xl font-bold">החשבון שלי</h1>
         <p className="mt-1 text-muted">
           {user.name} · {user.email} {user.username ? `· ${user.username}` : ""} ·{" "}
-          {user.role === "ADMIN" ? "אדמין" : "מנהל"}
+          {roleLabel(user.role)}
         </p>
       </div>
 

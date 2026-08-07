@@ -4,6 +4,7 @@ import { getSessionUser } from "@/lib/session";
 import { computeVisibility, visibilityFrom } from "@/lib/access";
 import { KIND_LABEL } from "@/lib/org";
 import { pathResolver } from "@/lib/commander";
+import { ROLE_LABEL, roleLabel } from "@/lib/role-labels";
 import { LevelBadge } from "@/components/OrgTree";
 import { createUser, addGrant, removeGrant, deleteUser, updateUserProfile } from "@/lib/access-actions";
 import { adminResetPassword } from "@/lib/auth-actions";
@@ -85,8 +86,9 @@ export default async function AccessPage({ searchParams }: { searchParams: Promi
               תפקיד
             </label>
             <select id="role" name="role" defaultValue="MANAGER" className={inputCls}>
-              <option value="MANAGER">מנהל</option>
-              <option value="ADMIN">אדמין</option>
+              <option value="MANAGER">{ROLE_LABEL.MANAGER}</option>
+              <option value="HR">{ROLE_LABEL.HR}</option>
+              <option value="ADMIN">{ROLE_LABEL.ADMIN}</option>
             </select>
           </div>
           <div className="flex flex-col">
@@ -186,10 +188,14 @@ export default async function AccessPage({ searchParams }: { searchParams: Promi
                   <span className="font-semibold">{u.name}</span>
                   <span
                     className={`rounded px-2 py-0.5 text-xs ${
-                      u.role === "ADMIN" ? "bg-brand-100 text-brand-800" : "bg-slate-100 text-slate-600"
+                      u.role === "ADMIN"
+                        ? "bg-brand-100 text-brand-800"
+                        : u.role === "HR"
+                          ? "bg-amber-100 text-amber-800"
+                          : "bg-slate-100 text-slate-600"
                     }`}
                   >
-                    {u.role === "ADMIN" ? "אדמין" : "מנהל"}
+                    {roleLabel(u.role)}
                   </span>
                   <span className="text-xs text-muted">{u.email}</span>
                   {u.username && <span className="text-xs text-muted">· {u.username}</span>}

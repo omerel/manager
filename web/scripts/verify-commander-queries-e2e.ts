@@ -72,7 +72,7 @@ async function main() {
   const sec2 = await prisma.orgNode.create({ data: { name: `${TAG} מדור ב`, kind: "SECTION", parentId: domain.id } });
   const team = await prisma.orgNode.create({ data: { name: `${TAG} צוות`, kind: "TEAM", parentId: sec1.id } });
 
-  const mk = async (handle: string, node: string | null, role: "ADMIN" | "MANAGER" = "MANAGER") =>
+  const mk = async (handle: string, node: string | null, role: "ADMIN" | "MANAGER" | "HR" = "MANAGER") =>
     prisma.user.create({
       data: {
         name: `${TAG}-${handle}`, email: `${handle}${MAIL}`, username: `${TAG}-${handle}`,
@@ -85,6 +85,7 @@ async function main() {
   // sec2 deliberately has NO commander — the row nobody can fill
   await mk("team", team.id); // receives only
   await mk("admin", null, "ADMIN"); // commands nothing → no page at all
+  await mk("admin2", null, "ADMIN"); // performs the deletion; an admin cannot delete themselves
 
   const browser = await chromium.launch();
   try {
@@ -488,6 +489,118 @@ async function main() {
 
     await sec.goto(`${BASE}/queries`);
     check("the recipient no longer sees it either", !(await fullText(sec)).includes(`${TAG} חיווי`));
+
+    console.log("\n=== משא״ן: a lateral sender ===");
+    // granted over the domain, commanding nothing — the pair the change exists
+    // to keep apart is this user and the domain's own commander
+    // a framework nobody commands, created here: by this point in the run every
+    // earlier one has been given a commander
+    const orphanSec = await prisma.orgNode.create({
+      data: { name: `${TAG} מדור ללא מפקד`, kind: "SECTION", parentId: domain.id },
+    });
+    const hrUser = await mk("hr", null, "HR");
+    await prisma.accessGrant.create({ data: { userId: hrUser.id, nodeId: domain.id, level: "EDIT" } });
+    const hr = await signIn(browser, `${TAG}-hr`);
+    await hr.goto(`${BASE}/queries`);
+    const hrText = await fullText(hr);
+    check("the page opens for them though they command nothing", hrText.includes("שאילתות משא״ן"));
+    check("one panel only — no for-me section", !hrText.includes("שאילתות עבורי"));
+    check("and no side chooser, there being no second side", (await hr.locator('select[name="side"]').count()) === 0);
+    check("they get a create form", (await hr.locator('button:text("שלח שאילתא")').count()) === 1);
+
+    const hrBoxes = hr.locator('form:has(button:text("שלח שאילתא")) input[type="checkbox"]');
+    check("nothing is pre-checked — there is no level below to default to",
+      (await hrBoxes.evaluateAll((els) => els.filter((e) => (e as HTMLInputElement).checked).length)) === 0);
+    check("no ‎@‎ picker: the reach IS the granted subtree",
+      (await hr.locator('form:has(button:text("שלח שאילתא")) input[name="mention"], form:has(button:text("שלח שאילתא")) [placeholder*="@"]').count()) === 0);
+    // scoped to the chooser, not the whole page: sec2 has no commander, so it
+    // must not be a choosable row for a sender who can appoint nobody
+    const hrPickerText = await hr
+      .locator('form:has(button:text("שלח שאילתא")) ul')
+      .first()
+      .innerText();
+    check("an uncommanded framework is not offered to them at all", !hrPickerText.includes(orphanSec.name),
+      !hrPickerText.includes(orphanSec.name) ? "absent" : "OFFERED A ROW NOBODY CAN ANSWER");
+    check("while the commanded ones are", hrPickerText.includes(`${TAG} מדור א`) && hrPickerText.includes(`${TAG} צוות`));
+
+    // the role is operational, not configurational: the same refusals a Manager
+    // meets. Asserted rather than assumed, because "HR is like a Manager" is
+    // exactly the kind of claim that is true until someone adds a role check.
+    await hr.goto(`${BASE}/people/card-schema`);
+    const schemaPage = await fullText(hr);
+    check("משא״ן cannot reach the card-schema configuration",
+      schemaPage.includes("לאדמין בלבד") || schemaPage.includes("אין לך הרשאה") || !schemaPage.includes("שדות כרטיס"),
+      schemaPage.slice(0, 60));
+    await hr.goto(`${BASE}/access`);
+    const accessPage = await fullText(hr);
+    check("...and cannot create users or grants there",
+      !accessPage.includes("משתמש חדש") && (await hr.locator('select[name="role"]').count()) === 0);
+    await hr.goto(`${BASE}/queries`);
+
+    // choose the section and the team — a commanded team three levels down
+    await hr.locator(`label:has-text("${TAG} מדור א") input[type="checkbox"]`).first().check();
+    await hr.locator(`label:has-text("${TAG} צוות") input[type="checkbox"]`).first().check();
+    await hr.fill('input[name="title"]', `${TAG} סקר משאבי אנוש`);
+    await hr.fill('textarea[name="body"]', "נא לדווח על מצב כוח האדם.");
+    await hr.locator('form:has(button:text("שלח שאילתא")) input[name="dueDate"]').fill(inDays(7));
+    await hr.locator('button:text("שלח שאילתא")').click();
+    await hr.waitForTimeout(2500);
+
+    const hq = await prisma.query.findFirst({ where: { title: `${TAG} סקר משאבי אנוש` }, include: { targets: true } });
+    check("the query was created", !!hq);
+    check("recorded as sent by a person, not by a framework", hq?.senderKind === "STAFF");
+    check("credited to the HR user", hq?.authorId === hrUser.id);
+    check("reaching the two chosen frameworks, including the team", hq?.targets.length === 2,
+      `${hq?.targets.length} targets`);
+
+    // the leak: the domain's own commander must see nothing of it
+    await dom.goto(`${BASE}/queries`);
+    check("the domain commander does not see it among what their framework sent",
+      !(await fullText(dom)).includes(`${TAG} סקר משאבי אנוש`),
+      !(await fullText(dom)).includes(`${TAG} סקר משאבי אנוש`) ? "invisible" : "LEAKED TO THE COMMANDER");
+
+    // the recipients see a PERSON, not the framework it was made under
+    await sec.goto(`${BASE}/queries`);
+    const secOnHr = await fullText(sec);
+    check("the addressed commander sees the query", secOnHr.includes(`${TAG} סקר משאבי אנוש`));
+    check("...attributed to משא״ן and the person", secOnHr.includes(`משא״ן · ${TAG}-hr`),
+      secOnHr.includes(`משא״ן · ${TAG}-hr`) ? "named as a person" : "READS AS A FRAMEWORK");
+    check("...and never as the framework it was made under",
+      !new RegExp(`מאת ${TAG} תחום`).test(secOnHr));
+
+    await sec.locator(`form:has(button:text("שלח תשובה")) textarea[name="answer"]`).first().fill("שנים עשר אנשים.");
+    await sec.locator('button:text("שלח תשובה")').first().click();
+    await sec.waitForTimeout(2000);
+    const hrAnswered = await prisma.queryTarget.findFirstOrThrow({ where: { queryId: hq!.id, nodeId: sec1.id } });
+    check("the commander answers as their framework, exactly as to a commander", hrAnswered.answer === "שנים עשר אנשים.");
+
+    await hr.goto(`${BASE}/queries`);
+    const hrAfter = await fullText(hr);
+    check("the HR sender reads the answer", hrAfter.includes("שנים עשר אנשים."));
+    check("and the tally counts it", hrAfter.includes("1/2"), hrAfter.includes("1/2") ? "1/2" : "tally missing");
+
+    hr.on("dialog", (d) => d.accept()); // the close button confirms first
+    await hr.locator('button:text("סגור שאילתא")').first().click();
+    await hr.waitForTimeout(2500);
+    check("the HR sender closes their own query",
+      (await prisma.query.findUniqueOrThrow({ where: { id: hq!.id } })).closedAt !== null);
+
+    // and deleting them closes rather than orphans
+    await prisma.query.update({ where: { id: hq!.id }, data: { closedAt: null } });
+    const admin2 = await signIn(browser, `${TAG}-admin2`);
+    await admin2.goto(`${BASE}/access`);
+    admin2.on("dialog", (d) => d.accept());
+    await admin2.locator(`form:has(input[value="${hrUser.id}"]) button:text("מחק משתמש")`).first().click();
+    await admin2.waitForTimeout(2500);
+    const afterDelete = await prisma.query.findUnique({ where: { id: hq!.id }, include: { targets: true } });
+    const userGone = (await prisma.user.count({ where: { id: hrUser.id } })) === 0;
+    check("the HR user was deleted", userGone);
+    if (userGone) {
+      check("their open query was CLOSED, not left for nobody to close", afterDelete?.closedAt !== null);
+      check("and not deleted — the commander's answer survives",
+        afterDelete?.targets.some((t) => t.answer === "שנים עשר אנשים.") === true);
+    }
+
 
   } finally {
     await browser.close();

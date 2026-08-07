@@ -45,6 +45,7 @@ model AppSetting {
 enum Role {
   ADMIN // מנהלן = אדמין: users/grants, plan templates, person-card schema
   MANAGER // מנהל: operational, at VIEW or EDIT level
+  HR // משא״ן: operational like a manager, and a lateral correspondent on the query page
 }
 
 enum AccessLevel {
@@ -159,6 +160,13 @@ model AccessGrant {
   @@unique([userId, nodeId])
 }
 
+/// Who a query came from: a framework acting down the chain, or a person
+/// (משא״ן) acting laterally inside the subtree they are granted over.
+enum QuerySenderKind {
+  FRAMEWORK
+  STAFF
+}
+
 /// A question one commander puts to the commanders exactly one level below.
 ///
 /// Anchored to FRAMEWORKS at both ends, not to people. The requirement that a
@@ -172,7 +180,14 @@ model AccessGrant {
 /// unlock path, a re-lock path, and would drift on every edit.
 model Query {
   id           String        @id @default(cuid())
-  /// the framework that asked — deleting it takes its queries with it
+  /// Which kind of correspondent asked. Written when the query is created and
+  /// never inferred from the author's role afterwards: a role can change, and a
+  /// correspondence must not quietly change hands when it does.
+  senderKind   QuerySenderKind @default(FRAMEWORK)
+  /// the framework that asked — deleting it takes its queries with it.
+  /// For a STAFF query this is the SCOPE the request was made under, never the
+  /// sender: it records which subtree bounded the reach. The from-line for such
+  /// a query names the person, and must never render this.
   sender       OrgNode       @relation("QuerySender", fields: [senderNodeId], references: [id], onDelete: Cascade)
   senderNodeId String
   /// who actually wrote it; deleting the user leaves the query readable

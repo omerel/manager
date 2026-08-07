@@ -16,18 +16,24 @@
  *
  *   npx tsx scripts/verify-commander-queries.ts
  */
+import { readFile } from "fs/promises";
+import { execSync } from "child_process";
 import { prisma } from "@/lib/prisma";
+import { ROLE_LABEL } from "@/lib/role-labels";
 import { hashPassword } from "@/lib/password";
 import { todayMarker } from "@/lib/dates";
 import {
   canSendFrom,
   commandedFrameworks,
   isOpen,
+  isSenderOf,
+  lateralRecipients,
   mayAnswer,
   mayRead,
   outstandingCount,
   queryBadge,
   recipientsOf,
+  validLateralRecipient,
   validRecipient,
 } from "@/lib/queries";
 
@@ -88,7 +94,7 @@ async function releaseCommand(nodeId: string) {
   await prisma.user.updateMany({ where: { commandsNodeId: nodeId }, data: { commandsNodeId: null } });
 }
 
-async function mkUser(handle: string, commandsNodeId: string | null, role: "ADMIN" | "MANAGER" = "MANAGER") {
+async function mkUser(handle: string, commandsNodeId: string | null, role: "ADMIN" | "MANAGER" | "HR" = "MANAGER") {
   const u = await prisma.user.create({
     data: {
       name: `${TAG}-${handle}`, email: `${handle}${MAIL}`, username: `${TAG}-${handle}`,
@@ -98,10 +104,16 @@ async function mkUser(handle: string, commandsNodeId: string | null, role: "ADMI
   return u;
 }
 
-async function mkQuery(senderNodeId: string, targets: string[], dueDate: Date, authorId?: string) {
+async function mkQuery(
+  senderNodeId: string,
+  targets: string[],
+  dueDate: Date,
+  authorId?: string,
+  senderKind: "FRAMEWORK" | "STAFF" = "FRAMEWORK",
+) {
   return prisma.query.create({
     data: {
-      senderNodeId, authorId, title: `${TAG} כותרת`, body: "גוף", dueDate,
+      senderKind, senderNodeId, authorId, title: `${TAG} כותרת`, body: "גוף", dueDate,
       targets: { create: targets.map((nodeId) => ({ nodeId })) },
     },
     include: { targets: true },
@@ -213,21 +225,28 @@ function derived() {
 async function audience(f: Fx) {
   console.log("\n=== only the sender and the target ===");
   const q = await mkQuery(f.d1, [f.s1, f.s2], day("2026-12-31"));
-  const view = { senderNodeId: q.senderNodeId, targets: q.targets.map((t) => ({ nodeId: t.nodeId })) };
+  const view = {
+    senderKind: q.senderKind,
+    senderNodeId: q.senderNodeId,
+    authorId: q.authorId,
+    targets: q.targets.map((t) => ({ nodeId: t.nodeId })),
+  };
+  // the reader identity now carries an id, because a sender may be a person
+  const as = (commandsNodeId: string | null, id = "nobody") => ({ id, commandsNodeId });
 
-  check("the sending framework's commander reads it", mayRead({ commandsNodeId: f.d1 }, view));
-  check("an addressed framework's commander reads it", mayRead({ commandsNodeId: f.s1 }, view));
-  check("a SIBLING target reads it too — it was addressed to them as well", mayRead({ commandsNodeId: f.s2 }, view));
-  check("the level ABOVE the sender does not", !mayRead({ commandsNodeId: f.center }, view));
-  check("a framework below a target does not", !mayRead({ commandsNodeId: f.t1 }, view));
-  check("an unrelated framework does not", !mayRead({ commandsNodeId: f.d2 }, view));
-  check("a user who commands nothing does not", !mayRead({ commandsNodeId: null }, view));
+  check("the sending framework's commander reads it", mayRead(as(f.d1), view));
+  check("an addressed framework's commander reads it", mayRead(as(f.s1), view));
+  check("a SIBLING target reads it too — it was addressed to them as well", mayRead(as(f.s2), view));
+  check("the level ABOVE the sender does not", !mayRead(as(f.center), view));
+  check("a framework below a target does not", !mayRead(as(f.t1), view));
+  check("an unrelated framework does not", !mayRead(as(f.d2), view));
+  check("a user who commands nothing does not", !mayRead(as(null), view));
 
   // the Admin has no exception — the point of the rule
   const admin = await mkUser("admin", null, "ADMIN");
-  check("the ADMIN, commanding nothing, does not", !mayRead({ commandsNodeId: admin.commandsNodeId }, view));
+  check("the ADMIN, commanding nothing, does not", !mayRead(as(admin.commandsNodeId), view));
   const adminCmd = await mkUser("admincmd", f.d2, "ADMIN");
-  check("nor an Admin who commands an unrelated framework", !mayRead({ commandsNodeId: adminCmd.commandsNodeId }, view));
+  check("nor an Admin who commands an unrelated framework", !mayRead(as(adminCmd.commandsNodeId), view));
 
   // answering is narrower still than reading
   check("a sibling may READ but not ANSWER for another framework",
@@ -247,32 +266,39 @@ async function anchoring(f: Fx) {
   for (const n of [f.d1, f.s1, f.s2]) await releaseCommand(n);
   const first = await mkUser("first", f.s1);
   const q = await mkQuery(f.d1, [f.s1], day("2026-12-31"));
-  const view = { senderNodeId: q.senderNodeId, targets: q.targets.map((t) => ({ nodeId: t.nodeId })) };
-  check("the commander at the time can read it", mayRead({ commandsNodeId: first.commandsNodeId }, view));
+  const view = {
+    senderKind: q.senderKind,
+    senderNodeId: q.senderNodeId,
+    authorId: q.authorId,
+    targets: q.targets.map((t) => ({ nodeId: t.nodeId })),
+  };
+  // the reader identity now carries an id, because a sender may be a person
+  const as = (commandsNodeId: string | null, id = "nobody") => ({ id, commandsNodeId });
+  check("the commander at the time can read it", mayRead(as(first.commandsNodeId), view));
 
   // replaced mid-query: clear, then appoint someone else to the SAME framework
   await prisma.user.update({ where: { id: first.id }, data: { commandsNodeId: null } });
   const second = await mkUser("second", f.s1);
-  check("the replacement inherits it", mayRead({ commandsNodeId: second.commandsNodeId }, view));
+  check("the replacement inherits it", mayRead(as(second.commandsNodeId), view));
   check("and the person replaced loses it",
-    !mayRead({ commandsNodeId: (await prisma.user.findUniqueOrThrow({ where: { id: first.id } })).commandsNodeId }, view));
+    !mayRead(as((await prisma.user.findUniqueOrThrow({ where: { id: first.id } })).commandsNodeId, first.id), view));
   check("the query itself never moved", (await prisma.query.findUniqueOrThrow({ where: { id: q.id } })).senderNodeId === f.d1);
 
   // appointed AFTER the query was sent, to a framework that had nobody
   const q2 = await mkQuery(f.d1, [f.s2], day("2026-12-31"));
-  const view2 = { senderNodeId: q2.senderNodeId, targets: q2.targets.map((t) => ({ nodeId: t.nodeId })) };
+  const view2 = { senderKind: q2.senderKind, senderNodeId: q2.senderNodeId, authorId: q2.authorId, targets: q2.targets.map((t) => ({ nodeId: t.nodeId })) };
   const late = await mkUser("late", f.s2);
-  check("a commander appointed after the send inherits the waiting query", mayRead({ commandsNodeId: late.commandsNodeId }, view2));
+  check("a commander appointed after the send inherits the waiting query", mayRead(as(late.commandsNodeId, late.id), view2));
 
   // the SENDING end, replaced
   const sender = await mkUser("sender", f.d1);
-  check("the sending framework's new commander sees what it sent", mayRead({ commandsNodeId: sender.commandsNodeId }, view));
+  check("the sending framework's new commander sees what it sent", mayRead(as(sender.commandsNodeId), view));
   check("including answers received", (await prisma.query.findUniqueOrThrow({ where: { id: q.id }, include: { targets: true } })).targets.length === 1);
 
   // command cleared before answering
   await prisma.user.update({ where: { id: second.id }, data: { commandsNodeId: null } });
   check("a commander whose command was cleared can no longer read it",
-    !mayRead({ commandsNodeId: (await prisma.user.findUniqueOrThrow({ where: { id: second.id } })).commandsNodeId }, view));
+    !mayRead(as((await prisma.user.findUniqueOrThrow({ where: { id: second.id } })).commandsNodeId, second.id), view));
   check("and the target row is still waiting for whoever comes next",
     (await prisma.queryTarget.findFirstOrThrow({ where: { queryId: q.id } })).answer === null);
 }
@@ -448,32 +474,165 @@ async function deletionAndBadge(f: Fx) {
   const q2 = await mkQuery(f.d1, [f.s1], day("2026-12-31"));
   const now = at("2026-08-05", 12);
 
-  let b = await queryBadge(asker.commandsNodeId, now);
+  let b = await queryBadge(asker.commandsNodeId, null, now);
   check("nothing to read before anyone answers", b.newAnswers === 0 && b.total === 0, JSON.stringify(b));
-  b = await queryBadge(answerer.commandsNodeId, now);
+  b = await queryBadge(answerer.commandsNodeId, null, now);
   check("while the answerer is told one awaits them", b.awaitingMyAnswer === 1 && b.total === 1, JSON.stringify(b));
 
   const t = await prisma.queryTarget.findFirstOrThrow({ where: { queryId: q2.id } });
   await prisma.queryTarget.update({ where: { id: t.id }, data: { answer: "עניתי", answeredAt: new Date(), seenBySender: false } });
-  b = await queryBadge(asker.commandsNodeId, now);
+  b = await queryBadge(asker.commandsNodeId, null, now);
   check("an answer shows up on the ASKER's badge", b.newAnswers === 1 && b.total === 1, JSON.stringify(b));
-  check("and the answerer's own count clears", (await queryBadge(answerer.commandsNodeId, now)).total === 0);
+  check("and the answerer's own count clears", (await queryBadge(answerer.commandsNodeId, null, now)).total === 0);
 
   await prisma.queryTarget.update({ where: { id: t.id }, data: { seenBySender: true } });
-  check("reading it clears the asker's badge", (await queryBadge(asker.commandsNodeId, now)).total === 0);
+  check("reading it clears the asker's badge", (await queryBadge(asker.commandsNodeId, null, now)).total === 0);
 
   await prisma.queryTarget.update({ where: { id: t.id }, data: { answer: "תיקנתי", updatedAt: new Date(), seenBySender: false } });
-  check("a REVISION is news again", (await queryBadge(asker.commandsNodeId, now)).newAnswers === 1);
+  check("a REVISION is news again", (await queryBadge(asker.commandsNodeId, null, now)).newAnswers === 1);
 
   // the two halves are separate numbers that happen to share an icon
   const both = await mkQuery(f.d1, [f.s1], day("2026-12-30"));
   await prisma.queryTarget.updateMany({ where: { queryId: both.id }, data: { answer: null } });
-  const askerBadge = await queryBadge(asker.commandsNodeId, now);
+  const askerBadge = await queryBadge(asker.commandsNodeId, null, now);
   check("the asker is not counted as owing themselves an answer", askerBadge.awaitingMyAnswer === 0, JSON.stringify(askerBadge));
-  const answererBadge = await queryBadge(answerer.commandsNodeId, now);
+  const answererBadge = await queryBadge(answerer.commandsNodeId, null, now);
   check("and the two meanings stay separable", answererBadge.awaitingMyAnswer === 1 && answererBadge.newAnswers === 0,
     JSON.stringify(answererBadge));
-  check("someone commanding nothing has neither", (await queryBadge(null, now)).total === 0);
+  check("someone commanding nothing has neither", (await queryBadge(null, null, now)).total === 0);
+}
+
+
+/**
+ * 10 — the lateral correspondent (משא״ן).
+ *
+ * The rule under test is that a query's SENDER may be a person, and that this
+ * does not leak into the framework the request was made under. Everything is
+ * asserted through the shipped predicates — `isSenderOf`, `mayRead`,
+ * `lateralRecipients`, `validLateralRecipient`, `queryBadge` — never against a
+ * re-derived copy of them.
+ */
+async function lateral(f: Fx) {
+  console.log("\n=== a lateral sender: משא״ן ===");
+
+  // The role's own label, read from the source rather than from the constant
+  // the screens import: with two roles the label was a ternary in four files,
+  // and every one of them would have called משא״ן a מנהל without failing.
+  const src = await readFile(new URL("../src", import.meta.url).pathname + "/lib/role-labels.ts", "utf8");
+  check("every role in the enum has a label", ["ADMIN", "MANAGER", "HR"].every((r) => src.includes(`${r}:`)));
+  check("משא״ן is the HR label", ROLE_LABEL.HR === "משא״ן");
+  const survivors = execSync(`grep -rln '"אדמין" : "מנהל"' src || true`, { encoding: "utf8" })
+    .split("\n").filter((l) => l && !l.endsWith("role-labels.ts"));
+  check("no two-role ternary survives anywhere in src", survivors.length === 0, survivors.join(", "));
+
+  // an HR user granted over d1, and the commander of d1 — the pair the whole
+  // change exists to keep apart
+  const hr = await mkUser("hr", null, "HR");
+  await prisma.accessGrant.create({ data: { userId: hr.id, nodeId: f.d1, level: "EDIT" } });
+  await releaseCommand(f.d1);
+  const d1cmd = await mkUser("d1cmd", f.d1);
+  await releaseCommand(f.s1);
+  const s1cmd = await mkUser("s1cmd-lat", f.s1);
+  const grants = [{ nodeId: f.d1, level: "EDIT" as const }];
+  const hrSession = { id: hr.id, name: hr.name, role: "HR" as const, grants };
+
+  // ---- reach ----
+  const offered = await lateralRecipients(hrSession);
+  const ids = new Set(offered.map((r) => r.nodeId));
+  check("the granted node itself is offered when it has a commander", ids.has(f.d1));
+  check("a commanded framework beneath it is offered", ids.has(f.s1));
+  check("an uncommanded framework in the subtree is NOT offered", !ids.has(f.s2));
+  check("nothing outside the granted subtree is offered", !ids.has(f.d2) && !ids.has(f.center));
+
+  // a commanded TEAM three levels down is reachable — the team refusal is about
+  // sending FROM one, and never applied to being addressed
+  await releaseCommand(f.t1);
+  const t1cmd = await mkUser("t1cmd-lat", f.t1);
+  const deep = new Set((await lateralRecipients(hrSession)).map((r) => r.nodeId));
+  check("a commanded team deep in the subtree is offered", deep.has(f.t1));
+  check("the action agrees about that team", await validLateralRecipient(hrSession, f.t1));
+  check("the action refuses a framework outside the subtree", !(await validLateralRecipient(hrSession, f.d2)));
+  check("the action refuses an uncommanded framework inside it", !(await validLateralRecipient(hrSession, f.s2)));
+
+  // ---- the leak this change exists to prevent ----
+  const beforeForCommander = await prisma.query.count({ where: { senderKind: "FRAMEWORK", senderNodeId: f.d1 } });
+  // the commander's own view, captured BEFORE — the leak this change exists to
+  // prevent is checked as "nothing moved", not as an absolute count, because
+  // earlier sections of this suite have already used this framework
+  const cmdBadgeBefore = await queryBadge(f.d1, null);
+  const cmdSentBefore = (
+    await prisma.query.findMany({ where: { senderKind: "FRAMEWORK", senderNodeId: f.d1 }, select: { id: true }, orderBy: { id: "asc" } })
+  ).map((x) => x.id);
+  const q = await mkQuery(f.d1, [f.s1, f.t1], day("2026-12-31"), hr.id, "STAFF");
+  const afterForCommander = await prisma.query.count({ where: { senderKind: "FRAMEWORK", senderNodeId: f.d1 } });
+  check("the commander of the framework it was made under sent nothing new", beforeForCommander === afterForCommander);
+
+  const view = {
+    senderKind: q.senderKind,
+    senderNodeId: q.senderNodeId,
+    authorId: q.authorId,
+    targets: q.targets.map((t) => ({ nodeId: t.nodeId })),
+  };
+  const asUser = (id: string, commandsNodeId: string | null) => ({ id, commandsNodeId });
+
+  check("the HR sender owns it", isSenderOf(asUser(hr.id, null), q));
+  check("the commander of that framework does NOT own it", !isSenderOf(asUser(d1cmd.id, f.d1), q));
+  check("...and cannot even read it", !mayRead(asUser(d1cmd.id, f.d1), view));
+  check("an addressed commander reads it", mayRead(asUser(s1cmd.id, f.s1), view));
+  check("...but does not own it", !isSenderOf(asUser(s1cmd.id, f.s1), q));
+  check("the HR sender reads it", mayRead(asUser(hr.id, null), view));
+
+  // a framework query from the same node is unaffected in the other direction
+  const fq = await mkQuery(f.d1, [f.s1], day("2026-12-31"), d1cmd.id);
+  check("a framework query is still owned by whoever commands the framework", isSenderOf(asUser(d1cmd.id, f.d1), fq));
+  check("...and NOT by the HR user who happens to be granted over it", !isSenderOf(asUser(hr.id, null), fq));
+
+  // ---- the badge counts the right correspondence ----
+  await prisma.queryTarget.updateMany({ where: { queryId: q.id }, data: { answer: "כן", seenBySender: false } });
+  const hrBadge = await queryBadge(null, hr.id);
+  check("the HR sender is told an answer came back", hrBadge.newAnswers === 2, `${hrBadge.newAnswers}`);
+  check("...and is awaiting nobody, being addressed by nobody", hrBadge.awaitingMyAnswer === 0);
+  const cmdBadge = await queryBadge(f.d1, null);
+  check(
+    "the commander's badge did not move when the HR query was answered",
+    cmdBadge.newAnswers === cmdBadgeBefore.newAnswers,
+    `${cmdBadgeBefore.newAnswers} → ${cmdBadge.newAnswers}`,
+  );
+  const cmdSentAfter = (
+    await prisma.query.findMany({ where: { senderKind: "FRAMEWORK", senderNodeId: f.d1 }, select: { id: true }, orderBy: { id: "asc" } })
+  ).map((x) => x.id);
+  check(
+    "and their sent list is identical to what it was before — the query never entered it",
+    JSON.stringify(cmdSentAfter.filter((id) => id !== fq.id)) === JSON.stringify(cmdSentBefore),
+  );
+
+  // ---- a role change must not move correspondence ----
+  await prisma.user.update({ where: { id: hr.id }, data: { role: "MANAGER" } });
+  const after = await prisma.query.findUniqueOrThrow({ where: { id: q.id } });
+  check("the recorded sender kind survives a role change", after.senderKind === "STAFF");
+  check("...and the query still belongs to the same person", isSenderOf(asUser(hr.id, null), after));
+  check("...and still not to the commander", !isSenderOf(asUser(d1cmd.id, f.d1), after));
+  await prisma.user.update({ where: { id: hr.id }, data: { role: "HR" } });
+
+  // ---- deleting the sender closes, never orphans ----
+  const openBefore = await prisma.query.count({ where: { senderKind: "STAFF", authorId: hr.id, closedAt: null } });
+  check("the HR user has an open query to lose", openBefore === 1);
+  await prisma.query.updateMany({ where: { senderKind: "STAFF", authorId: hr.id, closedAt: null }, data: { closedAt: new Date() } });
+  await prisma.user.delete({ where: { id: hr.id } });
+  const orphan = await prisma.query.findUniqueOrThrow({ where: { id: q.id }, include: { targets: true } });
+  check("their query is closed, not left open with nobody able to close it", orphan.closedAt !== null);
+  check("...and not deleted — the answers the commanders wrote survive", orphan.targets.every((t) => t.answer === "כן"));
+  check("...and it is shut by the derived rule too", !isOpen(orphan));
+
+  // a commander's deletion leaves their framework's queries open for the next one
+  await prisma.user.delete({ where: { id: d1cmd.id } });
+  const fwq = await prisma.query.findUniqueOrThrow({ where: { id: fq.id } });
+  check("a framework query outlives the commander who wrote it", fwq.closedAt === null);
+  await releaseCommand(f.d1);
+  const next = await mkUser("d1next", f.d1);
+  check("...and passes to whoever commands it next", isSenderOf(asUser(next.id, f.d1), fwq));
+
+  void t1cmd;
 }
 
 async function main() {
@@ -490,6 +649,7 @@ async function main() {
     await agentScope(f);
     await mentions(f);
     await deletionAndBadge(f);
+    await lateral(f);
   } finally {
     await cleanup();
     const users = await prisma.user.count({ where: { email: { endsWith: MAIL } } });

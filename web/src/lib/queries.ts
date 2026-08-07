@@ -1,4 +1,5 @@
-import type { OrgKind } from "@/generated/prisma/client";
+import type { OrgKind, QuerySenderKind } from "@/generated/prisma/client";
+import { computeVisibility, type SessionUser } from "@/lib/access";
 import { prisma } from "@/lib/prisma";
 import { todayMarker } from "@/lib/dates";
 import { pathResolver } from "@/lib/commander";
@@ -6,9 +7,15 @@ import { pathResolver } from "@/lib/commander";
 /**
  * Commander queries — the rules of who may ask, who must answer, and who sees.
  *
- * Everything here reads the command chain. Nothing here reads or writes access
- * grants: a query's audience is decided by the chain, not by visibility, and
- * the two must not be quietly merged.
+ * A query between frameworks reads the command chain and nothing else — its
+ * audience is decided by rank, not by visibility.
+ *
+ * There is now a second kind of correspondent: an HR person (משא״ן), who is
+ * outside the chain and whose reach IS decided by their access grants. That is
+ * the one place the two axes meet, and it is deliberate rather than quiet: it
+ * is confined to `lateralRecipients` / `validLateralRecipient`, it never widens
+ * who may READ a query, and it never writes a grant. The chain rules below —
+ * `canSendFrom`, `recipientsOf`, `validRecipient` — are untouched by it.
  *
  * Openness is derived from two facts, never cached: the deadline, and whether
  * the sender ended it early. See `isOpen`.
@@ -100,6 +107,105 @@ export async function commandedFrameworks(): Promise<Recipient[]> {
     .sort((a, b) => a.path.localeCompare(b.path, "he"));
 }
 
+
+/**
+ * Is this user the sender of this query?
+ *
+ * ONE definition, because there used to be eight: every guard in
+ * `query-actions.ts` wrote `query.senderNodeId !== me.commandsNodeId` for
+ * itself. That is exactly right while every sender is a framework, and exactly
+ * one edit away from being wrong in one of eight places once a sender can also
+ * be a person — silently, because the eighth would simply let the wrong user
+ * close someone else's query.
+ *
+ * FRAMEWORK: whoever commands the sending framework right now, so a query
+ * outlives the commander who wrote it.
+ * STAFF: the author, and only the author. There is no framework carrying it,
+ * which is the whole point — the commander of the node an HR user was granted
+ * over is a stranger to their correspondence.
+ */
+export function isSenderOf(
+  user: { id: string; commandsNodeId: string | null },
+  query: { senderKind: QuerySenderKind; senderNodeId: string; authorId: string | null },
+): boolean {
+  if (query.senderKind === "STAFF") return !!query.authorId && query.authorId === user.id;
+  return !!user.commandsNodeId && query.senderNodeId === user.commandsNodeId;
+}
+
+/**
+ * Every commanded framework inside the subtrees this user is granted over —
+ * what an HR user may address.
+ *
+ * Lateral, not down a chain: any depth, and the granted node itself is
+ * included, because an HR person talks to the commanders *in* their framework
+ * rather than to the level beneath them. Several grants union into one list.
+ *
+ * Uncommanded frameworks are omitted, unlike `recipientsOf`, which keeps them
+ * as "אין מפקד" rows. There the absence is information a superior can act on;
+ * here the sender is outside the chain and can appoint nobody, so the row would
+ * only be a target that can never answer.
+ */
+export async function lateralRecipients(user: SessionUser): Promise<Recipient[]> {
+  const visibility = await computeVisibility(user);
+  const nodes = await prisma.orgNode.findMany({
+    include: { commander: { select: { id: true, name: true, email: true } } },
+  });
+  const resolve = pathResolver(nodes);
+  return nodes
+    .filter((n) => n.commander && visibility.nodeIds.has(n.id))
+    .map((n) => ({ nodeId: n.id, name: n.name, path: resolve(n.id), kind: n.kind, commander: n.commander! }))
+    .sort((a, b) => a.path.localeCompare(b.path, "he"));
+}
+
+/**
+ * Which granted framework a lateral request was made under.
+ *
+ * The column is NOT NULL and its cascade is meaningful — dissolve the framework
+ * the request was made under and the request goes with it — but for a STAFF
+ * query it is an audit fact only: ownership is the author, and the from-line
+ * never renders it.
+ *
+ * Preference is the widest grant that contains EVERY recipient, which is the
+ * honest answer whenever one exists. With disjoint grants and recipients spread
+ * across them no single node is the truth; the first recipient's grant is
+ * recorded, and that arbitrariness is confined here rather than being an
+ * ambiguity the sender is asked to resolve.
+ */
+export async function lateralScope(user: SessionUser, recipientIds: string[]): Promise<string> {
+  const nodes = await prisma.orgNode.findMany({ select: { id: true, parentId: true } });
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const ancestorsOf = (id: string): Set<string> => {
+    const out = new Set<string>();
+    let cur = byId.get(id);
+    while (cur) {
+      out.add(cur.id);
+      cur = cur.parentId ? byId.get(cur.parentId) : undefined;
+    }
+    return out;
+  };
+  const depthOf = (id: string) => ancestorsOf(id).size;
+  const grantNodes = [...new Set(user.grants.map((g) => g.nodeId))].filter((id) => byId.has(id));
+  const chains = recipientIds.map(ancestorsOf);
+
+  const coversAll = grantNodes.filter((g) => chains.every((c) => c.has(g)));
+  const pool = coversAll.length > 0 ? coversAll : grantNodes.filter((g) => chains[0]?.has(g));
+  const chosen = pool.sort((a, b) => depthOf(a) - depthOf(b))[0];
+  if (!chosen) throw new Error("לא נמצאה מסגרת מוקצית שהנמענים נמצאים בתוכה.");
+  return chosen;
+}
+
+/**
+ * May this user address this framework laterally? The rule the ACTION enforces;
+ * `lateralRecipients` is the same rule shaped for a chooser.
+ */
+export async function validLateralRecipient(user: SessionUser, nodeId: string): Promise<boolean> {
+  const [visibility, node] = await Promise.all([
+    computeVisibility(user),
+    prisma.orgNode.findUnique({ where: { id: nodeId }, select: { commander: { select: { id: true } } } }),
+  ]);
+  return !!node?.commander && visibility.nodeIds.has(nodeId);
+}
+
 /**
  * May this framework be a recipient of a query from `senderNodeId`?
  *
@@ -126,12 +232,15 @@ export async function validRecipient(senderNodeId: string, nodeId: string): Prom
  * that crosses it, and that should be a decision, not a leak.
  */
 export function mayRead(
-  user: { commandsNodeId: string | null },
-  query: { senderNodeId: string; targets: { nodeId: string }[] },
+  user: { id: string; commandsNodeId: string | null },
+  query: { senderKind: QuerySenderKind; senderNodeId: string; authorId: string | null; targets: { nodeId: string }[] },
 ): boolean {
+  // the sending side goes through the one ownership definition
+  if (isSenderOf(user, query)) return true;
+  // the receiving side is unchanged: whoever commands an addressed framework,
+  // whoever sent it
   const mine = user.commandsNodeId;
-  if (!mine) return false;
-  return query.senderNodeId === mine || query.targets.some((t) => t.nodeId === mine);
+  return !!mine && query.targets.some((t) => t.nodeId === mine);
 }
 
 /** May this user ANSWER this target row — i.e. do they command that framework, and is it open? */
@@ -158,14 +267,34 @@ export function mayAnswer(
  */
 export type QueryBadge = { awaitingMyAnswer: number; newAnswers: number; total: number };
 
-export async function queryBadge(commandsNodeId: string | null, now: Date = new Date()): Promise<QueryBadge> {
+export async function queryBadge(
+  commandsNodeId: string | null,
+  /** set for a lateral correspondent (משא״ן): they own queries as a person */
+  staffUserId: string | null = null,
+  now: Date = new Date(),
+): Promise<QueryBadge> {
+  // A lateral correspondent is addressed by nobody, so their whole badge is
+  // answers coming back.
+  if (staffUserId) {
+    const newAnswers = await prisma.queryTarget.count({
+      where: { query: { senderKind: "STAFF", authorId: staffUserId }, answer: { not: null }, seenBySender: false },
+    });
+    return { awaitingMyAnswer: 0, newAnswers, total: newAnswers };
+  }
   if (!commandsNodeId) return { awaitingMyAnswer: 0, newAnswers: 0, total: 0 };
   const [awaitingMyAnswer, newAnswers] = await Promise.all([
     prisma.queryTarget.count({
       where: { nodeId: commandsNodeId, answer: null, query: { closedAt: null, dueDate: { gte: todayMarker(now) } } },
     }),
     prisma.queryTarget.count({
-      where: { query: { senderNodeId: commandsNodeId }, answer: { not: null }, seenBySender: false },
+      // senderKind matters: a lateral query records the framework it was made
+      // under, and without this the commander of that framework would be
+      // notified about answers to correspondence that is not theirs
+      where: {
+        query: { senderKind: "FRAMEWORK", senderNodeId: commandsNodeId },
+        answer: { not: null },
+        seenBySender: false,
+      },
     }),
   ]);
   return { awaitingMyAnswer, newAnswers, total: awaitingMyAnswer + newAnswers };
@@ -173,5 +302,5 @@ export async function queryBadge(commandsNodeId: string | null, now: Date = new 
 
 /** How many queries await an answer from this user right now. */
 export async function outstandingCount(commandsNodeId: string | null, now: Date = new Date()): Promise<number> {
-  return (await queryBadge(commandsNodeId, now)).awaitingMyAnswer;
+  return (await queryBadge(commandsNodeId, null, now)).awaitingMyAnswer;
 }

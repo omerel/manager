@@ -26,15 +26,26 @@ export type AddableFramework = { nodeId: string; path: string; kind: OrgKindStr;
  * would be indistinguishable from an old form with no recipients field — and
  * would silently fall back to "everyone", the exact opposite of what unchecking
  * everyone means.
+ *
+ * A LATERAL sender (משא״ן) gets the same list with nothing pre-checked and no
+ * ‎@‎ field: "the level below" is a chain notion they are not part of, and ‎@‎
+ * reaches outside the subtree that defines their whole reach. They get a
+ * select-all instead, because asking everyone in your framework at once is the
+ * normal shape of the work rather than an edge case.
  */
 export function RecipientPicker({
   defaults,
   addable,
+  preselect = true,
 }: {
   defaults: DefaultRecipient[];
   addable: AddableFramework[];
+  /** false for a lateral sender: nothing is a default when there is no chain */
+  preselect?: boolean;
 }) {
-  const [checked, setChecked] = useState<Set<string>>(new Set(defaults.map((d) => d.nodeId)));
+  const [checked, setChecked] = useState<Set<string>>(
+    new Set(preselect ? defaults.map((d) => d.nodeId) : []),
+  );
   const [added, setAdded] = useState<AddableFramework[]>([]);
   const [term, setTerm] = useState("");
   const [open, setOpen] = useState(false);
@@ -100,6 +111,19 @@ export function RecipientPicker({
       <span className="text-sm text-muted">
         נמענים <span className="text-xs">({count})</span>
       </span>
+      {!preselect && defaults.length > 0 && (
+        <button
+          type="button"
+          onClick={() =>
+            setChecked((prev) =>
+              prev.size === defaults.length ? new Set() : new Set(defaults.map((d) => d.nodeId)),
+            )
+          }
+          className="rounded-md border border-border px-2 py-0.5 text-xs hover:bg-stone-50"
+        >
+          {checked.size === defaults.length ? "נקה הכל" : "סמן הכל"}
+        </button>
+      )}
 
       <ul className="flex flex-wrap gap-2">
         {defaults.map((d) => (

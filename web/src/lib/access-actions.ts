@@ -15,6 +15,7 @@ import {
   isCommandConflict,
 } from "@/lib/commander";
 import type { AccessLevel, Role } from "@/generated/prisma/client";
+import { roleLabel } from "@/lib/role-labels";
 
 function str(v: FormDataEntryValue | null): string {
   return String(v ?? "").trim();
@@ -45,7 +46,9 @@ export async function createUser(formData: FormData) {
   const name = str(formData.get("name")) || "משתמש";
   const email = str(formData.get("email"));
   const password = str(formData.get("password"));
-  const role = (str(formData.get("role")) === "ADMIN" ? "ADMIN" : "MANAGER") as Role;
+  // an unknown value falls back to MANAGER, the least powerful of the three
+  const requested = str(formData.get("role"));
+  const role = (requested === "ADMIN" || requested === "HR" ? requested : "MANAGER") as Role;
   const grantNodeId = str(formData.get("grantNodeId"));
   const grantLevel = (str(formData.get("grantLevel")) === "EDIT" ? "EDIT" : "VIEW") as AccessLevel;
   const commandsNodeId = str(formData.get("commandsNodeId")) || null;
@@ -83,7 +86,7 @@ export async function createUser(formData: FormData) {
     throw e;
   }
 
-  await logActivity({ action: "user.create", description: `יצר משתמש ${name} (${role === "ADMIN" ? "אדמין" : "מנהל"})`, subjectType: "user", subjectId: created.id });
+  await logActivity({ action: "user.create", description: `יצר משתמש ${name} (${roleLabel(role)})`, subjectType: "user", subjectId: created.id });
   if (grantNodeId) {
     const n = await prisma.orgNode.findUnique({ where: { id: grantNodeId }, select: { name: true } });
     await logActivity({
@@ -158,13 +161,38 @@ export async function updateUserProfile(formData: FormData) {
   redirect("/access");
 }
 
+/**
+ * Delete a user.
+ *
+ * Queries they sent AS A PERSON are closed first. `authorId` is `SetNull`, which
+ * is right for a framework query — the framework carries it and it outlives
+ * whoever typed it — but a lateral query has no framework behind it, so nulling
+ * the author would leave a question nobody can close, edit or delete, sitting
+ * open in every recipient's panel forever. Deleting them outright was the other
+ * option and is worse: the answers commanders wrote are their work, not the
+ * sender's. So the correspondence closes and stays readable.
+ *
+ * Queries their FRAMEWORK sent are deliberately untouched, and pass to whoever
+ * commands it next.
+ */
 export async function deleteUser(formData: FormData) {
   const me = await requireAdmin();
   const id = str(formData.get("userId"));
   if (id === me.id) throw new Error("לא ניתן למחוק את המשתמש הפעיל.");
   const doomed = await prisma.user.findUnique({ where: { id }, select: { name: true } });
+  const closed = await prisma.query.updateMany({
+    where: { senderKind: "STAFF", authorId: id, closedAt: null },
+    data: { closedAt: new Date() },
+  });
   await prisma.user.delete({ where: { id } }); // grants cascade
-  await logActivity({ action: "user.delete", description: `מחק את המשתמש ${doomed?.name ?? id}`, subjectType: "user", subjectId: id });
+  await logActivity({
+    action: "user.delete",
+    // the count is named because after the delete the actor cannot go and look
+    description:
+      `מחק את המשתמש ${doomed?.name ?? id}` + (closed.count ? ` · נסגרו ${closed.count} שאילתות שהוא שלח` : ""),
+    subjectType: "user",
+    subjectId: id,
+  });
   revalidatePath("/access");
   revalidatePath("/", "layout");
 }

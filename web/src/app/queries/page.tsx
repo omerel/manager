@@ -5,7 +5,8 @@ import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/session";
 import { KIND_LABEL } from "@/lib/org-kinds";
 import { pathResolver } from "@/lib/commander";
-import { canSendFrom, isOpen, recipientsOf, commandedFrameworks } from "@/lib/queries";
+import { canSendFrom, isOpen, recipientsOf, commandedFrameworks, lateralRecipients } from "@/lib/queries";
+import { senderLabel, STAFF_SENDER_TITLE } from "@/lib/query-sender";
 import { fmtDate, formatIsraeliDate, todayMarker } from "@/lib/dates";
 import { DateField } from "@/components/DateField";
 import { ConfirmSubmit } from "@/components/ConfirmSubmit";
@@ -25,23 +26,37 @@ export default async function QueriesPage({ searchParams }: { searchParams: Prom
   const session = await getSessionUser();
   const me = await prisma.user.findUnique({
     where: { id: session.id },
-    select: { id: true, commandsNodeId: true, commandsNode: { select: { id: true, name: true, kind: true } } },
+    select: {
+      id: true,
+      name: true,
+      role: true,
+      commandsNodeId: true,
+      commandsNode: { select: { id: true, name: true, kind: true } },
+      grants: { select: { nodeId: true, level: true } },
+    },
   });
 
-  // The page belongs to the chain of command, not to a role. Someone who
-  // commands nothing has no place in it — including the Admin.
-  if (!me?.commandsNode || !me.commandsNodeId) {
+  // The page belongs to correspondents. A commander corresponds as their
+  // framework; an HR user corresponds as themselves, bounded by their grants.
+  // Anyone who is neither has no place here — including the Admin.
+  const lateral = me?.role === "HR";
+  const hasIdentity = lateral ? (me?.grants.length ?? 0) > 0 : !!me?.commandsNode && !!me.commandsNodeId;
+  if (!me || !hasIdentity) {
     return (
       <div className="space-y-4">
-        <h1 className="text-2xl font-bold">שאילתות מפקד</h1>
+        <h1 className="text-2xl font-bold">שאילתות</h1>
         <div className="rounded-xl border border-border/70 bg-card p-6 text-muted shadow-sm">
-          עמוד זה מיועד למפקדי מסגרות. לא משויכת אליך מסגרת בפיקוד.
+          {lateral
+            ? "עמוד השאילתות ייפתח לאחר שתוקצה לך מסגרת."
+            : "עמוד זה מיועד למפקדי מסגרות. לא משויכת אליך מסגרת בפיקוד."}
         </div>
       </div>
     );
   }
 
-  const mine = me.commandsNodeId;
+  // A lateral sender has no framework identity; `mine` is the commander's, and
+  // is only ever consulted on the paths that belong to a commander.
+  const mine = me.commandsNodeId ?? "";
   const nodes = await prisma.orgNode.findMany();
   const resolve = pathResolver(nodes);
 
@@ -69,7 +84,11 @@ export default async function QueriesPage({ searchParams }: { searchParams: Prom
 
   const [sent, received] = await Promise.all([
     prisma.query.findMany({
-      where: { senderNodeId: mine, ...sentFilter },
+      // the same rule as isSenderOf, expressed as a filter: a commander's
+      // framework sent it, or this person did
+      where: lateral
+        ? { senderKind: "STAFF" as const, authorId: me.id, ...sentFilter }
+        : { senderKind: "FRAMEWORK" as const, senderNodeId: mine, ...sentFilter },
       orderBy: { createdAt: "desc" },
       include: {
         targets: {
@@ -77,7 +96,9 @@ export default async function QueriesPage({ searchParams }: { searchParams: Prom
         },
       },
     }),
-    prisma.queryTarget.findMany({
+    // An HR user is addressed by nobody: queries go to frameworks, and they are
+    // a person. Not an empty panel — no panel.
+    lateral ? [] : prisma.queryTarget.findMany({
       where: { nodeId: mine, ...receivedFilter },
       orderBy: { query: { createdAt: "desc" } },
       include: { query: { include: { sender: { select: { name: true } }, author: { select: { name: true } } } } },
@@ -125,7 +146,9 @@ export default async function QueriesPage({ searchParams }: { searchParams: Prom
   }
 
   const today = todayMarker();
-  const canSend = canSendFrom(me.commandsNode.kind);
+  // a lateral sender always may; the team-level refusal is about having nothing
+  // beneath you in a chain this sender is not part of
+  const canSend = lateral || canSendFrom(me.commandsNode!.kind);
 
   // Open queries first — they are what needs acting on; closed ones collapse
   // below them. The sort is stable, so inside each group the newest-first
@@ -135,14 +158,18 @@ export default async function QueriesPage({ searchParams }: { searchParams: Prom
   const sentSorted = openFirst(sent, (q) => isOpen(q));
   const receivedSorted = openFirst(received, (t) => isOpen(t.query));
 
-  const showMine = canSend && side !== "forme";
-  const showForMe = side !== "mine"; // every commander may be addressed now
+  const showMine = canSend && (lateral || side !== "forme");
+  const showForMe = !lateral && side !== "mine"; // every commander may be addressed; a person is not
 
-  // the level below (the pre-checked default), and every commanded framework
-  // anywhere (what ‎@‎ may add)
-  const [defaults, commanded] = canSend
-    ? await Promise.all([recipientsOf(mine), commandedFrameworks()])
-    : [[], []];
+  // A commander's chooser: the level below pre-checked, plus ‎@‎ over every
+  // commanded framework anywhere. A lateral sender's chooser: the commanded
+  // frameworks inside their granted subtrees, none pre-checked, no ‎@‎ — the
+  // reach IS the subtree, and ‎@‎ would erase exactly that.
+  const [defaults, commanded] = !canSend
+    ? [[], []]
+    : lateral
+      ? [await lateralRecipients({ id: me.id, name: me.name, role: me.role, grants: me.grants }), []]
+      : await Promise.all([recipientsOf(mine), commandedFrameworks()]);
   const defaultRecipients: DefaultRecipient[] = defaults.map((r) => ({
     nodeId: r.nodeId, name: r.name, kind: r.kind, commanderName: r.commander?.name ?? null,
   }));
@@ -153,10 +180,11 @@ export default async function QueriesPage({ searchParams }: { searchParams: Prom
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">שאילתות מפקד</h1>
+        <h1 className="text-2xl font-bold">{lateral ? "שאילתות משא״ן" : "שאילתות מפקד"}</h1>
         <p className="mt-1 text-muted">
-          {KIND_LABEL[me.commandsNode.kind]} {me.commandsNode.name} · שאילתא נראית לשולח ולנשאל בלבד — לא לרמה שמעליהם ולא
-          למסגרות אחיות.
+          {lateral
+            ? `${me.name} · ${STAFF_SENDER_TITLE} · פנייה רוחבית למפקדים בתוך המסגרת שהוקצתה לך. שאילתא נראית לך ולנשאל בלבד.`
+            : `${KIND_LABEL[me.commandsNode!.kind]} ${me.commandsNode!.name} · שאילתא נראית לשולח ולנשאל בלבד — לא לרמה שמעליהם ולא למסגרות אחיות.`}
         </p>
       </div>
 
@@ -168,11 +196,13 @@ export default async function QueriesPage({ searchParams }: { searchParams: Prom
           placeholder="חיפוש לפי כותרת, תוכן, תשובה או מסגרת…"
           className={`w-80 bg-card ${inputCls}`}
         />
-        <select name="side" defaultValue={side} className={`bg-card ${inputCls}`}>
-          <option value="all">שני הצדדים</option>
-          <option value="mine">רק השאילתות שלי</option>
-          <option value="forme">רק שאילתות עבורי</option>
-        </select>
+        {!lateral && (
+          <select name="side" defaultValue={side} className={`bg-card ${inputCls}`}>
+            <option value="all">שני הצדדים</option>
+            <option value="mine">רק השאילתות שלי</option>
+            <option value="forme">רק שאילתות עבורי</option>
+          </select>
+        )}
         <button className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-slate-50">חפש</button>
         {(query || side !== "all") && (
           <Link href="/queries" className="rounded-md px-3 py-1.5 text-sm text-muted hover:underline">
@@ -201,7 +231,7 @@ export default async function QueriesPage({ searchParams }: { searchParams: Prom
               <label htmlFor="body" className="mb-1 text-sm text-muted">תוכן קצר</label>
               <MentionTextarea name="body" people={mentionable} required rows={3} className={`${inputCls} w-full`} />
             </div>
-            <RecipientPicker defaults={defaultRecipients} addable={addableFrameworks} />
+            <RecipientPicker defaults={defaultRecipients} addable={addableFrameworks} preselect={!lateral} />
             <button className="rounded-md bg-brand-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-brand-700">
               שלח שאילתא
             </button>
@@ -405,7 +435,7 @@ export default async function QueriesPage({ searchParams }: { searchParams: Prom
                       )}
                     </span>
                     <span className="text-xs text-muted">
-                      מאת {resolve(t.query.senderNodeId)} · עד {formatIsraeliDate(t.query.dueDate)}
+                      מאת {senderLabel(t.query, resolve(t.query.senderNodeId))} · עד {formatIsraeliDate(t.query.dueDate)}
                       {t.query.dueChangedAt && ` · התאריך עודכן ${fmtDate(t.query.dueChangedAt)}`}
                       {t.query.closedAt && ` · נסגרה על ידי השולח ${fmtDate(t.query.closedAt)}`}
                     </span>

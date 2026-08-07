@@ -60,7 +60,10 @@ user-switcher (impersonation). Leave it unset in any real deployment.
   attach to the record (`eval-actions.ts`, `eval-scale.ts`).
 - **Commander queries** — a commander asks a chosen set of commanded frameworks a
   question with a deadline, answers gather in one place, and only the two
-  frameworks involved can read it (`queries.ts`).
+  frameworks involved can read it (`queries.ts`). A משא״ן user asks the same way
+  but **as a person**: laterally, to the commanders inside the subtree they are
+  granted over, with the recipient seeing `משא״ן · <name>` rather than a
+  framework. They ask only — nobody addresses a person.
 - **The agent** — free-form questions over a permission-clipped snapshot,
   read-only (`Read,Grep,Glob`, no shell). A good answer can be pinned as a
   deterministic rule that reruns instantly, and reports export to MD/PDF or go
@@ -68,7 +71,9 @@ user-switcher (impersonation). Leave it unset in any real deployment.
 - **Bulk intake** — drop many personnel documents at once; each is extracted
   server-side (pdftotext / mammoth / SheetJS, OCR fallback) and queued for
   field-by-field approval. Nothing is written without a human accepting it.
-- **Access control** — a user's visibility is the union of their granted org-tree
+- **Access control** — three roles: אדמין (configuration), מנהל and משא״ן (both
+  operational, differing only in that משא״ן corresponds laterally on the query
+  page). A user's visibility is the union of their granted org-tree
   subtrees (`access.ts`); command of a framework is separate from visibility of it
   (`commander.ts`). Editing someone's details needs EDIT over their team, but
   *enrolling* or *removing* a person needs an EDIT grant sitting on a section or
