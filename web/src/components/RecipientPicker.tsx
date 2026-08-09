@@ -11,6 +11,7 @@ export type DefaultRecipient = {
   commanderName: string | null;
 };
 export type AddableFramework = { nodeId: string; path: string; kind: OrgKindStr; commanderName: string };
+export type HrOption = { userId: string; name: string };
 
 /**
  * Who a query goes to.
@@ -37,12 +38,16 @@ export function RecipientPicker({
   defaults,
   addable,
   preselect = true,
+  hr = [],
 }: {
   defaults: DefaultRecipient[];
   addable: AddableFramework[];
   /** false for a lateral sender: nothing is a default when there is no chain */
   preselect?: boolean;
+  /** HR users with EDIT coverage of the sender's framework — person recipients */
+  hr?: HrOption[];
 }) {
+  const [hrChecked, setHrChecked] = useState<Set<string>>(new Set());
   const [checked, setChecked] = useState<Set<string>>(
     new Set(preselect ? defaults.map((d) => d.nodeId) : []),
   );
@@ -96,7 +101,7 @@ export function RecipientPicker({
     }
   };
 
-  const count = checked.size + added.length;
+  const count = checked.size + added.length + hrChecked.size;
 
   return (
     <div className="space-y-2">
@@ -106,6 +111,9 @@ export function RecipientPicker({
       ))}
       {added.map((f) => (
         <input key={f.nodeId} type="hidden" name="recipients" value={f.nodeId} />
+      ))}
+      {[...hrChecked].map((id) => (
+        <input key={id} type="hidden" name="hrRecipients" value={id} />
       ))}
 
       <span className="text-sm text-muted">
@@ -171,6 +179,38 @@ export function RecipientPicker({
         ))}
       </ul>
 
+      {hr.length > 0 && (
+        <ul className="flex flex-wrap items-center gap-2">
+          <li className="text-xs text-muted">משא״ן מטפל:</li>
+          {hr.map((h) => (
+            <li key={h.userId}>
+              <label
+                className={`flex cursor-pointer items-center gap-1.5 rounded-md border px-2 py-1 text-sm ${
+                  hrChecked.has(h.userId) ? "border-violet-300 bg-violet-50" : "border-border bg-card text-muted"
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  checked={hrChecked.has(h.userId)}
+                  onChange={() =>
+                    setHrChecked((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(h.userId)) next.delete(h.userId);
+                      else next.add(h.userId);
+                      return next;
+                    })
+                  }
+                  className="accent-violet-600"
+                />
+                <span className="rounded bg-violet-100 px-1 text-xs text-violet-900">משא״ן</span>
+                <span className="font-medium">{h.name}</span>
+              </label>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {addable.length > 0 && (
       <div className="relative">
         <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-muted">
           <AtSign className="h-4 w-4" aria-hidden />
@@ -219,6 +259,7 @@ export function RecipientPicker({
           </ul>
         )}
       </div>
+      )}
     </div>
   );
 }

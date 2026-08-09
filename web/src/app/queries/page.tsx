@@ -5,7 +5,9 @@ import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/session";
 import { KIND_LABEL } from "@/lib/org-kinds";
 import { pathResolver } from "@/lib/commander";
-import { canSendFrom, isOpen, recipientsOf, commandedFrameworks, lateralRecipients } from "@/lib/queries";
+import { canSendFrom, isOpen, recipientsOf, commandedFrameworks, lateralRecipients, eligibleHr, maySendToHr, type HrRecipient } from "@/lib/queries";
+import { visibilityFrom } from "@/lib/access";
+import type { AccessLevel, Role } from "@/generated/prisma/client";
 import { senderLabel, STAFF_SENDER_TITLE } from "@/lib/query-sender";
 import { fmtDate, formatIsraeliDate, todayMarker } from "@/lib/dates";
 import { DateField } from "@/components/DateField";
@@ -92,14 +94,18 @@ export default async function QueriesPage({ searchParams }: { searchParams: Prom
       orderBy: { createdAt: "desc" },
       include: {
         targets: {
-          include: { node: { select: { name: true, kind: true, commander: { select: { name: true } } } }, answeredBy: { select: { name: true } } },
+          include: {
+            node: { select: { name: true, kind: true, commander: { select: { name: true } } } },
+            targetUser: { select: { id: true, name: true, role: true, grants: { select: { nodeId: true, level: true } } } },
+            answeredBy: { select: { name: true } },
+          },
         },
       },
     }),
-    // An HR user is addressed by nobody: queries go to frameworks, and they are
-    // a person. Not an empty panel — no panel.
-    lateral ? [] : prisma.queryTarget.findMany({
-      where: { nodeId: mine, ...receivedFilter },
+    // A commander is addressed through their framework; an HR user as a person
+    // — commanders ask the one who tends their people.
+    prisma.queryTarget.findMany({
+      where: lateral ? { targetUserId: me.id, ...receivedFilter } : { nodeId: mine, ...receivedFilter },
       orderBy: { query: { createdAt: "desc" } },
       include: { query: { include: { sender: { select: { name: true } }, author: { select: { name: true } } } } },
     }),
@@ -145,10 +151,23 @@ export default async function QueriesPage({ searchParams }: { searchParams: Prom
     });
   }
 
+  // Does this HR user's edit coverage still reach my framework? Eligibility was
+  // a condition of appointment; this only DISPLAYS a lapse, never repairs it.
+  const orgNodes = await prisma.orgNode.findMany();
+  const hrStillCovers = (u: { id: string; name: string; role: Role; grants: { nodeId: string; level: AccessLevel }[] }) =>
+    !!me.commandsNodeId &&
+    visibilityFrom(orgNodes, { id: u.id, name: u.name, role: u.role, grants: u.grants }).canEdit(me.commandsNodeId);
+
   const today = todayMarker();
   // a lateral sender always may; the team-level refusal is about having nothing
   // beneath you in a chain this sender is not part of
-  const canSend = lateral || canSendFrom(me.commandsNode!.kind);
+  const canSendFrameworks = lateral || canSendFrom(me.commandsNode!.kind);
+  // The HR users a commander may address: EDIT coverage of their framework.
+  // A TEAM commander's only sending channel — the reason the create form can
+  // now appear for them at all.
+  const hrOptions: HrRecipient[] = !lateral && maySendToHr(me.commandsNodeId) ? await eligibleHr(me.commandsNodeId!) : [];
+  const canSend = canSendFrameworks || hrOptions.length > 0;
+  const teamOnlyHr = !lateral && !canSendFrameworks;
 
   // Open queries first — they are what needs acting on; closed ones collapse
   // below them. The sort is stable, so inside each group the newest-first
@@ -158,14 +177,17 @@ export default async function QueriesPage({ searchParams }: { searchParams: Prom
   const sentSorted = openFirst(sent, (q) => isOpen(q));
   const receivedSorted = openFirst(received, (t) => isOpen(t.query));
 
-  const showMine = canSend && (lateral || side !== "forme");
-  const showForMe = !lateral && side !== "mine"; // every commander may be addressed; a person is not
+  // Sending and seeing-what-you-sent are different questions: a team commander
+  // whose only eligible HR lost coverage can send nothing NEW, but their sent
+  // queries and incoming answers must not vanish with the channel.
+  const showMine = side !== "forme";
+  const showForMe = side !== "mine"; // every commander may be addressed — and so may an HR user, as a person
 
   // A commander's chooser: the level below pre-checked, plus ‎@‎ over every
   // commanded framework anywhere. A lateral sender's chooser: the commanded
   // frameworks inside their granted subtrees, none pre-checked, no ‎@‎ — the
   // reach IS the subtree, and ‎@‎ would erase exactly that.
-  const [defaults, commanded] = !canSend
+  const [defaults, commanded] = !canSendFrameworks
     ? [[], []]
     : lateral
       ? [await lateralRecipients({ id: me.id, name: me.name, role: me.role, grants: me.grants }), []]
@@ -196,13 +218,11 @@ export default async function QueriesPage({ searchParams }: { searchParams: Prom
           placeholder="חיפוש לפי כותרת, תוכן, תשובה או מסגרת…"
           className={`w-80 bg-card ${inputCls}`}
         />
-        {!lateral && (
-          <select name="side" defaultValue={side} className={`bg-card ${inputCls}`}>
-            <option value="all">שני הצדדים</option>
-            <option value="mine">רק השאילתות שלי</option>
-            <option value="forme">רק שאילתות עבורי</option>
-          </select>
-        )}
+        <select name="side" defaultValue={side} className={`bg-card ${inputCls}`}>
+          <option value="all">שני הצדדים</option>
+          <option value="mine">רק השאילתות שלי</option>
+          <option value="forme">רק שאילתות עבורי</option>
+        </select>
         <button className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-slate-50">חפש</button>
         {(query || side !== "all") && (
           <Link href="/queries" className="rounded-md px-3 py-1.5 text-sm text-muted hover:underline">
@@ -231,12 +251,24 @@ export default async function QueriesPage({ searchParams }: { searchParams: Prom
               <label htmlFor="body" className="mb-1 text-sm text-muted">תוכן קצר</label>
               <MentionTextarea name="body" people={mentionable} required rows={3} className={`${inputCls} w-full`} />
             </div>
-            <RecipientPicker defaults={defaultRecipients} addable={addableFrameworks} preselect={!lateral} />
+            <RecipientPicker
+              defaults={defaultRecipients}
+              addable={addableFrameworks}
+              preselect={!lateral && !teamOnlyHr}
+              hr={hrOptions.map((h) => ({ userId: h.userId, name: h.name }))}
+            />
+            {teamOnlyHr && hrOptions.length === 0 && (
+              <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                אין משא״ן עם הרשאת עריכה על המסגרת שלך, ולכן אין לך כרגע למי לשלוח. פנה לאדמין להקצאת משא״ן.
+              </p>
+            )}
             <button className="rounded-md bg-brand-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-brand-700">
               שלח שאילתא
             </button>
             <p className="text-xs text-muted">
-              ברירת המחדל: כל הדרגה שמתחתיך. אפשר להסיר, ואפשר לצרף ב-‎@‎ מפקד של כל מסגרת בעץ. למפקדי הנמענים נשלח מייל.
+              {teamOnlyHr
+                ? "כמפקד צוות, השאילתות שלך נשלחות למשא״ן המטפל במסגרתך."
+                : "ברירת המחדל: כל הדרגה שמתחתיך. אפשר להסיר, לצרף ב-‎@‎ מפקד של כל מסגרת בעץ, ולמען למשא״ן עם עריכה על מסגרתך. למפקדי הנמענים נשלח מייל."}{" "}
               בגוף הטקסט, ‎@‎ מתייג אדם — לחיצה על התיוג תפתח את כרטיסו בלשונית חדשה.
             </p>
           </form>
@@ -280,9 +312,27 @@ export default async function QueriesPage({ searchParams }: { searchParams: Prom
                       <li key={t.id} className="rounded-md border border-border px-3 py-2 text-sm">
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <span className="flex items-center gap-2">
-                            <span className="text-xs text-muted">{KIND_LABEL[t.node.kind]}</span>
-                            <span className="font-medium">{t.node.name}</span>
-                            {!t.node.commander && (
+                            {t.targetUser ? (
+                              <>
+                                <span className="rounded bg-violet-100 px-1.5 text-xs text-violet-900">משא״ן</span>
+                                <span className="font-medium">{t.targetUser.name}</span>
+                                {/* eligibility was a condition of APPOINTMENT; if the
+                                    covering grant lapsed since, say so — never repair */}
+                                {!hrStillCovers(t.targetUser) && (
+                                  <span className="rounded bg-red-100 px-2 py-0.5 text-xs text-red-800">
+                                    הרשאת העריכה שלו על מסגרתך פקעה
+                                  </span>
+                                )}
+                              </>
+                            ) : t.node ? (
+                              <>
+                                <span className="text-xs text-muted">{KIND_LABEL[t.node.kind]}</span>
+                                <span className="font-medium">{t.node.name}</span>
+                              </>
+                            ) : (
+                              <span className="text-xs text-muted">נמען שנמחק</span>
+                            )}
+                            {!t.targetUser && t.node && !t.node.commander && (
                               <Link
                                 href="/access"
                                 className="flex items-center gap-1 rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-900 hover:underline"
@@ -300,7 +350,7 @@ export default async function QueriesPage({ searchParams }: { searchParams: Prom
                           </span>
                           <span className="flex items-center gap-3">
                             {t.remindedAt && <span className="text-xs text-muted">הוזכר {fmtDate(t.remindedAt)}</span>}
-                            {!t.answer && t.node.commander && (
+                            {!t.answer && (t.targetUser || t.node?.commander) && (
                               <form action={remindTarget} className="inline">
                                 <input type="hidden" name="targetId" value={t.id} />
                                 <button className="text-xs text-brand-700 hover:underline">שלח תזכורת</button>

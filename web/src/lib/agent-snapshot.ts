@@ -274,7 +274,7 @@ async function exportQueries(userId: string, today: Date) {
     prisma.query.findMany({
       where: { senderNodeId: mine },
       orderBy: { createdAt: "desc" },
-      include: { targets: { include: { node: { select: { name: true } }, answeredBy: { select: { name: true } } } } },
+      include: { targets: { include: { node: { select: { name: true } }, targetUser: { select: { name: true } }, answeredBy: { select: { name: true } } } } },
     }),
     prisma.queryTarget.findMany({
       where: { nodeId: mine },
@@ -293,7 +293,10 @@ async function exportQueries(userId: string, today: Date) {
       מצב: open(q.dueDate),
       נשלחה: formatIsraeliDate(q.createdAt),
       נמענים: q.targets.map((t) => ({
-        מסגרת: t.node.name,
+        // a person-target names the person; the key stays "מסגרת" for frameworks
+        // and gains a sibling for people, so neither reads as the other
+        מסגרת: t.node?.name ?? null,
+        משא_ן: t.targetUser?.name ?? null,
         הגיב: !!t.answer,
         תשובה: stripMentions(t.answer),
         משיב: t.answeredBy?.name ?? null,

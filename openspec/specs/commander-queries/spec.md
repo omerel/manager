@@ -13,7 +13,7 @@ framework, or a משא״ן user acting laterally as themselves.
 
 A commander SHALL be able to send a query to any set of commanded frameworks they choose. The frameworks exactly one level below the sender's own remain the default audience, offered pre-selected; the sender MAY remove any of them and MAY add the commander of any framework in the system — above, beside, or in another branch.
 
-A team commander — the lowest level — SHALL NOT send queries. Any commander MAY receive one: receiving follows from being addressed, not from rank, so the for-me section exists for every commander, including a center commander.
+A team commander — the lowest level — SHALL NOT address frameworks; their only sending channel is the HR user who tends their framework, defined in its own requirement. Any commander MAY receive a query: receiving follows from being addressed, not from rank, so the for-me section exists for every commander, including a center commander.
 
 A user who neither commands a framework nor holds a correspondent identity of their own SHALL have no access to this page at all.
 
@@ -443,20 +443,6 @@ Where a query sent by a framework is presented to its recipient as coming from t
 - **WHEN** a commander answers a query from an HR user
 - **THEN** they answer as their framework exactly as they would answer a commander, and are counted in the tally the same way
 
-### Requirement: An HR user only asks
-
-An HR user's query page SHALL show one panel — the queries they sent. The panel of queries addressed to them SHALL NOT be present, since no framework addresses a person; it SHALL be absent rather than shown empty.
-
-#### Scenario: One panel
-
-- **WHEN** an HR user opens the query page
-- **THEN** they see only the queries they sent, with no for-me panel and no side chooser offering one
-
-#### Scenario: Nobody addresses an HR user
-
-- **WHEN** a commander opens their own recipient chooser
-- **THEN** no HR user appears in it; recipients are frameworks
-
 ### Requirement: Deleting a user closes the queries they sent as a person
 
 Deleting a user SHALL close every open query that user sent as a person, rather than deleting it or leaving it open. The correspondence and the answers written to it SHALL remain readable to the frameworks that answered.
@@ -472,3 +458,76 @@ Queries sent by a framework SHALL be unaffected: they belong to the framework an
 
 - **WHEN** a user who commanded a framework is deleted
 - **THEN** the queries their framework sent remain open and pass to whoever commands it next
+
+### Requirement: A commander may address the HR user who tends their framework
+
+Any commander — team level included — SHALL be able to address a query to an HR user who holds an **edit** grant covering the commander's framework, directly or by inheritance from an ancestor grant. View-level coverage SHALL NOT qualify, and a MANAGER with edit coverage SHALL NOT be addressable: the channel is to the HR role, whose work is the people.
+
+For a team commander this SHALL be the only way to send — teams still do not address frameworks — so their create form offers the HR chooser alone, and explains itself when no HR user qualifies.
+
+Eligibility SHALL be enforced by the action at send time, not only reflected by the form.
+
+#### Scenario: A team commander asks their HR
+
+- **WHEN** a team commander sends a query to an HR user holding an edit grant over their team
+- **THEN** the query is created with that person as its target, and the HR user is notified by mail at their own address
+
+#### Scenario: Coverage may be inherited
+
+- **WHEN** an HR user's edit grant sits on the section above the commander's team
+- **THEN** they qualify as a recipient for that team's commander
+
+#### Scenario: View coverage does not qualify
+
+- **WHEN** an HR user holds only a view grant over the commander's framework
+- **THEN** they are not offered and an attempt to address them is refused
+
+#### Scenario: A team commander with no eligible HR
+
+- **WHEN** no HR user holds an edit grant covering the team
+- **THEN** the create form says so plainly instead of offering an empty chooser
+
+#### Scenario: A higher commander may combine recipients
+
+- **WHEN** a domain commander addresses two sections and their covering HR user in one query
+- **THEN** three target rows are created — two frameworks, one person — and the tally counts all three
+
+### Requirement: A person-target belongs to the person
+
+A target row addressed to an HR user SHALL record the user as its endpoint. Only that user MAY answer it, and they SHALL answer as themselves. Sibling separation holds as it does for frameworks: the HR user sees their own row, never the other recipients' answers.
+
+The row SHALL live and die with the person: deleting the user removes their target rows as deleting a framework removes its own, while the query itself survives with its remaining targets. Losing the qualifying grant after the send SHALL NOT revoke the row — eligibility is a condition of appointment, not a standing condition — and the sender SHALL see that the coverage lapsed rather than having it silently repaired.
+
+#### Scenario: The HR user answers as themselves
+
+- **WHEN** the addressed HR user answers
+- **THEN** the answer is recorded under their name and the sender sees it in place, like any other answer
+
+#### Scenario: Nobody else may answer a person-target
+
+- **WHEN** any other user — commander or HR — attempts to answer that row
+- **THEN** they are refused; the row is not theirs
+
+#### Scenario: The grant lapses mid-query
+
+- **WHEN** the qualifying edit grant is removed while the query is open
+- **THEN** the HR user may still answer, and the sender's row shows that the coverage has lapsed
+
+#### Scenario: The person is deleted
+
+- **WHEN** the addressed HR user is deleted
+- **THEN** their target row disappears with them, and the query survives with its remaining targets
+
+### Requirement: An HR user is asked and answers on the same page
+
+An HR user's query page SHALL show both panels: the queries they sent laterally, and the queries addressed to them. The queries badge SHALL count what awaits their answer alongside the unread answers to their own, and mail for a person-target SHALL go to the person's own address with no framework-commander resolution.
+
+#### Scenario: The for-me panel appears
+
+- **WHEN** a commander addresses an HR user for the first time
+- **THEN** the HR user's page gains the for-me panel with that query in it, open queries first, closed ones folded
+
+#### Scenario: The badge counts for them
+
+- **WHEN** an HR user has two open queries awaiting their answer
+- **THEN** the queries badge shows them, exactly as it does for a commander

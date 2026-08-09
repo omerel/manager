@@ -250,14 +250,14 @@ async function audience(f: Fx) {
 
   // answering is narrower still than reading
   check("a sibling may READ but not ANSWER for another framework",
-    !mayAnswer({ commandsNodeId: f.s2 }, q, { nodeId: f.s1 }, at("2026-08-05", 12)));
-  check("a target answers its own row", mayAnswer({ commandsNodeId: f.s1 }, q, { nodeId: f.s1 }, at("2026-08-05", 12)));
+    !mayAnswer({ id: "u-s2", commandsNodeId: f.s2 }, q, { nodeId: f.s1 }, at("2026-08-05", 12)));
+  check("a target answers its own row", mayAnswer({ id: "u-s1", commandsNodeId: f.s1 }, q, { nodeId: f.s1 }, at("2026-08-05", 12)));
   check("the sender cannot answer on a target's behalf",
-    !mayAnswer({ commandsNodeId: f.d1 }, q, { nodeId: f.s1 }, at("2026-08-05", 12)));
+    !mayAnswer({ id: "u-d1", commandsNodeId: f.d1 }, q, { nodeId: f.s1 }, at("2026-08-05", 12)));
   check("nobody may answer once closed",
-    !mayAnswer({ commandsNodeId: f.s1 }, { dueDate: day("2026-01-01") }, { nodeId: f.s1 }, at("2026-08-05", 12)));
+    !mayAnswer({ id: "u-s1", commandsNodeId: f.s1 }, { dueDate: day("2026-01-01") }, { nodeId: f.s1 }, at("2026-08-05", 12)));
   check("nor once the sender closed it early, deadline notwithstanding",
-    !mayAnswer({ commandsNodeId: f.s1 }, { dueDate: day("2026-12-31"), closedAt: new Date() }, { nodeId: f.s1 }, at("2026-08-05", 12)));
+    !mayAnswer({ id: "u-s1", commandsNodeId: f.s1 }, { dueDate: day("2026-12-31"), closedAt: new Date() }, { nodeId: f.s1 }, at("2026-08-05", 12)));
 }
 
 /** 5 — both ends anchored to frameworks. */
@@ -635,6 +635,82 @@ async function lateral(f: Fx) {
   void t1cmd;
 }
 
+/**
+ * 10 — HR as a recipient.
+ *
+ * The inversion under test: every other target is anchored to a FRAMEWORK and
+ * answered by whoever commands it now; a person-target is anchored to the
+ * PERSON and answered by nobody else — not even a commander whose framework
+ * that person tends.
+ */
+async function hrRecipient(f: Fx) {
+  console.log("\n=== HR as a recipient ===");
+  const { eligibleHr, maySendToHr } = await import("@/lib/queries");
+  await prisma.query.deleteMany({ where: { title: { startsWith: TAG } } });
+  for (const n of [f.d1, f.s1, f.t1]) await releaseCommand(n);
+
+  const mkHr = (h: string, nodeId: string | null, level: "EDIT" | "VIEW" = "EDIT", role: "HR" | "MANAGER" = "HR") =>
+    prisma.user.create({
+      data: {
+        name: `${TAG}-${h}`, email: `${h}${MAIL}`, username: `${TAG}-${h}`,
+        passwordHash: hashPassword("x"), role,
+        grants: nodeId ? { create: [{ nodeId, level }] } : undefined,
+      },
+    });
+
+  // eligibility: edit qualifies, inheritance qualifies, view and MANAGER do not
+  const direct = await mkHr("hr-direct", f.t1);           // edit on the team itself
+  const above = await mkHr("hr-above", f.s1);             // edit on the section above
+  const viewer = await mkHr("hr-viewer", f.t1, "VIEW");
+  const manager = await mkHr("hr-manager", f.t1, "EDIT", "MANAGER");
+  const elsewhere = await mkHr("hr-far", f.d2);
+
+  const eligible = (await eligibleHr(f.t1)).map((h) => h.name.replace(`${TAG}-`, "")).sort();
+  check("edit on the framework qualifies; edit on the ANCESTOR inherits", eligible.join() === "hr-above,hr-direct", eligible.join());
+  check("view does not qualify", !eligible.includes("hr-viewer"));
+  check("a MANAGER with edit does not qualify — the channel is to the role", !eligible.includes("hr-manager"));
+  check("coverage elsewhere does not qualify", !eligible.includes("hr-far"));
+
+  // the team-level unlock
+  const teamCmd = await mkUser("teamcmd", f.t1);
+  check("a TEAM commander may address HR — their only sending channel", maySendToHr(teamCmd.commandsNodeId));
+  check("while canSendFrom still refuses them frameworks", !canSendFrom("TEAM"));
+  check("a non-commander may not", !maySendToHr(null));
+
+  // person-target ownership: read and answer
+  const q = await prisma.query.create({
+    data: {
+      senderNodeId: f.t1, authorId: teamCmd.id, title: `${TAG} לאיש`, body: "ב",
+      dueDate: day("2026-12-31"),
+      targets: { create: [{ targetUserId: direct.id }] },
+    },
+    include: { targets: true },
+  });
+  const view = { senderKind: "FRAMEWORK" as const, senderNodeId: f.t1, authorId: teamCmd.id, targets: q.targets };
+  check("the addressed person may read", mayRead({ id: direct.id, commandsNodeId: null }, view));
+  check("another HR with the SAME coverage may not — the row is personal",
+    !mayRead({ id: above.id, commandsNodeId: null }, view));
+  check("the sender reads as ever", mayRead({ id: teamCmd.id, commandsNodeId: f.t1 }, view));
+  const now = at("2026-08-05", 12);
+  check("the person answers their row", mayAnswer({ id: direct.id, commandsNodeId: null }, q, q.targets[0], now));
+  check("a commander whose framework they tend may NOT answer it",
+    !mayAnswer({ id: teamCmd.id, commandsNodeId: f.t1 }, q, q.targets[0], now));
+  check("and closure closes it for a person too",
+    !mayAnswer({ id: direct.id, commandsNodeId: null }, { dueDate: day("2026-12-31"), closedAt: new Date() }, q.targets[0], now));
+
+  // the badge counts person-targets for the HR user
+  const b = await queryBadge(null, direct.id, now);
+  check("the badge counts the person's waiting query", b.awaitingMyAnswer === 1 && b.total >= 1, JSON.stringify(b));
+  check("and not for the uninvolved HR", (await queryBadge(null, above.id, now)).awaitingMyAnswer === 0);
+
+  // the lapsed grant: the row survives, eligibility was a condition of appointment
+  await prisma.accessGrant.deleteMany({ where: { userId: direct.id } });
+  const still = await prisma.queryTarget.findFirst({ where: { queryId: q.id } });
+  check("removing the qualifying grant does NOT revoke the row", !!still && still.targetUserId === direct.id);
+  check("and they may still answer it", mayAnswer({ id: direct.id, commandsNodeId: null }, q, q.targets[0], now));
+  check("though they no longer qualify for NEW queries", !(await eligibleHr(f.t1)).some((h) => h.userId === direct.id));
+}
+
 async function main() {
   await cleanup();
   const f = await scaffold();
@@ -650,6 +726,7 @@ async function main() {
     await mentions(f);
     await deletionAndBadge(f);
     await lateral(f);
+    await hrRecipient(f);
   } finally {
     await cleanup();
     const users = await prisma.user.count({ where: { email: { endsWith: MAIL } } });

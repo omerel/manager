@@ -52,10 +52,17 @@ export async function sendReport({
   title,
   body,
   to,
+  from,
 }: {
   title: string;
   body: string;
   to: string;
+  /**
+   * Who sent it, as one display string — `שם (אימייל)`. Required HERE and
+   * optional in the script: a replacement script may ignore the flag, but a
+   * call site that forgot the sender should fail to compile, not log `?`.
+   */
+  from: string;
 }): Promise<SendResult> {
   if (!to) return { ok: false, reason: "לא הוגדרה כתובת מייל למשתמש." };
   if (!body.trim()) return { ok: false, reason: "אין תוכן לשליחה." };
@@ -71,7 +78,7 @@ export async function sendReport({
   return new Promise<SendResult>((resolve) => {
     execFile(
       "python3",
-      [SCRIPT, "--title", title, "--body", body, "--to", to],
+      [SCRIPT, "--title", title, "--body", body, "--to", to, "--from", from],
       { timeout: TIMEOUT_MS, maxBuffer: 1024 * 1024 },
       (err, stdout, stderr) => {
         // the script did not run to completion: it crashed, was missing, or was

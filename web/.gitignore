@@ -43,3 +43,7 @@ next-env.d.ts
 
 /src/generated/prisma
 uploads/
+
+# the stand-in emailer's send log — runtime artifact, never committed
+docker/mail.log
+docker/mail-verify.log

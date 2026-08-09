@@ -3,6 +3,7 @@ import { computeVisibility, type SessionUser } from "@/lib/access";
 import { prisma } from "@/lib/prisma";
 import { todayMarker } from "@/lib/dates";
 import { pathResolver } from "@/lib/commander";
+import { visibilityFrom } from "@/lib/access";
 
 /**
  * Commander queries — the rules of who may ask, who must answer, and who sees.
@@ -223,6 +224,38 @@ export async function validRecipient(senderNodeId: string, nodeId: string): Prom
   return node.parentId === senderNodeId || !!node.commander;
 }
 
+export type HrRecipient = { userId: string; name: string; email: string };
+
+/**
+ * The HR users a commander of `senderNodeId` may address: role HR, holding an
+ * EDIT grant that covers the framework.
+ *
+ * Coverage goes through `visibilityFrom` — the same function that answers every
+ * other coverage question — so inheritance comes free: an edit grant on the
+ * section qualifies its teams. View does not qualify (the tender of people
+ * edits them), and a MANAGER with edit does not qualify (the channel is to the
+ * HR role, not to anyone who can type).
+ */
+export async function eligibleHr(senderNodeId: string): Promise<HrRecipient[]> {
+  const [nodes, hrUsers] = await Promise.all([
+    prisma.orgNode.findMany(),
+    prisma.user.findMany({ where: { role: "HR" }, select: { id: true, name: true, email: true, grants: { select: { nodeId: true, level: true } } } }),
+  ]);
+  return hrUsers
+    .filter((u) => visibilityFrom(nodes, { id: u.id, name: u.name, role: "HR", grants: u.grants }).canEdit(senderNodeId))
+    .map((u) => ({ userId: u.id, name: u.name, email: u.email }))
+    .sort((a, b) => a.name.localeCompare(b.name, "he"));
+}
+
+/**
+ * May any commander address HR? Yes — including a TEAM commander, for whom this
+ * is the only way to send. `canSendFrom` keeps answering the narrower question
+ * ("may they address FRAMEWORKS"), which still excludes teams.
+ */
+export function maySendToHr(commandsNodeId: string | null): boolean {
+  return !!commandsNodeId;
+}
+
 /**
  * May this user read this query?
  *
@@ -233,24 +266,33 @@ export async function validRecipient(senderNodeId: string, nodeId: string): Prom
  */
 export function mayRead(
   user: { id: string; commandsNodeId: string | null },
-  query: { senderKind: QuerySenderKind; senderNodeId: string; authorId: string | null; targets: { nodeId: string }[] },
+  query: { senderKind: QuerySenderKind; senderNodeId: string; authorId: string | null; targets: { nodeId: string | null; targetUserId?: string | null }[] },
 ): boolean {
   // the sending side goes through the one ownership definition
   if (isSenderOf(user, query)) return true;
-  // the receiving side is unchanged: whoever commands an addressed framework,
-  // whoever sent it
+  // the receiving side: whoever commands an addressed framework — or IS an
+  // addressed person. A person-target belongs to its user, wherever they sit.
+  if (query.targets.some((t) => t.targetUserId === user.id)) return true;
   const mine = user.commandsNodeId;
-  return !!mine && query.targets.some((t) => t.nodeId === mine);
+  return !!mine && query.targets.some((t) => !!t.nodeId && t.nodeId === mine);
 }
 
-/** May this user ANSWER this target row — i.e. do they command that framework, and is it open? */
+/**
+ * May this user ANSWER this target row?
+ *
+ * A framework row belongs to whoever commands the framework NOW; a person row
+ * belongs to its person and nobody else — not even a commander whose framework
+ * the person tends. Both require the query to still be open.
+ */
 export function mayAnswer(
-  user: { commandsNodeId: string | null },
+  user: { id: string; commandsNodeId: string | null },
   query: { dueDate: Date; closedAt?: Date | null },
-  target: { nodeId: string },
+  target: { nodeId: string | null; targetUserId?: string | null },
   now: Date = new Date(),
 ): boolean {
-  return !!user.commandsNodeId && user.commandsNodeId === target.nodeId && isOpen(query, now);
+  if (!isOpen(query, now)) return false;
+  if (target.targetUserId) return target.targetUserId === user.id;
+  return !!user.commandsNodeId && user.commandsNodeId === target.nodeId;
 }
 
 /**
@@ -273,13 +315,18 @@ export async function queryBadge(
   staffUserId: string | null = null,
   now: Date = new Date(),
 ): Promise<QueryBadge> {
-  // A lateral correspondent is addressed by nobody, so their whole badge is
-  // answers coming back.
+  // A lateral correspondent owns queries as a person — and, now that a person
+  // can be ADDRESSED, may also owe answers as one.
   if (staffUserId) {
-    const newAnswers = await prisma.queryTarget.count({
-      where: { query: { senderKind: "STAFF", authorId: staffUserId }, answer: { not: null }, seenBySender: false },
-    });
-    return { awaitingMyAnswer: 0, newAnswers, total: newAnswers };
+    const [newAnswers, awaitingMyAnswer] = await Promise.all([
+      prisma.queryTarget.count({
+        where: { query: { senderKind: "STAFF", authorId: staffUserId }, answer: { not: null }, seenBySender: false },
+      }),
+      prisma.queryTarget.count({
+        where: { targetUserId: staffUserId, answer: null, query: { closedAt: null, dueDate: { gte: todayMarker(now) } } },
+      }),
+    ]);
+    return { awaitingMyAnswer, newAnswers, total: awaitingMyAnswer + newAnswers };
   }
   if (!commandsNodeId) return { awaitingMyAnswer: 0, newAnswers: 0, total: 0 };
   const [awaitingMyAnswer, newAnswers] = await Promise.all([

@@ -83,6 +83,7 @@ model User {
   commandsNodeId   String?       @unique
   authoredQueries  Query[]       @relation("QueryAuthor")
   queryAnswers     QueryTarget[] @relation("QueryAnswerer")
+  queryInbox       QueryTarget[] @relation("QueryTargetUser")
   agentRuns        AgentRun[]
   rules            Rule[]
   createdAt        DateTime      @default(now())
@@ -205,12 +206,24 @@ model Query {
 }
 
 /// One row per addressed framework — created whether or not anyone commands it.
+/// One addressed endpoint of a query. EXACTLY ONE of `nodeId` / `targetUserId`
+/// is set — enforced by the creating action, the only entrance; Prisma cannot
+/// express the CHECK. The two anchor differently on purpose:
+///
+///   framework target → the FRAMEWORK. Commanders rotate; the question is put
+///                      to the post, and whoever commands now answers now.
+///   person target    → the PERSON (an HR user). "מה מצב הקליטה של דנה" is put
+///                      to whoever tends Dana, not to a chair. So the row lives
+///                      and dies with the person — Cascade, exactly as a
+///                      framework row dies with its framework.
 model QueryTarget {
   id           String    @id @default(cuid())
   query        Query     @relation(fields: [queryId], references: [id], onDelete: Cascade)
   queryId      String
-  node         OrgNode   @relation("QueryTargetNode", fields: [nodeId], references: [id], onDelete: Cascade)
-  nodeId       String
+  node         OrgNode?  @relation("QueryTargetNode", fields: [nodeId], references: [id], onDelete: Cascade)
+  nodeId       String?
+  targetUser   User?     @relation("QueryTargetUser", fields: [targetUserId], references: [id], onDelete: Cascade)
+  targetUserId String?
   answer       String? // null = has not responded
   /// who wrote the answer; deleting them leaves the answer text intact
   answeredBy   User?     @relation("QueryAnswerer", fields: [answeredById], references: [id], onDelete: SetNull)
@@ -229,6 +242,7 @@ model QueryTarget {
   mailError    String?
 
   @@unique([queryId, nodeId])
+  @@unique([queryId, targetUserId])
 }
 
 // Strict tree: CENTER > DOMAIN > SECTION > TEAM. People attach to TEAM nodes.

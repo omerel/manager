@@ -59,12 +59,14 @@ function runNodeScript(scriptSource: string, cwd: string, todayIso: string): Pro
 async function mailIfAsked(ruleId: string, output: string, runId: string): Promise<void> {
   const rule = await prisma.rule.findUnique({
     where: { id: ruleId },
-    select: { emailOnRun: true, name: true, user: { select: { email: true } } },
+    select: { emailOnRun: true, name: true, user: { select: { email: true, name: true } } },
   });
   if (!rule?.emailOnRun) return;
 
   const title = subjectFromReport(output, rule.name);
-  const result = await sendReport({ title, body: output, to: rule.user.email });
+  // the OWNER is the sender even when the scheduler pulls the trigger — the
+  // chronic run acts in their name, to their own address
+  const result = await sendReport({ title, body: output, to: rule.user.email, from: `${rule.user.name} (${rule.user.email})` });
   const note = result.ok ? `\n\n---\n_נשלח למייל: ${rule.user.email}_` : `\n\n---\n_${result.reason}_`;
   await prisma.agentRun.update({ where: { id: runId }, data: { output: output + note } });
 }

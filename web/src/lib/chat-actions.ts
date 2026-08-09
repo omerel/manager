@@ -29,11 +29,11 @@ export async function emailRun(_prev: EmailState, formData: FormData): Promise<E
   if (!run?.output) return { ok: false, message: "לא נמצא תוצר לשליחה." };
 
   // the address lives on the User row, not on the session token
-  const account = await prisma.user.findUniqueOrThrow({ where: { id: me.id }, select: { email: true } });
+  const account = await prisma.user.findUniqueOrThrow({ where: { id: me.id }, select: { email: true, name: true } });
   // the report's own first line; the old "<name> · <date>" made every answer
   // look identical in an inbox
   const title = subjectFromReport(run.output, run.rule?.name ?? "תשובה");
-  const result = await sendReport({ title, body: run.output, to: account.email });
+  const result = await sendReport({ title, body: run.output, to: account.email, from: `${account.name} (${account.email})` });
   return result.ok ? { ok: true, message: `נשלח ל-${account.email}` } : { ok: false, message: result.reason };
 }
 

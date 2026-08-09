@@ -16,6 +16,7 @@ import {
   lateralScope,
   validLateralRecipient,
   validRecipient,
+  eligibleHr,
 } from "@/lib/queries";
 import { sendReport } from "@/lib/emailer";
 import { stripMentions } from "@/lib/mentions";
@@ -24,17 +25,6 @@ import type { AccessLevel, Role } from "@/generated/prisma/client";
 
 function str(v: FormDataEntryValue | null): string {
   return String(v ?? "").trim();
-}
-
-/** The signed-in user together with the framework they command. Refused outright when they command nothing. */
-async function requireCommander() {
-  const session = await getSessionUser();
-  const user = await prisma.user.findUnique({
-    where: { id: session.id },
-    select: { id: true, name: true, commandsNodeId: true, commandsNode: { select: { id: true, name: true, kind: true } } },
-  });
-  if (!user?.commandsNode) throw new Error("עמוד השאילתות פתוח למפקדי מסגרות בלבד.");
-  return { ...user, commandsNode: user.commandsNode, commandsNodeId: user.commandsNodeId! };
 }
 
 /**
@@ -54,6 +44,7 @@ async function requireCorrespondent() {
     select: {
       id: true,
       name: true,
+      email: true,
       role: true,
       commandsNodeId: true,
       commandsNode: { select: { id: true, name: true, kind: true } },
@@ -84,9 +75,9 @@ function asSessionUser(u: { id: string; name: string; role: Role; grants: { node
  * the sender is no longer there to see a failure — so the outcome is written to
  * the target row, which is where the list reads it from.
  */
-function mailTarget(targetId: string, to: string, title: string, body: string) {
+function mailTarget(targetId: string, to: string, title: string, body: string, from: string) {
   after(async () => {
-    const result = await sendReport({ title, body, to });
+    const result = await sendReport({ title, body, to, from });
     await prisma.queryTarget
       .update({
         where: { id: targetId },
@@ -127,9 +118,10 @@ function answerNotification(title: string, fromPath: string, answer: string, rev
 export async function createQuery(formData: FormData) {
   const me = await requireCorrespondent();
   const lateral = me.role === "HR";
-  if (!lateral && !canSendFrom(me.commandsNode!.kind)) {
-    throw new Error("מפקד צוות אינו יכול לשלוח שאילתא — אין מסגרות תחתיו.");
-  }
+  // A team commander cannot address FRAMEWORKS — nothing sits beneath them.
+  // They CAN address their tending HR, so the gate moved off the whole action
+  // and onto the framework recipients specifically, below.
+  const frameworksAllowed = lateral || canSendFrom(me.commandsNode!.kind);
 
   const title = str(formData.get("title"));
   const body = str(formData.get("body"));
@@ -150,7 +142,19 @@ export async function createQuery(formData: FormData) {
     ? [...new Set(chosen)]
     : defaults.map((r) => r.nodeId);
 
-  if (recipientIds.length === 0) {
+  // HR recipients — people, not frameworks. Open to every commander INCLUDING a
+  // team commander, for whom this is the only way to send; closed to a lateral
+  // (HR) sender — the channel is commander→HR, not HR→HR.
+  const hrChosen = lateral ? [] : [...new Set(formData.getAll("hrRecipients").map((v) => String(v).trim()).filter(Boolean))];
+  if (lateral && formData.getAll("hrRecipients").length > 0) {
+    throw new Error("משא״ן פונה למסגרות בלבד — לא למשא״ן אחר.");
+  }
+
+  if (!frameworksAllowed && recipientIds.length > 0) {
+    throw new Error("מפקד צוות אינו שולח למסגרות — אין מסגרות תחתיו. אפשר למען למשא״ן המטפל במסגרתך.");
+  }
+
+  if (recipientIds.length === 0 && hrChosen.length === 0) {
     throw new Error(
       lateral
         ? "שאילתא צריכה נמען אחד לפחות — סמן מסגרת מהרשימה."
@@ -158,7 +162,16 @@ export async function createQuery(formData: FormData) {
     );
   }
   // The form offers only legal recipients, but the form is a convenience and
-  // this is the rule. Two rules, one per kind of sender.
+  // this is the rule. Eligibility is EDIT coverage of the sender's framework,
+  // held by an HR user — checked here even though the picker only offers those.
+  if (hrChosen.length > 0) {
+    const eligible = new Set((await eligibleHr(me.commandsNodeId!)).map((h) => h.userId));
+    for (const uid of hrChosen) {
+      if (!eligible.has(uid)) {
+        throw new Error("נמען משא״ן אינו זכאי — נדרש תפקיד משא״ן עם הרשאת עריכה המכסה את המסגרת שלך.");
+      }
+    }
+  }
   for (const id of recipientIds) {
     const ok = lateral
       ? await validLateralRecipient(asSessionUser(me), id)
@@ -186,15 +199,29 @@ export async function createQuery(formData: FormData) {
       dueDate,
       // a row per chosen framework — a child with no commander stays choosable,
       // which is exactly how the sender sees that nobody can answer for it
-      targets: { create: recipientIds.map((nodeId) => ({ nodeId })) },
+      targets: {
+        create: [
+          ...recipientIds.map((nodeId) => ({ nodeId })),
+          ...hrChosen.map((targetUserId) => ({ targetUserId })),
+        ],
+      },
     },
-    include: { targets: { include: { node: { select: { commander: { select: { email: true } } } } } } },
+    include: {
+      targets: {
+        include: {
+          node: { select: { commander: { select: { email: true } } } },
+          targetUser: { select: { email: true } },
+        },
+      },
+    },
   });
 
   const senderPath = lateral ? staffSenderLabel(me.name) : await commandedPath(me.commandsNodeId!);
   for (const t of query.targets) {
-    const email = t.node.commander?.email;
-    if (email) mailTarget(t.id, email, title, notificationBody("new", query, senderPath));
+    // a person-target is mailed at their own address; a framework-target at its
+    // commander's — no commander, no mail, and the row says so
+    const email = t.targetUser?.email ?? t.node?.commander?.email;
+    if (email) mailTarget(t.id, email, title, notificationBody("new", query, senderPath), `${me.name} (${me.email})`);
   }
 
   revalidatePath("/queries");
@@ -215,13 +242,19 @@ async function readableQuery(queryId: string, me: { id: string; commandsNodeId: 
 }
 
 export async function answerQuery(formData: FormData) {
-  const me = await requireCommander();
+  // requireCorrespondent, not requireCommander: an HR user answers the queries
+  // addressed to them as a person, and commands nothing
+  const me = await requireCorrespondent();
   const queryId = str(formData.get("queryId"));
   const answer = str(formData.get("answer"));
   if (!answer) throw new Error("חובה להזין תשובה.");
 
   const query = await readableQuery(queryId, me);
-  const target = query.targets.find((t) => t.nodeId === me.commandsNodeId);
+  // a person row belongs to ME; a framework row to what I command. Mine-as-person
+  // wins the lookup — an HR user also commands nothing, so there is no clash.
+  const target =
+    query.targets.find((t) => t.targetUserId === me.id) ??
+    query.targets.find((t) => !!t.nodeId && t.nodeId === me.commandsNodeId);
   if (!target) throw new Error("השאילתא אינה מופנית למסגרת שבפיקודך.");
   if (!isOpen(query)) {
     throw new Error(
@@ -259,7 +292,7 @@ export async function answerQuery(formData: FormData) {
           })
         )?.commander?.email;
   if (to) {
-    mailTarget(target.id, to, query.title, answerNotification(query.title, await commandedPath(me.commandsNodeId), answer, revised));
+    mailTarget(target.id, to, query.title, answerNotification(query.title, await commandedPath(me.commandsNodeId), answer, revised), `${me.name} (${me.email})`);
   }
 
   revalidatePath("/queries");
@@ -372,20 +405,24 @@ export async function remindTarget(formData: FormData) {
 
   const target = await prisma.queryTarget.findUnique({
     where: { id: targetId },
-    include: { query: { include: { targets: true } }, node: { select: { commander: { select: { email: true } } } } },
+    include: {
+      query: { include: { targets: true } },
+      node: { select: { commander: { select: { email: true } } } },
+      targetUser: { select: { email: true } },
+    },
   });
   if (!target) throw new Error("שורה לא נמצאה.");
   if (!isSenderOf(me, target.query)) throw new Error("רק השולח יכול לשלוח תזכורת.");
   if (target.answer) throw new Error("המסגרת כבר השיבה — אין למה להזכיר.");
 
-  const to = target.node.commander?.email;
+  const to = target.targetUser?.email ?? target.node?.commander?.email;
   if (!to) throw new Error("אין מפקד למסגרת זו, ולכן אין למי לשלוח תזכורת.");
 
   await prisma.queryTarget.update({ where: { id: targetId }, data: { remindedAt: new Date() } });
   // the reminder must name the sender the same way the original mail did
   const fromLine =
     target.query.senderKind === "STAFF" ? staffSenderLabel(me.name) : await commandedPath(me.commandsNodeId!);
-  mailTarget(targetId, to, target.query.title, notificationBody("reminder", target.query, fromLine));
+  mailTarget(targetId, to, target.query.title, notificationBody("reminder", target.query, fromLine), `${me.name} (${me.email})`);
 
   revalidatePath("/queries");
 }

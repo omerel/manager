@@ -504,8 +504,10 @@ async function main() {
     await hr.goto(`${BASE}/queries`);
     const hrText = await fullText(hr);
     check("the page opens for them though they command nothing", hrText.includes("שאילתות משא״ן"));
-    check("one panel only — no for-me section", !hrText.includes("שאילתות עבורי"));
-    check("and no side chooser, there being no second side", (await hr.locator('select[name="side"]').count()) === 0);
+    // flipped by hr-as-query-recipient: an HR user IS addressable now, so the
+    // for-me panel and the side chooser exist for them like for any commander
+    check("the for-me panel exists for them — a person can be addressed now", hrText.includes("שאילתות עבורי"));
+    check("and the side chooser with it", (await hr.locator('select[name="side"]').count()) === 1);
     check("they get a create form", (await hr.locator('button:text("שלח שאילתא")').count()) === 1);
 
     const hrBoxes = hr.locator('form:has(button:text("שלח שאילתא")) input[type="checkbox"]');
@@ -601,6 +603,72 @@ async function main() {
         afterDelete?.targets.some((t) => t.answer === "שנים עשר אנשים.") === true);
     }
 
+
+    console.log("\n=== a team commander asks their משא״ן ===");
+    // fresh pair: the lateral section deleted its HR user at its end
+    const hrTend = await mk("hrtend", null, "HR");
+    await prisma.accessGrant.create({ data: { userId: hrTend.id, nodeId: sec1.id, level: "EDIT" } }); // covers the team by inheritance
+    await teamPage.goto(`${BASE}/queries`);
+    check("the team commander NOW has a create form — the HR channel unlocked it",
+      (await teamPage.locator('button:text("שלח שאילתא")').count()) === 1,
+      "was refused before an eligible HR existed");
+    const teamForm = teamPage.locator('form:has(button:text("שלח שאילתא"))');
+    check("with the HR chip offered by name", (await teamForm.locator(`label:has-text("${TAG}-hrtend")`).count()) === 1);
+    check("no framework checkboxes and no ‎@‎ — teams still do not address frameworks",
+      (await teamForm.locator('[placeholder*="הוסף מפקד"]').count()) === 0);
+
+    await teamForm.locator(`label:has-text("${TAG}-hrtend") input[type="checkbox"]`).check();
+    await teamForm.locator('input[name="title"]').fill(`${TAG} קליטת דנה`);
+    await teamForm.locator('textarea[name="body"]').fill("מה מצב הקליטה?");
+    await teamForm.locator('input[name="dueDate"]').fill(inDays(5));
+    await teamForm.locator('button:text("שלח שאילתא")').click();
+    await teamPage.waitForTimeout(2500);
+
+    const pq = await prisma.query.findFirst({ where: { title: `${TAG} קליטת דנה` }, include: { targets: true } });
+    check("the query was created", !!pq);
+    check("with the PERSON as its target — no framework row", pq?.targets.length === 1 && pq?.targets[0].targetUserId === hrTend.id && pq?.targets[0].nodeId === null);
+    check("and mailed to the person's own address, outcome recorded",
+      (await prisma.queryTarget.findFirstOrThrow({ where: { queryId: pq!.id } })).mailOk !== null);
+
+    const hrT = await signIn(browser, `${TAG}-hrtend`);
+    await hrT.goto(`${BASE}/queries`);
+    const hrTText = await fullText(hrT);
+    check("the HR user sees it in שאילתות עבורי", hrTText.includes(`${TAG} קליטת דנה`));
+    check("with the badge counting it", /שאילתות\s*[1-9]/.test(hrTText), "badge lit");
+    await hrT.locator(`form:has(button:text("שלח תשובה")) textarea[name="answer"]`).first().fill("דנה נקלטה היטב.");
+    await hrT.locator('button:text("שלח תשובה")').first().click();
+    await hrT.waitForTimeout(2000);
+    const pAnswered = await prisma.queryTarget.findFirstOrThrow({ where: { queryId: pq!.id } });
+    check("they answer as themselves", pAnswered.answer === "דנה נקלטה היטב." && pAnswered.answeredById === hrTend.id);
+
+    await teamPage.goto(`${BASE}/queries`);
+    const teamReads = await fullText(teamPage);
+    check("the sender reads the answer under the person's name",
+      teamReads.includes("דנה נקלטה היטב.") && teamReads.includes(`${TAG}-hrtend`));
+
+    // lapsed coverage: shown, not repaired, and the row still answerable
+    await prisma.accessGrant.deleteMany({ where: { userId: hrTend.id } });
+    await teamPage.goto(`${BASE}/queries`);
+    check("a lapsed grant is SHOWN on the sender's row, never silently repaired",
+      (await fullText(teamPage)).includes("פקעה"), "the lapse marking");
+
+    console.log("\n=== a mixed audience: frameworks and a person in one query ===");
+    await prisma.accessGrant.create({ data: { userId: hrTend.id, nodeId: domain.id, level: "EDIT" } });
+    await dom.goto(`${BASE}/queries`);
+    const domForm = dom.locator('form:has(button:text("שלח שאילתא"))');
+    await domForm.locator(`label:has-text("${TAG}-hrtend") input[type="checkbox"]`).check();
+    await domForm.locator('input[name="title"]').fill(`${TAG} מעורבת`);
+    await domForm.locator('textarea[name="body"]').fill("לשני המדורים ולמשא״ן.");
+    await domForm.locator('input[name="dueDate"]').fill(inDays(5));
+    await domForm.locator('button:text("שלח שאילתא")').click();
+    await dom.waitForTimeout(2500);
+    const mixed = await prisma.query.findFirst({ where: { title: `${TAG} מעורבת` }, include: { targets: true } });
+    const personRows = mixed?.targets.filter((t) => t.targetUserId).length ?? 0;
+    const frameworkRows = mixed?.targets.filter((t) => t.nodeId).length ?? 0;
+    check("framework rows AND one person row in a single query", personRows === 1 && frameworkRows === 3,
+      `${frameworkRows} frameworks + ${personRows} person (domain has 3 children by now)`);
+    check("and the sender's tally counts them all", (await fullText(dom)).includes(`0/${frameworkRows + personRows}`),
+      `0/${frameworkRows + personRows} in the list`);
 
   } finally {
     await browser.close();
