@@ -50,6 +50,10 @@ export async function extractionFields() {
     { key: "recruitmentDate", label: "תאריך גיוס", type: "תאריך" },
     { key: "placementDate", label: "תאריך הצבה ביחידה", type: "תאריך" },
     { key: "endOfServiceDate", label: "תאריך סיום שירות (תת״ש)", type: "תאריך" },
+    // the framework the document places the person in — the value the agent
+    // returns is a NAME; resolution to a real team (in the operator's scope,
+    // ambiguity refused) happens at apply time, never here
+    { key: "framework", label: "המסגרת/הצוות שבו האדם משובץ", type: "טקסט" },
     ...defs.map((d) => ({
       key: `field:${d.id}`,
       label: d.label,

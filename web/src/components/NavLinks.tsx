@@ -9,6 +9,7 @@ import {
   MessageCircleQuestion,
   ScrollText,
   Send,
+  ClipboardList,
   type LucideIcon,
 } from "lucide-react";
 
@@ -19,6 +20,7 @@ const ICONS: Record<string, LucideIcon> = {
   chat: MessageCircleQuestion,
   rules: ScrollText,
   queries: Send,
+  hr: ClipboardList,
 };
 
 export type NavItem = { href: string; label: string; icon: keyof typeof ICONS; badge?: number; badgeTitle?: string };

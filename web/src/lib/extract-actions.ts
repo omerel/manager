@@ -77,11 +77,74 @@ export async function extractFromDocument(formData: FormData) {
     },
   );
   revalidatePath(`/people/${personId}`);
-  redirect(`/people/${personId}?edit=1`);
+  // the person-card panel wants to land back on the card; the HR central
+  // review resolves DOZENS in sequence and must stay put — it passes stay=1
+  if (str(formData.get("stay")) !== "1") redirect(`/people/${personId}?edit=1`);
 }
 
-async function applyItem(personId: string, item: ProposalItem) {
-  if (item.key === "firstName" || item.key === "lastName") {
+async function applyItem(personId: string, item: ProposalItem & { kind?: "delete" }) {
+  // ---- career values from the external update: resolved by LABEL against the
+  // person's OWN plan copy; deletion removes exactly the one row
+  if (item.key.startsWith("point:")) {
+    const label = item.key.slice(6);
+    const person = await prisma.person.findUniqueOrThrow({
+      where: { id: personId },
+      select: { assignedPlan: { select: { pointEvents: { where: { label }, select: { id: true } } } } },
+    });
+    const event = person.assignedPlan?.pointEvents[0];
+    if (!event) throw new Error(`אירוע ״${label}״ אינו בתכנית של אדם זה.`);
+    if (item.kind === "delete" || !item.proposed) {
+      await prisma.pointProgress.deleteMany({ where: { personId, pointEventId: event.id } });
+      return;
+    }
+    const d = parseIsraeliDate(item.proposed);
+    if (!d) throw new Error("תאריך ביצוע לא תקין — נדרש dd/mm/yyyy.");
+    await prisma.pointProgress.upsert({
+      where: { personId_pointEventId: { personId, pointEventId: event.id } },
+      create: { personId, pointEventId: event.id, doneOn: d, note: "עדכון חיצוני (משא״ן)" },
+      update: { doneOn: d },
+    });
+    return;
+  }
+  if (item.key.startsWith("metric:")) {
+    const name = item.key.slice(7);
+    const person = await prisma.person.findUniqueOrThrow({
+      where: { id: personId },
+      select: { assignedPlan: { select: { cumulativeMetrics: { where: { name }, select: { id: true } } } } },
+    });
+    const metric = person.assignedPlan?.cumulativeMetrics[0];
+    if (!metric) throw new Error(`מדד ״${name}״ אינו בתכנית של אדם זה.`);
+    if (item.kind === "delete" || !item.proposed) {
+      await prisma.metricReading.deleteMany({ where: { personId, metricId: metric.id } });
+      return;
+    }
+    const num = Number(item.proposed);
+    if (!Number.isFinite(num)) throw new Error("ערך מדד לא תקין.");
+    await prisma.metricReading.upsert({
+      where: { personId_metricId: { personId, metricId: metric.id } },
+      create: { personId, metricId: metric.id, value: num, asOf: new Date(), note: "עדכון חיצוני (משא״ן)" },
+      update: { value: num, asOf: new Date() },
+    });
+    return;
+  }
+  // ---- a deletion of a configurable field empties its value
+  if (item.kind === "delete" && item.key.startsWith("field:")) {
+    await prisma.personFieldValue.deleteMany({ where: { personId, fieldDefId: item.key.slice(6) } });
+    return;
+  }
+  if (item.key === "framework") {
+    // the extracted NAME becomes a team only through the shared resolver —
+    // in-scope only, namesakes refused — the same rule as the table import
+    const { getSessionUser } = await import("@/lib/session");
+    const { computeVisibility } = await import("@/lib/access");
+    const { resolveTeamByName } = await import("@/lib/hr-import");
+    const user = await getSessionUser();
+    const visibility = await computeVisibility(user);
+    const nodes = await prisma.orgNode.findMany({ select: { id: true, name: true, parentId: true, kind: true } });
+    const res = resolveTeamByName(visibility, nodes, item.proposed);
+    if (!res.ok) throw new Error(res.reason);
+    await prisma.person.update({ where: { id: personId }, data: { teamId: res.teamId } });
+  } else if (item.key === "firstName" || item.key === "lastName") {
     const p = await prisma.person.findUniqueOrThrow({ where: { id: personId } });
     const firstName = item.key === "firstName" ? item.proposed : p.firstName;
     const lastName = item.key === "lastName" ? item.proposed : p.lastName;
@@ -129,7 +192,9 @@ export async function resolveProposalItem(formData: FormData) {
     await prisma.extractionProposal.update({ where: { id: proposal.id }, data: { items: rest } });
   }
   revalidatePath(`/people/${personId}`);
-  redirect(`/people/${personId}?edit=1`);
+  // the person-card panel wants to land back on the card; the HR central
+  // review resolves DOZENS in sequence and must stay put — it passes stay=1
+  if (str(formData.get("stay")) !== "1") redirect(`/people/${personId}?edit=1`);
 }
 
 /* ---------- Create-from-document (new person): agent pre-fills a draft form ---------- */
@@ -182,5 +247,7 @@ export async function discardProposal(formData: FormData) {
   await requireEditForPerson(personId);
   await prisma.extractionProposal.deleteMany({ where: { personId } });
   revalidatePath(`/people/${personId}`);
-  redirect(`/people/${personId}?edit=1`);
+  // the person-card panel wants to land back on the card; the HR central
+  // review resolves DOZENS in sequence and must stay put — it passes stay=1
+  if (str(formData.get("stay")) !== "1") redirect(`/people/${personId}?edit=1`);
 }

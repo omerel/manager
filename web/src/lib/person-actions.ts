@@ -14,6 +14,7 @@ import type { EmploymentStatus, FieldType } from "@/generated/prisma/client";
 import { composeFullName } from "@/lib/person-name";
 import { deleteUploadDir } from "@/lib/storage";
 import { logActivity } from "@/lib/activity-log";
+import { assertIdentityFree } from "@/lib/identity-keys";
 import { monthsSince } from "@/lib/waivers";
 import { parseIsraeliDate } from "@/lib/dates";
 
@@ -136,11 +137,15 @@ export async function removeEnumOption(formData: FormData) {
 async function collectFieldValues(formData: FormData) {
   const defs = await prisma.personFieldDef.findMany();
   const values: { fieldDefId: string; value: string; order: number }[] = [];
+  const labeled: { label: string; value: string }[] = [];
   for (const def of defs) {
     const v = str(formData.get(`field_${def.id}`));
-    if (v) values.push({ fieldDefId: def.id, value: v, order: def.order });
+    if (v) {
+      values.push({ fieldDefId: def.id, value: v, order: def.order });
+      labeled.push({ label: def.label, value: v });
+    }
   }
-  return values;
+  return { values, labeled };
 }
 
 /** Reassign (or first-assign) a person to a team. Requires EDIT on the target team. */
@@ -175,7 +180,8 @@ export async function createPerson(formData: FormData) {
   const birthDate = dateOrNull(formData.get("birthDate"));
   if (!birthDate) throw new Error("חובה להזין תאריך לידה.");
 
-  const values = await collectFieldValues(formData);
+  const { values, labeled } = await collectFieldValues(formData);
+  await assertIdentityFree(labeled);
   const person = await prisma.person.create({
     data: {
       firstName,
@@ -221,7 +227,9 @@ export async function updatePerson(formData: FormData) {
   if (!firstName || !lastName) throw new Error("חובה להזין שם פרטי ושם משפחה.");
   const birthDate = dateOrNull(formData.get("birthDate"));
   if (!birthDate) throw new Error("חובה להזין תאריך לידה.");
-  const values = await collectFieldValues(formData);
+  const { values, labeled } = await collectFieldValues(formData);
+  // an identity value belongs to one person — refused by name, own values pass
+  await assertIdentityFree(labeled, personId);
 
   await prisma.$transaction([
     prisma.person.update({

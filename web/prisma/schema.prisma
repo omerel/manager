@@ -494,6 +494,34 @@ model PersonDraft {
 
 // Field values the agent proposed from an uploaded document — awaiting per-field
 // human approval. The agent never writes to the person directly.
+/// The ONE global column mapping for the weekly master-system file, keyed by
+/// the header signature. Global by decision: one master system, every HR user
+/// shares it. A column may carry SEVERAL targets (careers differ), so the
+/// mapping rows are {header, targets[]}.
+model ImportMapping {
+  id          String   @id @default(cuid())
+  headersHash String   @unique // normalised, sorted, hashed headers
+  mapping     Json // [{header, targets: ColumnTarget[]}]
+  dateFormats Json // agent-interpreted column date orders, saved with the map
+  updatedAt   DateTime @updatedAt
+}
+
+/// The history of concluded update runs: the file itself (under uploads) and
+/// the row snapshot the NEXT diff runs against. Written only when a review
+/// concludes — an abandoned run must not become next week's baseline.
+model ImportSnapshot {
+  id           String   @id @default(cuid())
+  filename     String
+  filePath     String // relative, under uploads
+  headersHash  String
+  rows         Json // the parsed rows, diff base for the next upload
+  uploadedAt   DateTime @default(now())
+  /// no FK: the history outlives the account that uploaded (same reasoning as
+  /// the activity log — the record's value is what was true at the time)
+  uploadedById String
+  uploadedByName String
+}
+
 model ExtractionProposal {
   id        String   @id @default(cuid())
   person    Person   @relation(fields: [personId], references: [id], onDelete: Cascade)

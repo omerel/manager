@@ -51,9 +51,14 @@ export async function Header() {
   ]
     .filter(Boolean)
     .join(" · ");
-  const navItems: NavItem[] = commanded?.commandsNodeId || lateral
-    ? [...NAV_ITEMS, { href: "/queries", label: "שאילתות", icon: "queries", badge: badge.total, badgeTitle }]
-    : NAV_ITEMS;
+  const navItems: NavItem[] = [
+    ...NAV_ITEMS,
+    ...(commanded?.commandsNodeId || lateral
+      ? [{ href: "/queries", label: "שאילתות", icon: "queries" as const, badge: badge.total, badgeTitle }]
+      : []),
+    // the HR workspace: the HR role's page, and the Admin's — authority over everything
+    ...(commanded?.role === "HR" || commanded?.role === "ADMIN" ? [{ href: "/hr", label: "משא״ן", icon: "hr" as const }] : []),
+  ];
 
   const showSwitcher = devSwitchEnabled();
   const users = showSwitcher ? await prisma.user.findMany({ orderBy: { role: "asc" } }) : [];
