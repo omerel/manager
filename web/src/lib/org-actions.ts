@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/authz";
 import { logActivity } from "@/lib/activity-log";
+import { emitMovement, pathOf } from "@/lib/movements";
 import type { OrgKind } from "@/generated/prisma/client";
 
 function str(v: FormDataEntryValue | null): string {
@@ -154,6 +155,15 @@ export async function removeOrgNode(formData: FormData) {
   if (!node) throw new Error("מסגרת לא נמצאה.");
 
   const ids = await subtreeIds(id);
+  // the people about to be orphaned, captured BEFORE the delete nulls their
+  // teamId at the database level — the one movement that had no witnesses
+  const orphans = await prisma.person.findMany({
+    where: { teamId: { in: ids } },
+    select: { id: true, fullName: true, teamId: true },
+  });
+  // paths BEFORE the delete — afterwards there is nothing left to snapshot
+  const orphanPaths = new Map<string, string | null>();
+  for (const teamId of new Set(orphans.map((o) => o.teamId!))) orphanPaths.set(teamId, await pathOf(teamId));
   // delete deepest-first so no parent disappears before its children
   await prisma.$transaction(ids.reverse().map((nodeId) => prisma.orgNode.delete({ where: { id: nodeId } })));
   await logActivity({
@@ -162,6 +172,14 @@ export async function removeOrgNode(formData: FormData) {
     subjectType: "org",
     subjectId: id,
   });
+  // the orphaning gains witnesses: one movement per person the delete unassigned
+  for (const o of orphans) {
+    await emitMovement({
+      kind: "MOVED", personId: o.id, personName: o.fullName,
+      fromTeamId: o.teamId, fromPath: orphanPaths.get(o.teamId!) ?? null,
+      toTeamId: null, toPath: null, source: "org-delete",
+    });
+  }
 
   revalidatePath("/hierarchy");
   revalidatePath("/people");

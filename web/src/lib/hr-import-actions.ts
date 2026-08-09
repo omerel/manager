@@ -9,6 +9,7 @@ import { composeFullName } from "@/lib/person-name";
 import { parseIsraeliDate } from "@/lib/dates";
 import { logActivity } from "@/lib/activity-log";
 import { findByIdentity } from "@/lib/identity-keys";
+import { emitMovement } from "@/lib/movements";
 import {
   parseTable,
   recognizeHeaders,
@@ -170,7 +171,7 @@ export async function approveImport() {
         } else {
           const allDefs = await prisma.personFieldDef.findMany({ select: { id: true, order: true } });
           const orderOf = new Map(allDefs.map((d) => [d.id, d.order]));
-          await prisma.person.create({
+          const createdPerson = await prisma.person.create({
             data: {
               firstName: c.data.firstName,
               lastName: c.data.lastName,
@@ -185,6 +186,13 @@ export async function approveImport() {
             },
           });
           created++;
+          // per-person, not only the aggregate summary — the movement log's
+          // whole point. The actor rides in explicitly: this runs in after(),
+          // where there is no session to read.
+          await emitMovement({
+            kind: "CREATED", personId: createdPerson.id, personName: createdPerson.fullName,
+            toTeamId: c.teamId, source: "import", actor: { id: me.id, name: actorName },
+          });
         }
       } catch (e) {
         downgraded.push(`${c.name} — ${(e as Error).message.slice(0, 120)}`);

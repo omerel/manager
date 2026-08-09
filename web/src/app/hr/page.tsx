@@ -22,6 +22,11 @@ import {
 } from "@/lib/hr-update-actions";
 import { careerTargetSources } from "@/lib/hr-update";
 import { TargetPicker, type TargetOption } from "@/components/TargetPicker";
+import { readMovements } from "@/lib/movements";
+import { DateField } from "@/components/DateField";
+import { computeVisibility } from "@/lib/access";
+import { parseIsraeliDate, formatIsraeliDate } from "@/lib/dates";
+import type { MovementKind } from "@/generated/prisma/client";
 import { resolveProposalItem } from "@/lib/extract-actions";
 import { HrUpdateReview, type ReviewPerson } from "@/components/HrUpdateReview";
 
@@ -50,12 +55,26 @@ const KIND_STYLE: Record<string, { label: string; cls: string }> = {
   "duplicate-halt": { label: "ייתכן כפיל", cls: "bg-amber-100 text-amber-900" },
 };
 
-export default async function HrPage() {
+const MOVEMENT_META: Record<MovementKind, { label: string; cls: string }> = {
+  CREATED: { label: "נוצר", cls: "bg-green-100 text-green-800" },
+  MOVED: { label: "עבר", cls: "bg-blue-100 text-blue-800" },
+  REMOVED: { label: "נמחק", cls: "bg-red-100 text-red-800" },
+  DEPARTED: { label: "עזב", cls: "bg-slate-200 text-slate-700" },
+};
+const SOURCE_LABEL: Record<string, string> = {
+  manual: "ידני", intake: "קליטת מסמך", import: "ייבוא טבלה", "org-delete": "מחיקת מסגרת", status: "עדכון סטטוס",
+};
+
+export default async function HrPage({ searchParams }: { searchParams: Promise<{ day?: string; mkind?: string; mteam?: string; mactor?: string }> }) {
+  const { day: rawDay, mkind, mteam, mactor } = await searchParams;
   const session = await getSessionUser();
   const me = await prisma.user.findUnique({ where: { id: session.id }, select: { id: true, role: true } });
   // HR by role, Admin by their authority over everything; nobody else
   if (me?.role !== "HR" && me?.role !== "ADMIN") notFound();
 
+  const day = parseIsraeliDate(rawDay ?? "") ?? new Date(Date.UTC(new Date().getFullYear(), new Date().getMonth(), new Date().getDate()));
+  const kindFilter = ["CREATED", "MOVED", "REMOVED", "DEPARTED"].includes(mkind ?? "") ? (mkind as MovementKind) : undefined;
+  const visibility = await computeVisibility(session);
   const [current, targets, updateRun, career, snapshots] = await Promise.all([
     currentImport(me.id),
     targetOptions(),
@@ -63,6 +82,16 @@ export default async function HrPage() {
     careerTargetSources(),
     prisma.importSnapshot.findMany({ orderBy: { uploadedAt: "desc" }, take: 5 }),
   ]);
+  const movements = await readMovements(visibility, day, {
+    kind: kindFilter,
+    teamId: mteam || undefined,
+    actorId: mactor || undefined,
+  });
+  const movementActors = [...new Map(movements.map((m) => [m.actorId, m.actorName])).entries()];
+  const prevDay = formatIsraeliDate(new Date(day.getTime() - 86400_000));
+  const nextDay = formatIsraeliDate(new Date(day.getTime() + 86400_000));
+  const scopeTeams = (await prisma.orgNode.findMany({ where: { kind: "TEAM" }, orderBy: { name: "asc" } }))
+    .filter((t) => visibility.canEdit(t.id));
   const state = current?.state ?? null;
   const upd = updateRun?.state ?? null;
   // every target names its SOURCE — the card, or the plans that carry the label
@@ -361,6 +390,76 @@ export default async function HrPage() {
               <HrUpdateReview people={reviewPeople} resolve={resolveProposalItem} conclude={concludeUpdateRun} dismiss={dismissUpdateRun} />
             )}
           </div>
+        )}
+      </section>
+
+      <section className="space-y-4 border-t border-border/70 pt-6">
+        <div>
+          <h2 className="text-xl font-bold">עדכוני כוח אדם</h2>
+          <p className="mt-1 text-sm text-muted">
+            כל תנועות האנשים — נוצר, עבר, נמחק, עזב — בחתך יומי. תנועה נראית אם המקור או היעד בתחום העריכה שלך; מעבר אל
+            מחוץ לתחום נשאר גלוי.
+          </p>
+        </div>
+
+        <form method="get" action="/hr" className="flex flex-wrap items-end gap-2">
+          <a href={`/hr?day=${prevDay}${mkind ? `&mkind=${mkind}` : ""}`} className="rounded-md border border-border px-2 py-1.5 text-sm hover:bg-slate-50">→ יום קודם</a>
+          <DateField name="day" label="תאריך" defaultDate={day} className={`${inputCls} w-40`} />
+          <a href={`/hr?day=${nextDay}${mkind ? `&mkind=${mkind}` : ""}`} className="rounded-md border border-border px-2 py-1.5 text-sm hover:bg-slate-50">יום הבא ←</a>
+          <div className="flex flex-col">
+            <label className="mb-1 text-xs text-muted">סוג</label>
+            <select name="mkind" defaultValue={mkind ?? ""} className={inputCls}>
+              <option value="">הכול</option>
+              {Object.entries(MOVEMENT_META).map(([k, v]) => (<option key={k} value={k}>{v.label}</option>))}
+            </select>
+          </div>
+          <div className="flex flex-col">
+            <label className="mb-1 text-xs text-muted">מסגרת</label>
+            <select name="mteam" defaultValue={mteam ?? ""} className={inputCls}>
+              <option value="">הכול</option>
+              {scopeTeams.map((t) => (<option key={t.id} value={t.id}>{t.name}</option>))}
+            </select>
+          </div>
+          <div className="flex flex-col">
+            <label className="mb-1 text-xs text-muted">מבצע</label>
+            <select name="mactor" defaultValue={mactor ?? ""} className={inputCls}>
+              <option value="">הכול</option>
+              {movementActors.map(([id, name]) => (<option key={id} value={id}>{name}</option>))}
+            </select>
+          </div>
+          <button className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-slate-50">סנן</button>
+        </form>
+
+        {movements.length === 0 ? (
+          <p className="rounded-xl border border-border/70 bg-card p-6 text-sm text-muted shadow-sm">
+            אין תנועות ב-{formatIsraeliDate(day)} תחת המסננים שנבחרו.
+          </p>
+        ) : (
+          <ul className="divide-y divide-border/60 rounded-xl border border-border/70 bg-card shadow-sm">
+            {movements.map((m) => (
+              <li key={m.id} className="flex flex-wrap items-center gap-2 px-4 py-2 text-sm">
+                <span className="w-12 text-xs text-muted">
+                  {new Intl.DateTimeFormat("he-IL", { hour: "2-digit", minute: "2-digit" }).format(m.at)}
+                </span>
+                <span className={`rounded px-1.5 py-0.5 text-xs ${MOVEMENT_META[m.kind].cls}`}>{MOVEMENT_META[m.kind].label}</span>
+                {m.personExists ? (
+                  <Link href={`/people/${m.personId}`} className="font-medium text-brand-700 hover:underline">
+                    {m.personName}
+                  </Link>
+                ) : (
+                  <span className="font-medium" title="האדם כבר אינו במערכת">{m.personName}</span>
+                )}
+                <span className="text-xs text-muted">
+                  {m.fromPath || m.toPath
+                    ? `${m.fromPath ?? "ללא שיוך"} ← ${m.toPath ?? "ללא שיוך"}`
+                    : ""}
+                </span>
+                <span className="ms-auto text-xs text-muted">
+                  {m.actorName} · {SOURCE_LABEL[m.source] ?? m.source}
+                </span>
+              </li>
+            ))}
+          </ul>
         )}
       </section>
     </div>

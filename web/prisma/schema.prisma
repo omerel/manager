@@ -498,6 +498,36 @@ model PersonDraft {
 /// the header signature. Global by decision: one master system, every HR user
 /// shares it. A column may carry SEVERAL targets (careers differ), so the
 /// mapping rows are {header, targets[]}.
+enum MovementKind {
+  CREATED // נוצר — ידנית, בקליטה, או בייבוא
+  MOVED // עבר מסגרת, כולל אל «ללא שיוך»
+  REMOVED // נמחק מהמערכת
+  DEPARTED // מעבר סטטוס ל«עזב»
+}
+
+/// One workforce movement, as a SNAPSHOT: no foreign keys anywhere, because
+/// the row must outlive the person and the frameworks it names — the same
+/// reasoning as the activity log, with the two axes it lacks: from and to,
+/// which are what let an HR user see what LEFT their scope.
+model PersonMovement {
+  id         String       @id @default(cuid())
+  kind       MovementKind
+  personId   String // no FK — the movement survives the person
+  personName String // as it read at the time
+  fromTeamId String?
+  fromPath   String? // «מרכז ▸ תחום ▸ צוות», at the time
+  toTeamId   String?
+  toPath     String?
+  actorId    String
+  actorName  String
+  source     String // "manual" | "intake" | "import" | "org-delete" | "status"
+  at         DateTime     @default(now())
+
+  @@index([at])
+  @@index([fromTeamId, at])
+  @@index([toTeamId, at])
+}
+
 model ImportMapping {
   id          String   @id @default(cuid())
   headersHash String   @unique // normalised, sorted, hashed headers

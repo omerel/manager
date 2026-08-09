@@ -15,6 +15,7 @@ import { composeFullName } from "@/lib/person-name";
 import { deleteUploadDir } from "@/lib/storage";
 import { logActivity } from "@/lib/activity-log";
 import { assertIdentityFree } from "@/lib/identity-keys";
+import { emitMovement } from "@/lib/movements";
 import { monthsSince } from "@/lib/waivers";
 import { parseIsraeliDate } from "@/lib/dates";
 
@@ -155,9 +156,13 @@ export async function reassignTeam(formData: FormData) {
   await requireEditForNode(teamId); // must be able to edit the destination
   const team = await prisma.orgNode.findUnique({ where: { id: teamId } });
   if (!team || team.kind !== "TEAM") throw new Error("יש לשייך לצוות (צומת מסוג צוות).");
+  // the movement needs WHERE FROM — read before the update erases it
+  const before = await prisma.person.findUnique({ where: { id: personId }, select: { teamId: true } });
+  const previousTeamId = before?.teamId ?? null;
   await prisma.person.update({ where: { id: personId }, data: { teamId } });
   const moved = await prisma.person.findUnique({ where: { id: personId }, select: { fullName: true } });
   await logActivity({ action: "person.reassign", description: `שייך את ${moved?.fullName ?? personId} ל${team.name}`, subjectType: "person", subjectId: personId });
+  await emitMovement({ kind: "MOVED", personId, personName: moved?.fullName ?? personId, fromTeamId: previousTeamId, toTeamId: teamId, source: "manual" });
   revalidatePath(`/people/${personId}`);
   revalidatePath("/people");
 }
@@ -211,6 +216,11 @@ export async function createPerson(formData: FormData) {
 
   // before the redirect: redirect() throws to unwind, so anything after it never runs
   await logActivity({ action: "person.create", description: `יצר את ${person.fullName}`, subjectType: "person", subjectId: person.id });
+  // a draftId marks the intake channel — the same action serves both doors
+  await emitMovement({
+    kind: "CREATED", personId: person.id, personName: person.fullName, toTeamId: person.teamId,
+    source: str(formData.get("draftId")) ? "intake" : "manual",
+  });
   redirect(`/people/${person.id}`);
 }
 
@@ -230,6 +240,10 @@ export async function updatePerson(formData: FormData) {
   const { values, labeled } = await collectFieldValues(formData);
   // an identity value belongs to one person — refused by name, own values pass
   await assertIdentityFree(labeled, personId);
+
+  // departure is a TRANSITION: emitted only when the stored status was not
+  // already עזב, so re-editing a departed person's card stays silent
+  const statusBefore = await prisma.person.findUnique({ where: { id: personId }, select: { status: true, teamId: true, fullName: true } });
 
   await prisma.$transaction([
     prisma.person.update({
@@ -254,6 +268,13 @@ export async function updatePerson(formData: FormData) {
     subjectType: "person",
     subjectId: personId,
   });
+  const statusNow = statusOf(formData.get("status"));
+  if (statusNow === "DEPARTED" && statusBefore?.status !== "DEPARTED") {
+    await emitMovement({
+      kind: "DEPARTED", personId, personName: composeFullName(firstName, lastName),
+      fromTeamId: statusBefore?.teamId, source: "status",
+    });
+  }
   revalidatePath(`/people/${personId}`);
 }
 
@@ -481,7 +502,7 @@ export async function removePerson(formData: FormData) {
     where: { id: personId },
     // fullName is read for the activity entry: after the delete there is
     // nothing left to name them by
-    select: { id: true, fullName: true, assignedPlanId: true, planAssignments: { select: { planId: true } } },
+    select: { id: true, fullName: true, teamId: true, assignedPlanId: true, planAssignments: { select: { planId: true } } },
   });
   if (!person) throw new Error("איש לא נמצא.");
 
@@ -502,6 +523,7 @@ export async function removePerson(formData: FormData) {
   await deleteUploadDir(personId);
 
   await logActivity({ action: "person.delete", description: `מחק את ${person.fullName}`, subjectType: "person", subjectId: personId });
+  await emitMovement({ kind: "REMOVED", personId, personName: person.fullName, fromTeamId: person.teamId, source: "manual" });
 
   revalidatePath("/people");
   revalidatePath("/plans");
