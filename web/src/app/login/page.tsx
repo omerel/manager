@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getSessionUserOrNull } from "@/lib/session";
-import { getLogoPath, getSystemName } from "@/lib/branding";
+import { getLogoPath, getSystemName, getLoginLink } from "@/lib/branding";
+import { ExternalLink } from "lucide-react";
 import { login } from "@/lib/auth-actions";
 import { PendingButton } from "@/components/PendingButton";
 import { AppLogo } from "@/components/Logo";
@@ -9,7 +10,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   const { error } = await searchParams;
   // already signed in → straight to the dashboard
   if (await getSessionUserOrNull()) redirect("/");
-  const [logoPath, systemName] = await Promise.all([getLogoPath(), getSystemName()]);
+  const [logoPath, systemName, loginLink] = await Promise.all([getLogoPath(), getSystemName(), getLoginLink()]);
 
   return (
     <div className="mx-auto mt-16 w-full max-w-sm space-y-6">
@@ -58,6 +59,21 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
           התחבר
         </PendingButton>
       </form>
+
+      {loginLink.enabled && loginLink.url && (
+        <div className="rounded-xl border border-border/70 bg-card p-4 text-center shadow-sm">
+          <p className="text-sm text-muted">{loginLink.text}</p>
+          <a
+            href={loginLink.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-md border border-border px-4 py-2 text-sm font-medium text-brand-700 hover:bg-stone-50"
+          >
+            <ExternalLink className="h-4 w-4" aria-hidden />
+            מעבר לאתר
+          </a>
+        </div>
+      )}
     </div>
   );
 }

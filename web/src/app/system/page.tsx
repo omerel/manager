@@ -1,12 +1,13 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/session";
-import { getLogoPath, getSystemName, DEFAULT_SYSTEM_NAME } from "@/lib/branding";
-import { uploadLogo, resetLogo, updateSystemName } from "@/lib/branding-actions";
+import { getLogoPath, getSystemName, getLoginLink, DEFAULT_SYSTEM_NAME, DEFAULT_LOGIN_LINK_TEXT } from "@/lib/branding";
+import { uploadLogo, resetLogo, updateSystemName, updateLoginLink } from "@/lib/branding-actions";
 import { importBundle } from "@/lib/portability-actions";
 import { AppLogo, LogoMark } from "@/components/Logo";
 import { FileDrop } from "@/components/FileDrop";
-import { Palette, DatabaseBackup, Download, Upload } from "lucide-react";
+import { Palette, DatabaseBackup, Download, Upload, ExternalLink, Eraser } from "lucide-react";
+import { DevWipe } from "@/components/DevWipe";
 
 export default async function SystemSettingsPage({
   searchParams,
@@ -19,6 +20,7 @@ export default async function SystemSettingsPage({
   const logoPath = await getLogoPath();
   const customLogo = !!logoPath;
   const systemName = await getSystemName();
+  const loginLink = await getLoginLink();
 
   return (
     <div className="space-y-6">
@@ -93,6 +95,63 @@ export default async function SystemSettingsPage({
           </div>
         )}
       </section>
+
+      {/* Login-page environment link */}
+      <section className="space-y-4 rounded-xl border border-border/70 bg-card p-5 shadow-sm">
+        <h2 className="flex items-center gap-2 text-lg font-semibold">
+          <ExternalLink className="h-5 w-5 text-brand-600" aria-hidden />
+          קישור באתר ההתחברות
+        </h2>
+        <p className="text-sm text-muted">
+          כרטיס מתחת לטופס ההתחברות המפנה לאתר אחר — למשל לסביבת הפיתוח. הכרטיס מוצג רק כשהוא
+          במצב ״הצג״ וגם הוזנה כתובת.
+        </p>
+        <form action={updateLoginLink} className="flex flex-wrap items-end gap-3">
+          <div className="flex flex-col">
+            <label htmlFor="loginLinkText" className="mb-1 text-sm text-muted">טקסט הכרטיס</label>
+            <input
+              id="loginLinkText"
+              name="loginLinkText"
+              defaultValue={loginLink.text}
+              placeholder={DEFAULT_LOGIN_LINK_TEXT}
+              className="w-64 rounded-md border border-border px-3 py-1.5 text-sm"
+            />
+          </div>
+          <div className="flex flex-col">
+            <label htmlFor="loginLinkUrl" className="mb-1 text-sm text-muted">כתובת היעד (http/https)</label>
+            <input
+              id="loginLinkUrl"
+              name="loginLinkUrl"
+              dir="ltr"
+              defaultValue={loginLink.url ?? ""}
+              placeholder="https://dev.example.com"
+              className="w-80 rounded-md border border-border px-3 py-1.5 text-sm"
+            />
+          </div>
+          <label className="flex items-center gap-2 py-1.5 text-sm">
+            <input type="checkbox" name="loginLinkEnabled" defaultChecked={loginLink.enabled} className="accent-brand-600" />
+            הצג במסך ההתחברות
+          </label>
+          <button className="rounded-md bg-brand-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-brand-700">
+            שמור קישור
+          </button>
+          <p className="w-full text-xs text-muted">{`ניקוי הטקסט מחזיר לברירת המחדל "${DEFAULT_LOGIN_LINK_TEXT}"; ניקוי הכתובת מסתיר את הכרטיס.`}</p>
+        </form>
+      </section>
+
+      {process.env.NODE_ENV !== "production" && (
+        <section className="space-y-4 rounded-xl border border-red-200 bg-card p-5 shadow-sm">
+          <h2 className="flex items-center gap-2 text-lg font-semibold">
+            <Eraser className="h-5 w-5 text-red-600" aria-hidden />
+            מחיקת נתונים (סביבת פיתוח)
+          </h2>
+          <p className="text-sm text-muted">
+            מחיקה לפי סוג נתונים — לניקוי סביבת הפיתוח בין ניסויים. משתמשים, הרשאות, עץ הארגון,
+            ההגדרות ויומן הפעילות לעולם אינם נמחקים כאן. הכלי אינו קיים בסביבת ייצור.
+          </p>
+          <DevWipe />
+        </section>
+      )}
 
       {/* Backup & data portability */}
       <section className="space-y-4 rounded-xl border border-border/70 bg-card p-5 shadow-sm">

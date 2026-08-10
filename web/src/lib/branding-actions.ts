@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { logActivity } from "@/lib/activity-log";
 import { requireAdmin } from "@/lib/authz";
 import { saveUpload, deleteUpload } from "@/lib/storage";
-import { getLogoPath, setLogoPath, setSystemName } from "@/lib/branding";
+import { getLogoPath, setLogoPath, setSystemName, setLoginLink } from "@/lib/branding";
 
 export async function updateSystemName(formData: FormData) {
   await requireAdmin();
@@ -33,4 +33,20 @@ export async function resetLogo() {
   await deleteUpload(previous);
   await logActivity({ action: "branding.logo", description: "איפס את לוגו המערכת", subjectType: "system" });
   revalidatePath("/", "layout");
+}
+
+export async function updateLoginLink(formData: FormData) {
+  await requireAdmin();
+  const url = String(formData.get("loginLinkUrl") ?? "").trim();
+  // the login page is shown to signed-OUT visitors — never let a non-http
+  // scheme (javascript:, data:) through, even Admin-planted
+  if (url && !/^https?:\/\/.+/i.test(url)) throw new Error("הקישור חייב להיות כתובת מלאה המתחילה ב-http:// או https://");
+  await setLoginLink({
+    text: String(formData.get("loginLinkText") ?? ""),
+    url,
+    enabled: formData.get("loginLinkEnabled") === "on",
+  });
+  await logActivity({ action: "branding.loginLink", description: "עדכן את קישור אתר הפיתוח במסך ההתחברות", subjectType: "system" });
+  revalidatePath("/login");
+  revalidatePath("/system");
 }
