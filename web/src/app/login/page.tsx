@@ -3,6 +3,7 @@ import { getSessionUserOrNull } from "@/lib/session";
 import { getLogoPath, getSystemName, getLoginLink } from "@/lib/branding";
 import { ExternalLink } from "lucide-react";
 import { login } from "@/lib/auth-actions";
+import { ActionForm } from "@/components/ActionForm";
 import { PendingButton } from "@/components/PendingButton";
 import { AppLogo } from "@/components/Logo";
 
@@ -26,7 +27,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
         </div>
       )}
 
-      <form action={login} className="space-y-4 rounded-xl border border-border/70 bg-card shadow-sm p-6">
+      <ActionForm action={login} className="space-y-4 rounded-xl border border-border/70 bg-card shadow-sm p-6">
         <div className="flex flex-col">
           <label htmlFor="identifier" className="mb-1 text-sm text-muted">
             שם משתמש או אימייל
@@ -58,7 +59,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
         >
           התחבר
         </PendingButton>
-      </form>
+      </ActionForm>
 
       {loginLink.enabled && loginLink.url && (
         <div className="rounded-xl border border-border/70 bg-card p-4 text-center shadow-sm">

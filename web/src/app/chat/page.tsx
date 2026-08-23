@@ -11,6 +11,7 @@ import { fmtDate } from "@/lib/dates";
 import { QuestionInput, type Mentionable } from "@/components/QuestionInput";
 import { PendingButton } from "@/components/PendingButton";
 import { AutoRefresh } from "@/components/AutoRefresh";
+import { ActionForm } from "@/components/ActionForm";
 import { effectiveStatus, staleError } from "@/lib/jobs";
 
 export default async function ChatPage({ searchParams }: { searchParams: Promise<{ run?: string }> }) {
@@ -52,7 +53,7 @@ export default async function ChatPage({ searchParams }: { searchParams: Promise
         </p>
       </div>
 
-      <form action={askQuestion} className="flex flex-wrap items-end gap-2 rounded-xl border border-border/70 bg-card shadow-sm p-4">
+      <ActionForm action={askQuestion} className="flex flex-wrap items-end gap-2 rounded-xl border border-border/70 bg-card shadow-sm p-4">
         <QuestionInput mentionables={mentionables} />
         <PendingButton
           pendingLabel="הסוכן חושב…"
@@ -63,17 +64,17 @@ export default async function ChatPage({ searchParams }: { searchParams: Promise
         <p className="w-full text-xs text-muted">
           הריצה עשויה לקחת עד דקה-שתיים. הסוכן קורא גם את תוכן הקבצים המצורפים לחוות הדעת.
         </p>
-      </form>
+      </ActionForm>
 
       {run && (
         <div className="space-y-3">
           <div className="rounded-xl border border-border/70 bg-card shadow-sm p-4">
             <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted">
               <span>שאלה · {fmtDate(run.createdAt)}</span>
-              <form action={deleteChatRun}>
+              <ActionForm action={deleteChatRun}>
                 <input type="hidden" name="runId" value={run.id} />
                 <button className="text-xs text-red-600 hover:underline">מחק שאלה</button>
-              </form>
+              </ActionForm>
             </div>
             <p className="mt-1 whitespace-pre-wrap font-medium">{run.prompt}</p>
           </div>
@@ -85,12 +86,12 @@ export default async function ChatPage({ searchParams }: { searchParams: Promise
                   <a href={`/runs/${run.id}/download?format=md`} className="rounded-md border border-border bg-card px-2 py-1 text-xs hover:bg-slate-50">⬇ MD</a>
                   <a href={`/runs/${run.id}/download?format=pdf`} className="rounded-md border border-border bg-card px-2 py-1 text-xs hover:bg-slate-50">⬇ PDF</a>
                   <EmailRunButton runId={run.id} />
-                  <form action={saveQuestionAsRule}>
+                  <ActionForm action={saveQuestionAsRule}>
                     <input type="hidden" name="runId" value={run.id} />
                     <button className="rounded-md border border-border bg-card px-3 py-1 text-xs hover:bg-slate-50">
                       💾 שמור כחוק
                     </button>
-                  </form>
+                  </ActionForm>
                 </span>
               </div>
               <div className="prose prose-sm max-w-none prose-headings:mt-4 prose-headings:mb-2 prose-p:my-1.5 prose-li:my-0.5 prose-table:text-sm">
@@ -129,12 +130,12 @@ export default async function ChatPage({ searchParams }: { searchParams: Promise
                   {h.status === "RUNNING" ? "⏳ " : ""}
                   {h.prompt} · <span className="text-xs">{fmtDate(h.createdAt)}</span>
                 </Link>
-                <form action={deleteChatRun}>
+                <ActionForm action={deleteChatRun}>
                   <input type="hidden" name="runId" value={h.id} />
                   <button className="text-xs text-red-600 hover:underline" title="מחק שאלה">
                     מחק
                   </button>
-                </form>
+                </ActionForm>
               </li>
             ))}
           </ul>

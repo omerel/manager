@@ -2,6 +2,7 @@ import Link from "next/link";
 import { isAdmin } from "@/lib/authz";
 import { getFieldDefs, FIELD_TYPE_LABEL, CORE_FIELDS, ALL_CORE_FIELDS } from "@/lib/person-schema";
 import { addFieldDef, removeFieldDef, updateFieldDef, moveFieldDef } from "@/lib/person-actions";
+import { ActionForm } from "@/components/ActionForm";
 
 const inputCls = "rounded-md border border-border px-3 py-1.5 text-sm";
 
@@ -40,7 +41,7 @@ export default async function CardSchemaPage({ searchParams }: { searchParams: P
             {defs.map((d, i) =>
               admin && editId === d.id ? (
                 <li key={d.id} className="bg-brand-50/60 px-4 py-3">
-                  <form action={updateFieldDef} className="flex flex-wrap items-end gap-2">
+                  <ActionForm action={updateFieldDef} className="flex flex-wrap items-end gap-2">
                     <input type="hidden" name="id" value={d.id} />
                     <div className="flex flex-col">
                       <label className="mb-1 text-xs text-muted">שם השדה</label>
@@ -68,7 +69,7 @@ export default async function CardSchemaPage({ searchParams }: { searchParams: P
                     <Link href="/people/card-schema" className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-slate-50">
                       ביטול
                     </Link>
-                  </form>
+                  </ActionForm>
                   <p className="mt-1 text-xs text-muted">שינוי סוג/אפשרויות אינו משכתב ערכים שכבר הוזנו לאנשים.</p>
                 </li>
               ) : (
@@ -83,27 +84,27 @@ export default async function CardSchemaPage({ searchParams }: { searchParams: P
                   </span>
                   {admin && (
                     <span className="flex items-center gap-2">
-                      <form action={moveFieldDef}>
+                      <ActionForm action={moveFieldDef}>
                         <input type="hidden" name="id" value={d.id} />
                         <input type="hidden" name="dir" value="up" />
                         <button disabled={i === 0} className="rounded border border-border px-1.5 py-0.5 text-xs disabled:opacity-30 hover:bg-slate-50" title="הזז למעלה">
                           ▲
                         </button>
-                      </form>
-                      <form action={moveFieldDef}>
+                      </ActionForm>
+                      <ActionForm action={moveFieldDef}>
                         <input type="hidden" name="id" value={d.id} />
                         <input type="hidden" name="dir" value="down" />
                         <button disabled={i === defs.length - 1} className="rounded border border-border px-1.5 py-0.5 text-xs disabled:opacity-30 hover:bg-slate-50" title="הזז למטה">
                           ▼
                         </button>
-                      </form>
+                      </ActionForm>
                       <Link href={`/people/card-schema?edit=${d.id}`} className="text-xs text-brand-700 hover:underline">
                         ערוך
                       </Link>
-                      <form action={removeFieldDef}>
+                      <ActionForm action={removeFieldDef}>
                         <input type="hidden" name="id" value={d.id} />
                         <button className="text-xs text-red-600 hover:underline">מחק</button>
-                      </form>
+                      </ActionForm>
                     </span>
                   )}
                 </li>
@@ -114,7 +115,7 @@ export default async function CardSchemaPage({ searchParams }: { searchParams: P
       </div>
 
       {admin && (
-        <form action={addFieldDef} className="flex flex-wrap items-end gap-2 rounded-lg border border-dashed border-border p-4">
+        <ActionForm action={addFieldDef} className="flex flex-wrap items-end gap-2 rounded-lg border border-dashed border-border p-4">
           <div className="flex flex-col">
             <label htmlFor="label" className="mb-1 text-sm text-muted">שם השדה</label>
             <input id="label" name="label" required placeholder="למשל: השכלה" className={inputCls} />
@@ -136,7 +137,7 @@ export default async function CardSchemaPage({ searchParams }: { searchParams: P
             <input type="checkbox" name="required" /> חובה
           </label>
           <button className="rounded-md bg-brand-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-brand-700">הוסף שדה</button>
-        </form>
+        </ActionForm>
       )}
     </div>
   );

@@ -6,6 +6,7 @@ import { getSessionUser } from "@/lib/session";
 import { getEnrollableTeams } from "@/lib/people";
 import { getFieldDefs } from "@/lib/person-schema";
 import { PersonFormFields } from "@/components/PersonFormFields";
+import { ActionForm } from "@/components/ActionForm";
 import { createPerson } from "@/lib/person-actions";
 import { extractForNewPerson } from "@/lib/extract-actions";
 import { PendingButton } from "@/components/PendingButton";
@@ -84,7 +85,7 @@ export default async function NewPersonPage({
                 <AutoRefresh />
               </div>
             ) : (
-              <form action={extractForNewPerson} className="flex flex-wrap items-end gap-2">
+              <ActionForm action={extractForNewPerson} className="flex flex-wrap items-end gap-2">
                 <FileDrop name="document" required accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.md,.csv,.png,.jpg,.jpeg" label="גרור/י מסמך לכאן (PDF / Word / Excel / טקסט / סרוק)" className="min-w-72 flex-1" />
                 <PendingButton
                   pendingLabel="מתחיל ניתוח…"
@@ -93,7 +94,7 @@ export default async function NewPersonPage({
                   נתח מסמך ומלא טופס
                 </PendingButton>
                 <p className="w-full text-xs text-muted">הניתוח רץ ברקע — הטופס יתמלא לבד כשיסיים.</p>
-              </form>
+              </ActionForm>
             )}
             {busy === "1" && (
               <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-1.5 text-sm text-amber-800">
@@ -118,7 +119,7 @@ export default async function NewPersonPage({
             </div>
           )}
 
-          <form action={createPerson} className="space-y-4 rounded-xl border border-border/70 bg-card shadow-sm p-5">
+          <ActionForm action={createPerson} className="space-y-4 rounded-xl border border-border/70 bg-card shadow-sm p-5">
             {draft && <input type="hidden" name="draftId" value={draft.id} />}
             <div className="flex flex-col">
               <label htmlFor="teamId" className="mb-1 text-sm text-muted">
@@ -161,7 +162,7 @@ export default async function NewPersonPage({
                 ביטול
               </Link>
             </div>
-          </form>
+          </ActionForm>
         </>
       )}
     </div>

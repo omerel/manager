@@ -1,4 +1,5 @@
 import { extractFromDocument, resolveProposalItem, discardProposal, type ProposalItem } from "@/lib/extract-actions";
+import { ActionForm } from "@/components/ActionForm";
 import { PendingButton } from "@/components/PendingButton";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import { FileDrop } from "@/components/FileDrop";
@@ -39,7 +40,7 @@ export function ExtractionPanel({
           <AutoRefresh />
         </div>
       ) : (
-        <form action={extractFromDocument} className="flex flex-wrap items-end gap-2">
+        <ActionForm action={extractFromDocument} className="flex flex-wrap items-end gap-2">
           <input type="hidden" name="personId" value={personId} />
           <FileDrop
             name="document"
@@ -55,7 +56,7 @@ export function ExtractionPanel({
             נתח מסמך
           </PendingButton>
           <p className="w-full text-xs text-muted">הניתוח רץ ברקע — אפשר להמשיך לעבוד.</p>
-        </form>
+        </ActionForm>
       )}
 
       {busy && (
@@ -78,10 +79,10 @@ export function ExtractionPanel({
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <h3 className="font-medium">הצעות מהמסמך — ממתינות לאישור</h3>
-            <form action={discardProposal}>
+            <ActionForm action={discardProposal}>
               <input type="hidden" name="personId" value={personId} />
               <button className="text-xs text-red-600 hover:underline">דחה הכל</button>
-            </form>
+            </ActionForm>
           </div>
           <ul className="divide-y divide-border rounded-md border border-border">
             {proposal.items.map((it) => (
@@ -93,20 +94,20 @@ export function ExtractionPanel({
                   <span className="rounded bg-brand-50 px-1.5 py-0.5 font-medium text-brand-800">{it.proposed}</span>
                 </span>
                 <span className="flex items-center gap-2">
-                  <form action={resolveProposalItem}>
+                  <ActionForm action={resolveProposalItem}>
                     <input type="hidden" name="personId" value={personId} />
                     <input type="hidden" name="proposalId" value={proposal.id} />
                     <input type="hidden" name="key" value={it.key} />
                     <input type="hidden" name="decision" value="apply" />
                     <button className="rounded bg-emerald-600 px-2 py-1 text-xs text-white hover:bg-emerald-700">אשר</button>
-                  </form>
-                  <form action={resolveProposalItem}>
+                  </ActionForm>
+                  <ActionForm action={resolveProposalItem}>
                     <input type="hidden" name="personId" value={personId} />
                     <input type="hidden" name="proposalId" value={proposal.id} />
                     <input type="hidden" name="key" value={it.key} />
                     <input type="hidden" name="decision" value="reject" />
                     <button className="rounded border border-border px-2 py-1 text-xs hover:bg-slate-50">דחה</button>
-                  </form>
+                  </ActionForm>
                 </span>
               </li>
             ))}

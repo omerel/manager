@@ -3,6 +3,7 @@
 import { useState, type ReactNode } from "react";
 import { Pencil } from "lucide-react";
 import { SubmitButton } from "@/components/SubmitButton";
+import { ActionForm } from "@/components/ActionForm";
 
 /**
  * Row that flips between a read-only summary and an edit form. The fields are
@@ -41,9 +42,9 @@ export function InlineEdit({
   }
 
   return (
-    <form
+    <ActionForm
       action={action}
-      onSubmit={() => setOpen(false)}
+      onDone={() => setOpen(false)}
       className={`flex flex-wrap items-end gap-2 rounded-lg bg-brand-50/60 p-2 ${className ?? ""}`}
     >
       {children}
@@ -57,6 +58,6 @@ export function InlineEdit({
       >
         ביטול
       </button>
-    </form>
+    </ActionForm>
   );
 }

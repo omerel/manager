@@ -8,6 +8,7 @@ import { fmtDate } from "@/lib/dates";
 import { runRuleNow, updateRule, updateRuleSchedule, pinRuleFromRun, unpinRule, deleteRule } from "@/lib/rules-actions";
 import { PendingButton } from "@/components/PendingButton";
 import { AutoRefresh } from "@/components/AutoRefresh";
+import { ActionForm } from "@/components/ActionForm";
 import { effectiveStatus, staleError, STALE_MS } from "@/lib/jobs";
 
 const proseCls = "prose prose-sm max-w-none prose-headings:mt-4 prose-headings:mb-2 prose-p:my-1.5 prose-li:my-0.5 prose-table:text-sm";
@@ -57,7 +58,7 @@ export default async function RuleDetailPage({
                     {pinning ? "קיבוע רץ…" : "ריצה פעילה…"}
                   </span>
                 ) : (
-                  <form action={runRuleNow}>
+                  <ActionForm action={runRuleNow}>
                     <input type="hidden" name="ruleId" value={rule.id} />
                     <PendingButton
                       pendingLabel="מתחיל…"
@@ -65,15 +66,15 @@ export default async function RuleDetailPage({
                     >
                       ▶ הרץ עכשיו
                     </PendingButton>
-                  </form>
+                  </ActionForm>
                 )}
                 <Link href={`/rules/${rule.id}?edit=1`} className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-slate-50">
                   ✎ ערוך
                 </Link>
-                <form action={deleteRule}>
+                <ActionForm action={deleteRule}>
                   <input type="hidden" name="ruleId" value={rule.id} />
                   <button className="rounded-md border border-border px-3 py-1.5 text-sm text-red-600 hover:bg-red-50">מחק חוק</button>
-                </form>
+                </ActionForm>
               </>
             )}
           </div>
@@ -96,7 +97,7 @@ export default async function RuleDetailPage({
         )}
 
         {editing ? (
-          <form action={updateRule} className="mt-2 space-y-2 rounded-md border border-brand-200 bg-brand-50/60 p-3">
+          <ActionForm action={updateRule} className="mt-2 space-y-2 rounded-md border border-brand-200 bg-brand-50/60 p-3">
             <input type="hidden" name="ruleId" value={rule.id} />
             <div className="flex flex-col">
               <label className="mb-1 text-sm text-muted">שם החוק</label>
@@ -113,12 +114,12 @@ export default async function RuleDetailPage({
               <button className="rounded-md bg-brand-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-brand-700">שמור</button>
               <Link href={`/rules/${rule.id}`} className="rounded-md border border-border px-4 py-1.5 text-sm hover:bg-slate-50">ביטול</Link>
             </div>
-          </form>
+          </ActionForm>
         ) : (
           <p className="mt-2 whitespace-pre-wrap rounded-md border border-border bg-card px-3 py-2 text-sm">{rule.text}</p>
         )}
         <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
-          <form action={updateRuleSchedule} className="flex items-center gap-2">
+          <ActionForm action={updateRuleSchedule} className="flex items-center gap-2">
             <input type="hidden" name="ruleId" value={rule.id} />
             <label className="text-muted">תזמון:</label>
             <select name="schedule" defaultValue={rule.schedule} className="rounded-md border border-border px-2 py-1 text-sm">
@@ -132,7 +133,7 @@ export default async function RuleDetailPage({
               שלח למייל שלי בכל הרצה
             </label>
             <button className="rounded-md border border-border px-2 py-1 text-sm hover:bg-slate-50">עדכן</button>
-          </form>
+          </ActionForm>
           {rule.nextRunAt && <span className="text-xs text-muted">ריצה כרונית הבאה: {fmtDate(rule.nextRunAt)}</span>}
         </div>
       </div>
@@ -144,10 +145,10 @@ export default async function RuleDetailPage({
             <h2 className="font-semibold text-brand-900">
               📌 מקובע לדטרמיניסטי · {rule.realizationKind === "SCRIPT" ? "סקריפט (ללא LLM, שחזור 1:1)" : "נוהל נעול (LLM עקבי לפי תבנית)"}
             </h2>
-            <form action={unpinRule}>
+            <ActionForm action={unpinRule}>
               <input type="hidden" name="ruleId" value={rule.id} />
               <button className="text-xs text-red-600 hover:underline">בטל קיבוע</button>
-            </form>
+            </ActionForm>
           </div>
           <p className="text-sm text-brand-900/80">
             קובע {fmtDate(rule.pinnedAt)}. כל ריצה משחזרת את התוצר שאושר; הסוכן בחר את המימוש לפי אופי החוק.
@@ -173,7 +174,7 @@ export default async function RuleDetailPage({
             <p className="text-sm text-muted">
               מרוצה מהתוצר האחרון? קיבוע יגרום לכל ריצה עתידית לשחזר אותו נאמנה — הסוכן יבחר לבד בין סקריפט דטרמיניסטי לנוהל נעול.
             </p>
-            <form action={pinRuleFromRun}>
+            <ActionForm action={pinRuleFromRun}>
               <input type="hidden" name="ruleId" value={rule.id} />
               <input type="hidden" name="runId" value={latestSuccess.id} />
               <PendingButton
@@ -182,7 +183,7 @@ export default async function RuleDetailPage({
               >
                 📌 קבע כדטרמיניסטי
               </PendingButton>
-            </form>
+            </ActionForm>
           </section>
         )
       )}

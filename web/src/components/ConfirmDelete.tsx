@@ -1,6 +1,7 @@
 "use client";
 
 import { AlertTriangle, X } from "lucide-react";
+import { ActionForm } from "@/components/ActionForm";
 
 /**
  * The one delete confirmation in the system.
@@ -59,14 +60,15 @@ export function ConfirmDelete({
           >
             ביטול
           </button>
-          <form action={action} onSubmit={onCancel}>
+          {/* the dialog closes on SUCCESS — a refused delete keeps it open with the reason toasted above it */}
+          <ActionForm action={action} onDone={onCancel}>
             {Object.entries(hidden).map(([name, value]) => (
               <input key={name} type="hidden" name={name} value={value} />
             ))}
             <button className="rounded-md bg-red-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-red-700">
               {confirmLabel}
             </button>
-          </form>
+          </ActionForm>
         </div>
       </div>
     </div>

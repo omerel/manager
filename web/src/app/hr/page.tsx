@@ -4,6 +4,7 @@ import { CheckCircle2, FileSpreadsheet, AlertTriangle, Bot } from "lucide-react"
 import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/session";
 import { AutoRefresh } from "@/components/AutoRefresh";
+import { ActionForm } from "@/components/ActionForm";
 import { PendingButton } from "@/components/PendingButton";
 import {
   uploadImport,
@@ -141,7 +142,7 @@ export default async function HrPage({ searchParams }: { searchParams: Promise<{
             <FileSpreadsheet className="h-4 w-4" aria-hidden />
             העלאת קובץ
           </h2>
-          <form action={uploadImport} className="flex flex-wrap items-center gap-3">
+          <ActionForm action={uploadImport} className="flex flex-wrap items-center gap-3">
             <input type="file" name="file" accept=".csv,.xlsx,.xls" required className="text-sm" />
             <PendingButton
               pendingLabel="קורא את הקובץ… (כותרות או תאריכים בפורמט זר נשלחים לסוכן — עד דקה)"
@@ -149,7 +150,7 @@ export default async function HrPage({ searchParams }: { searchParams: Promise<{
             >
               קרא ובנה תצוגה מקדימה
             </PendingButton>
-          </form>
+          </ActionForm>
           <p className="mt-2 text-xs text-muted">
             עמודות מזוהות ממופות אוטומטית; כותרות זרות יקבלו פרשנות מהסוכן — ותוכל לתקן אותה לפני שדבר קורה. ההתאמה לפי
             תעודת זהות ואז מספר אישי.
@@ -167,7 +168,7 @@ export default async function HrPage({ searchParams }: { searchParams: Promise<{
                 עמודות שסומנו הן פרשנות הסוכן — בדוק אותן. הסוכן ממפה מבנה בלבד; ערכים לעולם אינם מומצאים.
               </p>
             )}
-            <form action={remapImport} className="space-y-3">
+            <ActionForm action={remapImport} className="space-y-3">
               <div className="flex flex-wrap gap-3">
                 {state.headers.map((h, i) => (
                   <div key={i} className={`flex flex-col rounded-md border p-2 ${state.agentMapped.includes(h) ? "border-violet-300 bg-violet-50" : "border-border"}`}>
@@ -188,7 +189,7 @@ export default async function HrPage({ searchParams }: { searchParams: Promise<{
               >
                 חשב מחדש עם המיפוי המתוקן
               </PendingButton>
-            </form>
+            </ActionForm>
           </section>
 
           <section className="rounded-xl border border-border/70 bg-card p-5 shadow-sm">
@@ -224,7 +225,7 @@ export default async function HrPage({ searchParams }: { searchParams: Promise<{
               ))}
             </ul>
             <div className="mt-4 flex items-center gap-3">
-              <form action={approveImport}>
+              <ActionForm action={approveImport}>
                 {state.plan.counts.create === 0 ? (
                   <button disabled className="rounded-md bg-brand-600 px-4 py-1.5 text-sm font-medium text-white opacity-40">
                     אשר וצור 0 אנשים
@@ -237,10 +238,10 @@ export default async function HrPage({ searchParams }: { searchParams: Promise<{
                     אשר וצור {state.plan.counts.create} אנשים
                   </PendingButton>
                 )}
-              </form>
-              <form action={dismissImport}>
+              </ActionForm>
+              <ActionForm action={dismissImport}>
                 <button className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-slate-50">בטל</button>
-              </form>
+              </ActionForm>
               <span className="text-xs text-muted">אישור אחד לכל הקובץ. שגיאות וכפילים אינם נכתבים.</span>
             </div>
           </section>
@@ -283,9 +284,9 @@ export default async function HrPage({ searchParams }: { searchParams: Promise<{
               </ul>
             </div>
           )}
-          <form action={dismissImport} className="mt-3">
+          <ActionForm action={dismissImport} className="mt-3">
             <button className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-slate-50">סגור דוח</button>
-          </form>
+          </ActionForm>
         </section>
       )}
 
@@ -299,7 +300,7 @@ export default async function HrPage({ searchParams }: { searchParams: Promise<{
         </div>
 
         {!upd && (
-          <form action={uploadUpdateFile} className="flex flex-wrap items-center gap-3 rounded-xl border border-border/70 bg-card p-4 shadow-sm">
+          <ActionForm action={uploadUpdateFile} className="flex flex-wrap items-center gap-3 rounded-xl border border-border/70 bg-card p-4 shadow-sm">
             <input type="file" name="file" accept=".csv,.xlsx,.xls" required className="text-sm" />
             <PendingButton
               pendingLabel="קורא ומשווה… (מבנה חדש נשלח לסוכן — עד דקה)"
@@ -317,7 +318,7 @@ export default async function HrPage({ searchParams }: { searchParams: Promise<{
                 — לבדוק מהו הפורמט האחרון
               </span>
             )}
-          </form>
+          </ActionForm>
         )}
 
         {upd?.stage === "structure-gate" && upd.structure && (
@@ -329,20 +330,20 @@ export default async function HrPage({ searchParams }: { searchParams: Promise<{
               בהמשך, עמודות מוכרות ישמרו את מיפוין וימופו רק החדשות — לאישורך.
             </p>
             <div className="mt-3 flex gap-2">
-              <form action={acceptStructureChange}>
+              <ActionForm action={acceptStructureChange}>
                 <PendingButton pendingLabel="ממפה…" className="rounded-md bg-brand-600 px-3 py-1.5 text-sm text-white hover:bg-brand-700">
                   המשך למיפוי
                 </PendingButton>
-              </form>
-              <form action={dismissUpdateRun}>
+              </ActionForm>
+              <ActionForm action={dismissUpdateRun}>
                 <button className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-slate-50">בטל</button>
-              </form>
+              </ActionForm>
             </div>
           </div>
         )}
 
         {upd?.stage === "mapping" && (
-          <form action={approveUpdateMapping} className="space-y-3 rounded-xl border border-border/70 bg-card p-4 shadow-sm">
+          <ActionForm action={approveUpdateMapping} className="space-y-3 rounded-xl border border-border/70 bg-card p-4 shadow-sm">
             <h3 className="font-semibold">מיפוי עמודות · {upd.filename}</h3>
             <p className="text-xs text-muted">
               עמודה יכולה להיות ממופה לכמה יעדים — סמן ✓ לכל יעד; ללא סימון = התעלם. המיפוי נשמר גלובלית באישור, לשימוש
@@ -359,7 +360,7 @@ export default async function HrPage({ searchParams }: { searchParams: Promise<{
             <PendingButton pendingLabel="בונה הצעות…" className="rounded-md bg-brand-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-brand-700">
               אשר מיפוי והמשך
             </PendingButton>
-          </form>
+          </ActionForm>
         )}
 
         {upd?.stage === "review" && upd.plan && (
@@ -378,12 +379,12 @@ export default async function HrPage({ searchParams }: { searchParams: Promise<{
               <div className="rounded-xl border border-border/70 bg-card p-6 text-sm text-muted shadow-sm">
                 אין שינויים לסקירה — הקובץ תואם את המערכת. אפשר לסיים ולשמור להיסטוריה.
                 <div className="mt-3 flex gap-2">
-                  <form action={concludeUpdateRun}>
+                  <ActionForm action={concludeUpdateRun}>
                     <button className="rounded-md bg-brand-600 px-3 py-1.5 text-sm text-white hover:bg-brand-700">סיים ושמור</button>
-                  </form>
-                  <form action={dismissUpdateRun}>
+                  </ActionForm>
+                  <ActionForm action={dismissUpdateRun}>
                     <button className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-slate-50">בטל</button>
-                  </form>
+                  </ActionForm>
                 </div>
               </div>
             ) : (

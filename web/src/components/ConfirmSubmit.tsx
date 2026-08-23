@@ -1,5 +1,7 @@
 "use client";
 
+import { ActionForm } from "@/components/ActionForm";
+
 /**
  * A submit button that asks before it acts.
  *
@@ -27,17 +29,11 @@ export function ConfirmSubmit({
   className?: string;
 }) {
   return (
-    <form
-      action={action}
-      onSubmit={(e) => {
-        if (!window.confirm(message)) e.preventDefault();
-      }}
-      className="pb-0.5"
-    >
+    <ActionForm action={action} confirm={message} className="pb-0.5">
       <input type="hidden" name="queryId" value={queryId} />
       <button className={className ?? "rounded-md border border-border px-3 py-1.5 text-sm hover:bg-slate-50"}>
         {label}
       </button>
-    </form>
+    </ActionForm>
   );
 }

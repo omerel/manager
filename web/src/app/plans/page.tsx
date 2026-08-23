@@ -5,6 +5,7 @@ import { computeVisibility } from "@/lib/access";
 import { getSessionUser } from "@/lib/session";
 import { createPlan } from "@/lib/plan-actions";
 import { PlanRowActions } from "@/components/PlanRowActions";
+import { ActionForm } from "@/components/ActionForm";
 
 export default async function PlansPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
   const { q } = await searchParams;
@@ -50,7 +51,7 @@ export default async function PlansPage({ searchParams }: { searchParams: Promis
       </form>
 
       {admin && (
-        <form action={createPlan} className="flex flex-wrap items-end gap-2 rounded-xl border border-border/70 bg-card shadow-sm p-4">
+        <ActionForm action={createPlan} className="flex flex-wrap items-end gap-2 rounded-xl border border-border/70 bg-card shadow-sm p-4">
           <div className="flex flex-col">
             <label htmlFor="name" className="mb-1 text-sm text-muted">
               שם תכנית חדשה
@@ -66,7 +67,7 @@ export default async function PlansPage({ searchParams }: { searchParams: Promis
           <button className="rounded-md bg-brand-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-brand-700">
             צור תכנית
           </button>
-        </form>
+        </ActionForm>
       )}
 
       {allPlans.length === 0 ? (

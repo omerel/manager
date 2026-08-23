@@ -2,6 +2,7 @@ import { fmtDate } from "@/lib/dates";
 import type { PersonFull, RecurrenceRow } from "@/lib/person-view";
 import { addFreeEntry, addInterview, fillSlot, deleteEntry } from "@/lib/eval-actions";
 import { RefreshCw, PenLine, Paperclip, FolderOpen, MessagesSquare } from "lucide-react";
+import { ActionForm } from "@/components/ActionForm";
 import { FileDrop } from "@/components/FileDrop";
 import { DateField } from "@/components/DateField";
 import { EVAL_SCALE, scoreLabel } from "@/lib/eval-scale";
@@ -74,11 +75,11 @@ export function EvaluationsSection({
                       {s.waived && <span className="text-muted"> · פטור</span>}
                     </span>
                     {editing && entry && (
-                      <form action={deleteEntry}>
+                      <ActionForm action={deleteEntry}>
                         <input type="hidden" name="personId" value={person.id} />
                         <input type="hidden" name="entryId" value={entry.id} />
                         <button className="text-xs text-red-600 hover:underline">מחק מילוי</button>
-                      </form>
+                      </ActionForm>
                     )}
                   </div>
 
@@ -91,7 +92,7 @@ export function EvaluationsSection({
                   )}
 
                   {editing && !entry && (
-                    <form action={fillSlot} className="mt-2 flex flex-wrap items-end gap-2">
+                    <ActionForm action={fillSlot} className="mt-2 flex flex-wrap items-end gap-2">
                       <input type="hidden" name="personId" value={person.id} />
                       <input type="hidden" name="recurringEventId" value={s.recurringEventId} />
                       <input type="hidden" name="occurrenceOffset" value={s.offsetMonths} />
@@ -105,7 +106,7 @@ export function EvaluationsSection({
                       <button className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700">
                         מלא מופע
                       </button>
-                    </form>
+                    </ActionForm>
                   )}
                 </li>
               );
@@ -140,11 +141,11 @@ export function EvaluationsSection({
                   <span className="flex items-center gap-2">
                     <span className="text-xs text-muted">{fmtDate(e.eventDate)}</span>
                     {editing && (
-                      <form action={deleteEntry}>
+                      <ActionForm action={deleteEntry}>
                         <input type="hidden" name="personId" value={person.id} />
                         <input type="hidden" name="entryId" value={e.id} />
                         <button className="text-xs text-red-600 hover:underline">מחק</button>
-                      </form>
+                      </ActionForm>
                     )}
                   </span>
                 </div>
@@ -156,7 +157,7 @@ export function EvaluationsSection({
         )}
 
         {editing && (
-          <form action={addInterview} className="mt-3 flex flex-wrap items-end gap-2 rounded-md border border-dashed border-border p-3">
+          <ActionForm action={addInterview} className="mt-3 flex flex-wrap items-end gap-2 rounded-md border border-dashed border-border p-3">
             <input type="hidden" name="personId" value={person.id} />
             <div className="flex flex-col">
               <label className="mb-1 text-sm text-muted">נושא</label>
@@ -189,7 +190,7 @@ export function EvaluationsSection({
             <button className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700">
               הוסף סיכום ראיון
             </button>
-          </form>
+          </ActionForm>
         )}
       </div>
 
@@ -207,11 +208,11 @@ export function EvaluationsSection({
                   <span className="flex items-center gap-2">
                     <span className="text-xs text-muted">{fmtDate(e.eventDate)}</span>
                     {editing && (
-                      <form action={deleteEntry}>
+                      <ActionForm action={deleteEntry}>
                         <input type="hidden" name="personId" value={person.id} />
                         <input type="hidden" name="entryId" value={e.id} />
                         <button className="text-xs text-red-600 hover:underline">מחק</button>
-                      </form>
+                      </ActionForm>
                     )}
                   </span>
                 </div>
@@ -223,7 +224,7 @@ export function EvaluationsSection({
         )}
 
         {editing && (
-          <form action={addFreeEntry} className="mt-3 flex flex-wrap items-end gap-2 rounded-md border border-dashed border-border p-3">
+          <ActionForm action={addFreeEntry} className="mt-3 flex flex-wrap items-end gap-2 rounded-md border border-dashed border-border p-3">
             <input type="hidden" name="personId" value={person.id} />
             <div className="flex flex-col">
               <label className="mb-1 text-sm text-muted">כותרת</label>
@@ -244,7 +245,7 @@ export function EvaluationsSection({
             <button className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700">
               הוסף רשומה
             </button>
-          </form>
+          </ActionForm>
         )}
       </div>
     </section>

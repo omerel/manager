@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Trash2 } from "lucide-react";
 import { ConfirmDelete, plural } from "@/components/ConfirmDelete";
+import { ActionForm } from "@/components/ActionForm";
 import { copyPlan, removePlan } from "@/lib/plan-actions";
 
 /**
@@ -35,10 +36,10 @@ export function PlanRowActions({
 
   return (
     <div className="flex items-center gap-2">
-      <form action={copyPlan}>
+      <ActionForm action={copyPlan}>
         <input type="hidden" name="planId" value={planId} />
         <button className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-slate-50">שכפל</button>
-      </form>
+      </ActionForm>
       <button
         type="button"
         onClick={() => setConfirming(true)}

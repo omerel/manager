@@ -8,6 +8,7 @@ import { STATUS_LABEL, getEditableTeams, UNASSIGNED_LABEL } from "@/lib/people";
 import { ageFromBirthDate } from "@/lib/person-name";
 import { fmtDate, addMonths } from "@/lib/dates";
 import { DateField } from "@/components/DateField";
+import { ActionForm } from "@/components/ActionForm";
 import { getPersonFull, buildPersonTimeline, type PersonFull } from "@/lib/person-view";
 import { computePersonGaps, levelForPoint, evalMetric, GAP_META, type GapLevel } from "@/lib/gaps";
 import { PersonFormFields } from "@/components/PersonFormFields";
@@ -141,17 +142,17 @@ export default async function PersonPage({
         </div>
         <p className="mt-1 text-muted">{orgPath}</p>
         {editing && (
-          <form action={setProfilePhoto} className="mt-2 flex flex-wrap items-center gap-2">
+          <ActionForm action={setProfilePhoto} className="mt-2 flex flex-wrap items-center gap-2">
             <input type="hidden" name="personId" value={person.id} />
             <label className="text-sm text-muted">תמונת פרופיל:</label>
             <FileDrop name="photo" accept="image/*" required label="גרור/י תמונה" className="min-w-56" />
             <button className="rounded-md border border-border px-3 py-1 text-sm hover:bg-slate-50">
               {person.photoPath ? "החלף תמונה" : "העלה תמונה"}
             </button>
-          </form>
+          </ActionForm>
         )}
         {editing && editableTeams.length > 0 && (
-          <form action={reassignTeam} className="mt-2 flex flex-wrap items-center gap-2">
+          <ActionForm action={reassignTeam} className="mt-2 flex flex-wrap items-center gap-2">
             <input type="hidden" name="personId" value={person.id} />
             <label className="text-sm text-muted">שיוך למסגרת:</label>
             <select name="teamId" defaultValue={person.teamId ?? ""} className="rounded-md border border-border px-2 py-1 text-sm">
@@ -163,7 +164,7 @@ export default async function PersonPage({
               ))}
             </select>
             <button className="rounded-md border border-border px-3 py-1 text-sm hover:bg-slate-50">שייך</button>
-          </form>
+          </ActionForm>
         )}
       </div>
 
@@ -293,7 +294,7 @@ function PersonalDetails({
     <section className="rounded-xl border border-border/70 bg-card shadow-sm p-5">
       <h2 className="mb-3 text-lg font-semibold">פרטים אישיים</h2>
       {canEdit ? (
-        <form action={updatePerson} className="space-y-4">
+        <ActionForm action={updatePerson} className="space-y-4">
           <input type="hidden" name="personId" value={person.id} />
           <PersonFormFields
             defs={defs}
@@ -309,7 +310,7 @@ function PersonalDetails({
             }}
           />
           <button className="rounded-md bg-brand-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-brand-700">שמור פרטים</button>
-        </form>
+        </ActionForm>
       ) : (
         <dl className="grid grid-cols-1 gap-x-8 gap-y-3 sm:grid-cols-2">
           <Field label="שם פרטי" value={person.firstName} />
@@ -390,10 +391,10 @@ function PlanSection({
                 העבר למסלול אחר…
               </button>
             </form>
-            <form action={unassignPlan}>
+            <ActionForm action={unassignPlan}>
               <input type="hidden" name="personId" value={person.id} />
               <button className="text-xs text-red-600 hover:underline">בטל שיוך</button>
-            </form>
+            </ActionForm>
           </div>
         )}
       </div>
@@ -415,17 +416,17 @@ function PlanSection({
                   <div className="flex items-center gap-2">
                     <span className="text-emerald-700">✅ הושלם {fmtDate(p.doneOn)}</span>
                     {canEdit && (
-                      <form action={clearPointDone}>
+                      <ActionForm action={clearPointDone}>
                         <input type="hidden" name="personId" value={person.id} />
                         <input type="hidden" name="pointEventId" value={p.id} />
                         <button className="text-xs text-red-600 hover:underline">בטל</button>
-                      </form>
+                      </ActionForm>
                     )}
                   </div>
                   {p.note && <span className="text-xs text-muted">📝 {p.note}</span>}
                 </div>
               ) : canEdit ? (
-                <form action={setPointDone} className="flex flex-wrap items-center gap-1">
+                <ActionForm action={setPointDone} className="flex flex-wrap items-center gap-1">
                   <input type="hidden" name="personId" value={person.id} />
                   <input type="hidden" name="pointEventId" value={p.id} />
                   <DateField name="doneOn" defaultDate={today} className="w-32 rounded border border-border px-2 py-1 text-xs text-end" />
@@ -435,7 +436,7 @@ function PlanSection({
                     className="w-44 rounded border border-border px-2 py-1 text-xs"
                   />
                   <button className="rounded bg-brand-600 px-2 py-1 text-xs text-white hover:bg-brand-700">סמן כהושלם</button>
-                </form>
+                </ActionForm>
               ) : (
                 <span className="text-muted">⬜ טרם</span>
               )}
@@ -486,7 +487,7 @@ function PlanSection({
                 unit={m.unit}
               />
               {canEdit && (
-                <form action={setMetricReading} className="mt-2 flex flex-wrap items-center gap-1">
+                <ActionForm action={setMetricReading} className="mt-2 flex flex-wrap items-center gap-1">
                   <input type="hidden" name="personId" value={person.id} />
                   <input type="hidden" name="metricId" value={m.id} />
                   <input
@@ -505,7 +506,7 @@ function PlanSection({
                     className="w-52 rounded border border-border px-2 py-1 text-xs"
                   />
                   <button className="rounded bg-brand-600 px-2 py-1 text-xs text-white hover:bg-brand-700">עדכן ערך</button>
-                </form>
+                </ActionForm>
               )}
             </div>
             );

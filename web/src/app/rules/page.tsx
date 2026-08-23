@@ -4,6 +4,7 @@ import { getSessionUser } from "@/lib/session";
 import { createRule } from "@/lib/rules-actions";
 import { ensureScheduler } from "@/lib/rules-engine";
 import { fmtDate } from "@/lib/dates";
+import { ActionForm } from "@/components/ActionForm";
 
 const inputCls = "rounded-md border border-border px-3 py-1.5 text-sm";
 
@@ -32,7 +33,7 @@ export default async function RulesPage() {
         </p>
       </div>
 
-      <form action={createRule} className="space-y-3 rounded-xl border border-border/70 bg-card shadow-sm p-4">
+      <ActionForm action={createRule} className="space-y-3 rounded-xl border border-border/70 bg-card shadow-sm p-4">
         <div className="flex flex-wrap items-end gap-2">
           <div className="flex flex-col">
             <label htmlFor="name" className="mb-1 text-sm text-muted">שם החוק</label>
@@ -68,7 +69,7 @@ export default async function RulesPage() {
         <button className="rounded-md bg-brand-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-brand-700">
           צור חוק
         </button>
-      </form>
+      </ActionForm>
 
       {rules.length === 0 ? (
         <p className="text-muted">אין חוקים עדיין.</p>

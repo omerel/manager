@@ -21,6 +21,7 @@ import {
   updateRecurringEvent,
 } from "@/lib/plan-actions";
 import { InlineEdit } from "@/components/InlineEdit";
+import { ActionForm } from "@/components/ActionForm";
 import { softColorFor } from "@/lib/palette";
 
 export default async function PlanDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -36,7 +37,7 @@ export default async function PlanDetailPage({ params }: { params: Promise<{ id:
         </Link>
         <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
           {admin ? (
-            <form action={renamePlan} className="flex items-center gap-2">
+            <ActionForm action={renamePlan} className="flex items-center gap-2">
               <input type="hidden" name="planId" value={plan.id} />
               <input
                 name="name"
@@ -45,15 +46,15 @@ export default async function PlanDetailPage({ params }: { params: Promise<{ id:
                 className="rounded-md border border-border px-3 py-1.5 text-xl font-bold"
               />
               <button className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-slate-50">שמור שם</button>
-            </form>
+            </ActionForm>
           ) : (
             <h1 className="text-2xl font-bold">{plan.name}</h1>
           )}
           {admin && (
-            <form action={copyPlan}>
+            <ActionForm action={copyPlan}>
               <input type="hidden" name="planId" value={plan.id} />
               <button className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-slate-50">שכפל תכנית</button>
-            </form>
+            </ActionForm>
           )}
         </div>
         <p className="mt-1 text-muted">
@@ -107,14 +108,14 @@ function Timeline({ plan }: { plan: PlanWithEvents }) {
 
 function DeleteButton({ planId, kind, id }: { planId: string; kind: string; id: string }) {
   return (
-    <form action={deletePlanItem}>
+    <ActionForm action={deletePlanItem}>
       <input type="hidden" name="planId" value={planId} />
       <input type="hidden" name="kind" value={kind} />
       <input type="hidden" name="id" value={id} />
       <SubmitButton className="text-xs text-red-600 hover:underline disabled:opacity-50" pendingText="מוחק…">
         מחק
       </SubmitButton>
-    </form>
+    </ActionForm>
   );
 }
 
@@ -153,12 +154,12 @@ function PointEventsSection({ plan, admin }: { plan: PlanWithEvents; admin: bool
         </ul>
       )}
       {admin && (
-        <form action={addPointEvent} className="flex flex-wrap items-end gap-2 rounded-lg border border-dashed border-border p-3">
+        <ActionForm action={addPointEvent} className="flex flex-wrap items-end gap-2 rounded-lg border border-dashed border-border p-3">
           <input type="hidden" name="planId" value={plan.id} />
           <TextField name="label" label="שם האירוע" placeholder="סיום הכשרה בסיסית" />
           <OffsetField name="offsetMonths" label="מועד (שנים.חודשים מההצבה)" defaultMonths={1} required />
           <AddButton>הוסף נקודתי</AddButton>
-        </form>
+        </ActionForm>
       )}
     </section>
   );
@@ -230,13 +231,13 @@ function CumulativeSection({ plan, admin }: { plan: PlanWithEvents; admin: boole
                 </ul>
               )}
               {admin && (
-                <form action={addCheckpoint} className="mt-3 flex flex-wrap items-end gap-2">
+                <ActionForm action={addCheckpoint} className="mt-3 flex flex-wrap items-end gap-2">
                   <input type="hidden" name="planId" value={plan.id} />
                   <input type="hidden" name="metricId" value={m.id} />
                   <NumField name={`newtarget-${m.id}`} field="target" label={`יעד (${m.unit})`} defaultValue={100} step="any" />
                   <OffsetField name={`newoffset-${m.id}`} field="offsetMonths" label="מועד (שנים.חודשים מההצבה)" defaultMonths={6} required />
                   <AddButton>הוסף יעד-ביניים</AddButton>
-                </form>
+                </ActionForm>
               )}
             </div>
             );
@@ -244,12 +245,12 @@ function CumulativeSection({ plan, admin }: { plan: PlanWithEvents; admin: boole
         </div>
       )}
       {admin && (
-        <form action={addCumulativeMetric} className="flex flex-wrap items-end gap-2 rounded-lg border border-dashed border-border p-3">
+        <ActionForm action={addCumulativeMetric} className="flex flex-wrap items-end gap-2 rounded-lg border border-dashed border-border p-3">
           <input type="hidden" name="planId" value={plan.id} />
           <TextField name="name" label="שם המדד" placeholder="שעות גמול" />
           <TextField name="unit" label="יחידה" placeholder="שעות" />
           <AddButton>הוסף מדד</AddButton>
-        </form>
+        </ActionForm>
       )}
     </section>
   );
@@ -322,7 +323,7 @@ function RecurringSection({ plan, admin }: { plan: PlanWithEvents; admin: boolea
         </ul>
       )}
       {admin && (
-        <form action={addRecurringEvent} className="flex flex-wrap items-end gap-2 rounded-lg border border-dashed border-border p-3">
+        <ActionForm action={addRecurringEvent} className="flex flex-wrap items-end gap-2 rounded-lg border border-dashed border-border p-3">
           <input type="hidden" name="planId" value={plan.id} />
           <TextField name="label" label="שם האירוע" placeholder="חוות דעת" />
           <NumField name="intervalMonths" label="כל כמה חודשים" defaultValue={6} />
@@ -331,7 +332,7 @@ function RecurringSection({ plan, admin }: { plan: PlanWithEvents; admin: boolea
           <OffsetField name="stopOffsetMonths" label="עד (שנים.חודשים מההצבה)" defaultMonths={DEFAULT_STOP_MONTHS} required />
           <DisplayField name="display-new" defaultValue="MARKER" />
           <AddButton>הוסף מחזורי</AddButton>
-        </form>
+        </ActionForm>
       )}
     </section>
   );

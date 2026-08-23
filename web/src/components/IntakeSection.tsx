@@ -3,6 +3,7 @@ import { CheckCircle2, Loader2, XCircle, UserPlus, UserCog } from "lucide-react"
 import { prisma } from "@/lib/prisma";
 import { effectiveStatus, staleError } from "@/lib/jobs";
 import { startIntake, dismissIntakeRun } from "@/lib/intake-actions";
+import { ActionForm } from "@/components/ActionForm";
 import { SubmitButton } from "@/components/SubmitButton";
 import { FileDrop } from "@/components/FileDrop";
 import { AutoRefresh } from "@/components/AutoRefresh";
@@ -64,7 +65,7 @@ export async function IntakeSection({ userId }: { userId: string }) {
   return (
     <section className="space-y-3">
       {anyLive && <AutoRefresh />}
-      <form action={startIntake} className="space-y-3 rounded-xl border border-border/70 bg-card p-4 shadow-sm">
+      <ActionForm action={startIntake} className="space-y-3 rounded-xl border border-border/70 bg-card p-4 shadow-sm">
         <div className="text-sm font-medium">קליטה מרובה ממסמכים</div>
         <p className="text-xs text-muted">
           כל קובץ מייצג עובד אחד. שם שקיים במערכת יהפוך להצעת עדכון על העובד הקיים; שם חדש — לטיוטת עובד חדש. דבר
@@ -80,7 +81,7 @@ export async function IntakeSection({ userId }: { userId: string }) {
         <button className="rounded-md bg-brand-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-brand-700">
           התחל קליטה
         </button>
-      </form>
+      </ActionForm>
 
       {pending.length > 0 && (
         <div className="rounded-xl border border-border/70 bg-card shadow-sm">
@@ -104,7 +105,7 @@ export async function IntakeSection({ userId }: { userId: string }) {
                   <span className="flex shrink-0 items-center gap-2">
                     <ResultLink output={r.output} status={status} personName={personName} />
                     {status !== "RUNNING" && (
-                      <form action={dismissIntakeRun}>
+                      <ActionForm action={dismissIntakeRun}>
                         <input type="hidden" name="runId" value={r.id} />
                         <SubmitButton
                           className="rounded-md border border-border px-3 py-1 text-xs hover:bg-stone-50 disabled:opacity-50"
@@ -112,7 +113,7 @@ export async function IntakeSection({ userId }: { userId: string }) {
                         >
                           ביטול
                         </SubmitButton>
-                      </form>
+                      </ActionForm>
                     )}
                   </span>
                 </li>

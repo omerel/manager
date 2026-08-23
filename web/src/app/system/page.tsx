@@ -6,6 +6,7 @@ import { uploadLogo, resetLogo, updateSystemName, updateLoginLink } from "@/lib/
 import { importBundle } from "@/lib/portability-actions";
 import { AppLogo, LogoMark } from "@/components/Logo";
 import { FileDrop } from "@/components/FileDrop";
+import { ActionForm } from "@/components/ActionForm";
 import { Palette, DatabaseBackup, Download, Upload, ExternalLink, Eraser } from "lucide-react";
 import { DevWipe } from "@/components/DevWipe";
 
@@ -40,7 +41,7 @@ export default async function SystemSettingsPage({
           מיתוג המערכת
         </h2>
 
-        <form action={updateSystemName} className="flex flex-wrap items-end gap-2">
+        <ActionForm action={updateSystemName} className="flex flex-wrap items-end gap-2">
           <div className="flex flex-col">
             <label htmlFor="systemName" className="mb-1 text-sm text-muted">
               שם המערכת (מוצג בסרגל, בהתחברות, בכותרת הדפדפן ובדוחות)
@@ -57,7 +58,7 @@ export default async function SystemSettingsPage({
             שמור שם
           </button>
           <p className="w-full text-xs text-muted">{`ניקוי השדה מחזיר לברירת המחדל "${DEFAULT_SYSTEM_NAME}".`}</p>
-        </form>
+        </ActionForm>
         <div className="flex items-center gap-4">
           <AppLogo logoPath={logoPath} size={48} />
           <div className="text-sm text-muted">
@@ -68,7 +69,7 @@ export default async function SystemSettingsPage({
         </div>
 
         <div className="flex flex-wrap items-end gap-2">
-          <form action={uploadLogo} className="flex flex-wrap items-end gap-2">
+          <ActionForm action={uploadLogo} className="flex flex-wrap items-end gap-2">
             <div className="flex flex-col">
               <label htmlFor="logo" className="mb-1 text-sm text-muted">העלאת לוגו (PNG / SVG / JPG)</label>
               <FileDrop name="logo" accept="image/*" required label="גרור/י לוגו לכאן (PNG / SVG / JPG)" className="min-w-72" />
@@ -76,13 +77,13 @@ export default async function SystemSettingsPage({
             <button className="rounded-md bg-brand-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-brand-700">
               החלף לוגו
             </button>
-          </form>
+          </ActionForm>
           {customLogo && (
-            <form action={resetLogo}>
+            <ActionForm action={resetLogo}>
               <button className="rounded-md border border-border px-4 py-1.5 text-sm hover:bg-stone-50">
                 חזרה ללוגו המובנה
               </button>
-            </form>
+            </ActionForm>
           )}
         </div>
 
@@ -106,7 +107,7 @@ export default async function SystemSettingsPage({
           כרטיס מתחת לטופס ההתחברות המפנה לאתר אחר — למשל לסביבת הפיתוח. הכרטיס מוצג רק כשהוא
           במצב ״הצג״ וגם הוזנה כתובת.
         </p>
-        <form action={updateLoginLink} className="flex flex-wrap items-end gap-3">
+        <ActionForm action={updateLoginLink} className="flex flex-wrap items-end gap-3">
           <div className="flex flex-col">
             <label htmlFor="loginLinkText" className="mb-1 text-sm text-muted">טקסט הכרטיס</label>
             <input
@@ -136,7 +137,7 @@ export default async function SystemSettingsPage({
             שמור קישור
           </button>
           <p className="w-full text-xs text-muted">{`ניקוי הטקסט מחזיר לברירת המחדל "${DEFAULT_LOGIN_LINK_TEXT}"; ניקוי הכתובת מסתיר את הכרטיס.`}</p>
-        </form>
+        </ActionForm>
       </section>
 
       {process.env.NODE_ENV !== "production" && (
@@ -203,7 +204,7 @@ export default async function SystemSettingsPage({
               שחזור מגיבוי מלא <b>מוחק את כל הנתונים הקיימים</b> ומחליף אותם בתוכן הגיבוי.
               ייבוא תצורה מותר רק כשאין אנשים במרשם.
             </p>
-            <form action={importBundle} className="space-y-2">
+            <ActionForm action={importBundle} className="space-y-2">
               <FileDrop name="bundle" required accept=".zip,.json" label="גרור/י חבילת גיבוי לכאן (ZIP / JSON)" />
               <label className="flex items-start gap-2 text-sm text-red-800">
                 <input type="checkbox" name="confirm" className="mt-0.5" />
@@ -212,7 +213,7 @@ export default async function SystemSettingsPage({
               <button className="rounded-md bg-red-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-red-700">
                 ייבא ושחזר
               </button>
-            </form>
+            </ActionForm>
           </div>
         </div>
       </section>

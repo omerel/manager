@@ -10,6 +10,7 @@ import { visibilityFrom } from "@/lib/access";
 import type { AccessLevel, Role } from "@/generated/prisma/client";
 import { senderLabel, STAFF_SENDER_TITLE } from "@/lib/query-sender";
 import { fmtDate, formatIsraeliDate, todayMarker } from "@/lib/dates";
+import { ActionForm } from "@/components/ActionForm";
 import { DateField } from "@/components/DateField";
 import { ConfirmSubmit } from "@/components/ConfirmSubmit";
 import { MentionTextarea, type MentionablePerson } from "@/components/MentionTextarea";
@@ -239,7 +240,7 @@ export default async function QueriesPage({ searchParams }: { searchParams: Prom
       {canSend && (
         <section className="space-y-3 rounded-xl border border-border/70 bg-card p-4 shadow-sm">
           <h2 className="font-semibold">שאילתא חדשה</h2>
-          <form action={createQuery} className="space-y-3">
+          <ActionForm action={createQuery} className="space-y-3">
             <div className="flex flex-wrap items-end gap-2">
               <div className="flex flex-col">
                 <label htmlFor="title" className="mb-1 text-sm text-muted">כותרת</label>
@@ -271,7 +272,7 @@ export default async function QueriesPage({ searchParams }: { searchParams: Prom
                 : "ברירת המחדל: כל הדרגה שמתחתיך. אפשר להסיר, לצרף ב-‎@‎ מפקד של כל מסגרת בעץ, ולמען למשא״ן עם עריכה על מסגרתך. למפקדי הנמענים נשלח מייל."}{" "}
               בגוף הטקסט, ‎@‎ מתייג אדם — לחיצה על התיוג תפתח את כרטיסו בלשונית חדשה.
             </p>
-          </form>
+          </ActionForm>
         </section>
       )}
 
@@ -351,10 +352,10 @@ export default async function QueriesPage({ searchParams }: { searchParams: Prom
                           <span className="flex items-center gap-3">
                             {t.remindedAt && <span className="text-xs text-muted">הוזכר {fmtDate(t.remindedAt)}</span>}
                             {!t.answer && (t.targetUser || t.node?.commander) && (
-                              <form action={remindTarget} className="inline">
+                              <ActionForm action={remindTarget} className="inline">
                                 <input type="hidden" name="targetId" value={t.id} />
                                 <button className="text-xs text-brand-700 hover:underline">שלח תזכורת</button>
-                              </form>
+                              </ActionForm>
                             )}
                           </span>
                         </div>
@@ -380,11 +381,11 @@ export default async function QueriesPage({ searchParams }: { searchParams: Prom
                   </ul>
 
                   <div className="mt-3 flex flex-wrap items-end gap-4 border-t border-border/60 pt-3">
-                    <form action={updateQueryDue} className="flex flex-wrap items-end gap-2">
+                    <ActionForm action={updateQueryDue} className="flex flex-wrap items-end gap-2">
                       <input type="hidden" name="queryId" value={q.id} />
                       <DateField name="dueDate" label="שינוי תאריך" defaultDate={q.dueDate} minDate={today} className={`${inputCls} w-40`} />
                       <button className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-slate-50">עדכן</button>
-                    </form>
+                    </ActionForm>
                     <ConfirmSubmit
                       action={deleteQuery}
                       queryId={q.id}
@@ -397,12 +398,12 @@ export default async function QueriesPage({ searchParams }: { searchParams: Prom
                       }
                     />
                     {q.closedAt ? (
-                      <form action={reopenQuery} className="pb-0.5">
+                      <ActionForm action={reopenQuery} className="pb-0.5">
                         <input type="hidden" name="queryId" value={q.id} />
                         <button className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-slate-50">
                           פתח מחדש
                         </button>
-                      </form>
+                      </ActionForm>
                     ) : (
                       <ConfirmSubmit
                         action={closeQuery}
@@ -418,12 +419,12 @@ export default async function QueriesPage({ searchParams }: { searchParams: Prom
                     {!frozen && (
                       <details className="text-sm">
                         <summary className="cursor-pointer text-brand-700">ערוך תוכן</summary>
-                        <form action={updateQueryContent} className="mt-2 space-y-2">
+                        <ActionForm action={updateQueryContent} className="mt-2 space-y-2">
                           <input type="hidden" name="queryId" value={q.id} />
                           <input name="title" defaultValue={q.title} required className={`w-72 ${inputCls}`} />
                           <MentionTextarea name="body" people={mentionable} defaultValue={q.body} required rows={3} className={`${inputCls} w-full`} />
                           <button className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-slate-50">שמור</button>
-                        </form>
+                        </ActionForm>
                       </details>
                     )}
                     {frozen && (
@@ -495,7 +496,7 @@ export default async function QueriesPage({ searchParams }: { searchParams: Prom
                   </div>
 
                   {open ? (
-                    <form action={answerQuery} className="mt-3 space-y-2">
+                    <ActionForm action={answerQuery} className="mt-3 space-y-2">
                       <input type="hidden" name="queryId" value={t.queryId} />
                       <MentionTextarea name="answer" people={mentionable} defaultValue={t.answer ?? ""} required rows={4} className={`${inputCls} w-full`} />
                       <div className="flex items-center gap-3">
@@ -509,7 +510,7 @@ export default async function QueriesPage({ searchParams }: { searchParams: Prom
                           </span>
                         )}
                       </div>
-                    </form>
+                    </ActionForm>
                   ) : (
                     <div className="mt-3 rounded bg-slate-50 p-2 text-sm">
                       {t.answer ? (

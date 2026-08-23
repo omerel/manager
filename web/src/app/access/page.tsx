@@ -6,6 +6,7 @@ import { KIND_LABEL } from "@/lib/org";
 import { pathResolver } from "@/lib/commander";
 import { ROLE_LABEL, roleLabel } from "@/lib/role-labels";
 import { LevelBadge } from "@/components/OrgTree";
+import { ActionForm } from "@/components/ActionForm";
 import { createUser, addGrant, removeGrant, deleteUser, updateUserProfile } from "@/lib/access-actions";
 import { adminResetPassword } from "@/lib/auth-actions";
 
@@ -77,7 +78,7 @@ export default async function AccessPage({ searchParams }: { searchParams: Promi
       </form>
 
       {isAdmin && (
-        <form action={createUser} className="flex flex-wrap items-end gap-2 rounded-xl border border-border/70 bg-card shadow-sm p-4">
+        <ActionForm action={createUser} className="flex flex-wrap items-end gap-2 rounded-xl border border-border/70 bg-card shadow-sm p-4">
           <Field name="name" label="שם" placeholder="שם מלא" />
           <Field name="email" label="אימייל" placeholder="name@example.com" type="email" />
           <Field name="password" label="סיסמה" placeholder="סיסמה" type="password" />
@@ -133,7 +134,7 @@ export default async function AccessPage({ searchParams }: { searchParams: Promi
             שם המשתמש (username) ייגזר אוטומטית מהאימייל עד ה־@. הפיקוד אינו מקנה גישה אלא מותנה בה: המסגרת שבפיקוד חייבת
             להיות בתוך ההרשאה הראשונה (אדמין רואה את כל העץ). לכל מסגרת מפקד אחד לכל היותר.
           </p>
-        </form>
+        </ActionForm>
       )}
 
       {users.length === 0 ? (
@@ -144,7 +145,7 @@ export default async function AccessPage({ searchParams }: { searchParams: Promi
             <div key={u.id} className="rounded-xl border border-border/70 bg-card shadow-sm p-4">
               {isAdmin && editUserId === u.id ? (
                 <div className="rounded-md bg-brand-50/60 p-3">
-                  <form action={updateUserProfile} className="flex flex-wrap items-end gap-2">
+                  <ActionForm action={updateUserProfile} className="flex flex-wrap items-end gap-2">
                     <input type="hidden" name="userId" value={u.id} />
                     <div className="flex flex-col">
                       <label className="mb-1 text-xs text-muted">שם</label>
@@ -176,7 +177,7 @@ export default async function AccessPage({ searchParams }: { searchParams: Promi
                     <Link href="/access" className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-slate-50">
                       ביטול
                     </Link>
-                  </form>
+                  </ActionForm>
                   <p className="mt-1 text-xs text-muted">
                     שם המשתמש להתחברות ({u.username ?? "—"}) נשאר קבוע גם אם האימייל משתנה. ברשימת הפיקוד מוצגות רק מסגרות
                     שהמשתמש רואה — כדי לפקד על מסגרת אחרת, יש לתת עליה הרשאה תחילה.
@@ -220,7 +221,7 @@ export default async function AccessPage({ searchParams }: { searchParams: Promi
                 </div>
                 {isAdmin && (
                   <span className="flex items-center gap-3">
-                    <form action={adminResetPassword} className="flex items-center gap-1">
+                    <ActionForm action={adminResetPassword} className="flex items-center gap-1">
                       <input type="hidden" name="userId" value={u.id} />
                       <input
                         name="password"
@@ -232,12 +233,12 @@ export default async function AccessPage({ searchParams }: { searchParams: Promi
                         className="w-28 rounded border border-border px-2 py-1 text-xs"
                       />
                       <button className="text-xs text-brand-700 hover:underline">אפס סיסמה</button>
-                    </form>
+                    </ActionForm>
                     {u.id !== me.id && (
-                      <form action={deleteUser}>
+                      <ActionForm action={deleteUser}>
                         <input type="hidden" name="userId" value={u.id} />
                         <button className="text-xs text-red-600 hover:underline">מחק משתמש</button>
-                      </form>
+                      </ActionForm>
                     )}
                   </span>
                 )}
@@ -259,10 +260,10 @@ export default async function AccessPage({ searchParams }: { searchParams: Promi
                             <span>{g.node.name}</span>
                             <LevelBadge level={g.level} />
                             {isAdmin && (
-                              <form action={removeGrant} className="inline">
+                              <ActionForm action={removeGrant} className="inline">
                                 <input type="hidden" name="grantId" value={g.id} />
                                 <button className="text-xs text-red-600 hover:underline">הסר</button>
-                              </form>
+                              </ActionForm>
                             )}
                           </li>
                         ))}
@@ -270,7 +271,7 @@ export default async function AccessPage({ searchParams }: { searchParams: Promi
                     )}
 
                     {isAdmin && (
-                      <form action={addGrant} className="mt-3 flex flex-wrap items-end gap-2">
+                      <ActionForm action={addGrant} className="mt-3 flex flex-wrap items-end gap-2">
                         <input type="hidden" name="userId" value={u.id} />
                         <div className="flex flex-col">
                           <label className="mb-1 text-sm text-muted">מסגרת</label>
@@ -290,7 +291,7 @@ export default async function AccessPage({ searchParams }: { searchParams: Promi
                           </select>
                         </div>
                         <button className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-slate-50">הענק</button>
-                      </form>
+                      </ActionForm>
                     )}
                   </>
                 )}

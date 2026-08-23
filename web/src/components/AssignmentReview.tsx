@@ -2,6 +2,7 @@ import Link from "next/link";
 import { AlertTriangle, ArrowLeftRight, CalendarClock, Repeat2 } from "lucide-react";
 import { assignPlan } from "@/lib/person-actions";
 import type { AssignmentPreview } from "@/lib/plan-assignment";
+import { ActionForm } from "@/components/ActionForm";
 
 /**
  * The review step before a plan is assigned. Two questions, deliberately
@@ -36,7 +37,7 @@ export function AssignmentReview({ preview, backHref }: { preview: AssignmentPre
         </div>
       )}
 
-      <form action={assignPlan} className="space-y-5">
+      <ActionForm action={assignPlan} className="space-y-5">
         <input type="hidden" name="personId" value={preview.personId} />
         <input type="hidden" name="templateId" value={preview.templateId} />
         <input type="hidden" name="items" value={items.map(refOf).join(",")} />
@@ -122,7 +123,7 @@ export function AssignmentReview({ preview, backHref }: { preview: AssignmentPre
             ביטול
           </Link>
         </div>
-      </form>
+      </ActionForm>
     </section>
   );
 }

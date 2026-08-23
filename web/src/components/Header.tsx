@@ -5,6 +5,7 @@ import { getSessionUserOrNull } from "@/lib/session";
 import { logout } from "@/lib/auth-actions";
 import { devSwitchEnabled } from "@/lib/auth";
 import { getLogoPath, getSystemName } from "@/lib/branding";
+import { ActionForm } from "@/components/ActionForm";
 import { AppLogo } from "@/components/Logo";
 import { NavLinks, type NavItem } from "@/components/NavLinks";
 import { queryBadge } from "@/lib/queries";
@@ -98,14 +99,14 @@ export async function Header() {
             </span>
             {current.name}
           </Link>
-          <form action={logout}>
+          <ActionForm action={logout}>
             <button
               className="flex items-center gap-1 rounded-full px-2.5 py-1.5 text-sm text-brand-100/90 hover:bg-white/10 hover:text-white"
               title="התנתק"
             >
               <LogOut className="h-4 w-4" aria-hidden />
             </button>
-          </form>
+          </ActionForm>
         </div>
       </div>
     </header>

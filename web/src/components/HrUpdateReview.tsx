@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { CheckCircle2, XCircle, Trash2 } from "lucide-react";
+import { ActionForm } from "@/components/ActionForm";
 
 export type ReviewItem = {
   proposalId: string;
@@ -108,14 +109,14 @@ export function HrUpdateReview({
           אשר את כל המסומנים
         </button>
         <span className="text-sm text-muted">{decided}/{total} הוכרעו</span>
-        <form action={conclude} className="ms-auto">
+        <ActionForm action={conclude} className="ms-auto">
           <button className="rounded-md border border-brand-300 bg-brand-50 px-3 py-1.5 text-sm text-brand-800 hover:bg-brand-100">
             סיים סקירה ושמור להיסטוריה
           </button>
-        </form>
-        <form action={dismiss}>
+        </ActionForm>
+        <ActionForm action={dismiss}>
           <button className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-slate-50">בטל ריצה</button>
-        </form>
+        </ActionForm>
       </div>
 
       {people.map((p) => (

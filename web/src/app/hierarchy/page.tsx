@@ -6,6 +6,7 @@ import { KIND_LABEL } from "@/lib/org-kinds";
 import { addOrgNode } from "@/lib/org-actions";
 import { addEnumOption, removeEnumOption } from "@/lib/person-actions";
 import { HierarchyTree, type HierarchyNode } from "@/components/HierarchyTree";
+import { ActionForm } from "@/components/ActionForm";
 
 const inputCls = "rounded-md border border-border px-3 py-1.5 text-sm";
 
@@ -58,7 +59,7 @@ export default async function HierarchyPage() {
 
       <HierarchyTree nodes={treeNodes} />
 
-      <form action={addOrgNode} className="flex flex-wrap items-end gap-2 rounded-lg border border-dashed border-border p-4">
+      <ActionForm action={addOrgNode} className="flex flex-wrap items-end gap-2 rounded-lg border border-dashed border-border p-4">
         <div className="flex flex-col">
           <label htmlFor="name" className="mb-1 text-sm text-muted">שם המסגרת</label>
           <input id="name" name="name" required placeholder="למשל: תחום סייבר" className={inputCls} />
@@ -88,7 +89,7 @@ export default async function HierarchyPage() {
           כלל: אב של תחום = מרכז · אב של מדור = תחום · אב של צוות = מדור. עריכה (✏️) מאפשרת לשנות שם, סוג ומסגרת אב.
           מחיקה מוחקת גם את תתי-המסגרות — יוצג אישור עם הפירוט; אנשים משויכים יעברו ל״ללא שיוך״.
         </p>
-      </form>
+      </ActionForm>
 
       {/* Closed lists (specialties etc.) — the options behind ENUM card fields */}
       <section className="space-y-3">
@@ -109,20 +110,20 @@ export default async function HierarchyPage() {
                   {f.options.map((o) => (
                     <li key={o} className="flex items-center gap-2 rounded-md border border-border px-2 py-1 text-sm">
                       <span>{o}</span>
-                      <form action={removeEnumOption}>
+                      <ActionForm action={removeEnumOption}>
                         <input type="hidden" name="fieldId" value={f.id} />
                         <input type="hidden" name="option" value={o} />
                         <button className="text-xs text-red-600 hover:underline">הסר</button>
-                      </form>
+                      </ActionForm>
                     </li>
                   ))}
                   {f.options.length === 0 && <li className="text-sm text-muted">אין ערכים ברשימה.</li>}
                 </ul>
-                <form action={addEnumOption} className="mt-3 flex flex-wrap items-end gap-2">
+                <ActionForm action={addEnumOption} className="mt-3 flex flex-wrap items-end gap-2">
                   <input type="hidden" name="fieldId" value={f.id} />
                   <input name="option" required placeholder="ערך חדש…" className={inputCls} />
                   <button className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-slate-50">הוסף</button>
-                </form>
+                </ActionForm>
               </div>
             ))}
           </div>
