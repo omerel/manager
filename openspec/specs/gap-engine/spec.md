@@ -50,7 +50,7 @@ The system SHALL surface a person's gaps prominently on their individual card so
 
 ### Requirement: Rollup gap dashboard
 
-The system SHALL provide a rollup dashboard that reports gap counts at any level of the org tree (team, section, domain, center), with the ability to drill from an aggregate into the underlying people. The dashboard SHALL present compliance visually: a compliance gauge, a per-framework comparison, and a needs-attention list of the people in gap state. The org tree SHALL be **collapsible**: each framework can be collapsed or expanded individually, and a single control SHALL collapse or expand all team-level nodes at once (teams being where individual people are listed).
+The system SHALL provide a rollup dashboard that reports gap counts at any level of the org tree (team, section, domain, center), with the ability to drill from an aggregate into the underlying people. The dashboard SHALL present compliance visually: a compliance gauge, a per-framework comparison, and a needs-attention list of the people in gap state. The org tree SHALL be **collapsible**: each framework can be collapsed or expanded individually, and a single control SHALL collapse or expand all team-level nodes at once (teams being where individual people are listed). Where a framework has a commander appointed, the tree SHALL label the framework with the commander's name.
 
 #### Scenario: Dashboard at domain level
 
@@ -81,6 +81,12 @@ The system SHALL provide a rollup dashboard that reports gap counts at any level
 
 - **WHEN** a manager uses the collapse-all-teams control
 - **THEN** every team node collapses so its people are hidden, leaving the framework structure visible; the same control expands them again
+
+#### Scenario: A commanded framework names its commander
+
+- **WHEN** a user views the dashboard's org tree and a visible framework has a commander appointed
+- **THEN** the commander's name appears as a label beside the framework's name, and frameworks without a commander show no such label
+
 
 ### Requirement: Recurring occurrences come only from the plan, clipped by departure
 

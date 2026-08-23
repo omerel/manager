@@ -70,6 +70,9 @@ function Node({
           )}
           <span className="text-xs text-muted">{KIND_LABEL[node.kind]}</span>
           <span className="font-medium">{node.name}</span>
+          {node.commander && (
+            <span className="rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-900">מפקד: {node.commander}</span>
+          )}
         </span>
         <Counts node={node} />
       </div>

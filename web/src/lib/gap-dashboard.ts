@@ -25,6 +25,8 @@ export type GapTreeNode = {
   name: string;
   kind: OrgKind;
   level: AccessLevel | null;
+  /** name of the user who commands this framework, if anyone does */
+  commander: string | null;
   total: number; // people
   red: number; // people in overdue
   yellow: number; // people approaching (worst status)
@@ -36,10 +38,12 @@ export type GapTreeNode = {
 
 /** Build the scoped org forest with per-node counts of people and gap events. */
 export async function buildGapTree(visibility: Visibility, today: Date): Promise<GapTreeNode[]> {
-  const [nodes, people] = await Promise.all([
+  const [nodes, people, commanders] = await Promise.all([
     prisma.orgNode.findMany(),
     prisma.person.findMany({ where: { teamId: { in: [...visibility.nodeIds] } }, include: personGapInclude }),
+    prisma.user.findMany({ where: { commandsNodeId: { not: null } }, select: { name: true, commandsNodeId: true } }),
   ]);
+  const commanderOf = new Map(commanders.map((c) => [c.commandsNodeId!, c.name]));
 
   const visible = nodes.filter((n) => visibility.nodeIds.has(n.id));
   const visibleIds = new Set(visible.map((n) => n.id));
@@ -86,6 +90,7 @@ export async function buildGapTree(visibility: Visibility, today: Date): Promise
       name: node.name,
       kind: node.kind,
       level: visibility.levelOf(node.id),
+      commander: commanderOf.get(node.id) ?? null,
       total,
       red,
       yellow,
