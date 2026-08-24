@@ -179,6 +179,7 @@ export async function approveImport() {
               birthDate: parseIsraeliDate(c.data.birthDate)!,
               recruitmentDate: parseIsraeliDate(c.data.recruitmentDate)!,
               placementDate: parseIsraeliDate(c.data.placementDate)!,
+              endOfServiceDate: c.data.endOfServiceDate ? parseIsraeliDate(c.data.endOfServiceDate) : null,
               teamId: c.teamId, // null = ללא מסגרת, as previewed and warned
               fieldValues: {
                 create: c.data.custom.map((x) => ({ fieldDefId: x.fieldDefId, value: x.value, order: orderOf.get(x.fieldDefId) ?? 0 })),

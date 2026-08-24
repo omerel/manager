@@ -57,6 +57,7 @@ export type ColumnTarget =
   | "birthDate"
   | "recruitmentDate"
   | "placementDate"
+  | "endOfServiceDate"
   | "framework"
   | "ignore"
   | `custom:${string}`;
@@ -73,6 +74,8 @@ const CORE_VARIANTS: [ColumnTarget, string[]][] = [
   ["birthDate", ["תאריךלידה", "לידה", "birthdate", "dob"]],
   ["recruitmentDate", ["תאריךגיוס", "גיוס", "recruitmentdate"]],
   ["placementDate", ["תאריךהצבה", "הצבה", "תאריךהצבהביחידה", "placementdate"]],
+  // norm strips ״ so תת״ש arrives as תתש
+  ["endOfServiceDate", ["תאריךסיוםשירות", "סיוםשירות", "תתש", "endofservice", "endofservicedate"]],
   ["framework", ["מסגרת", "צוות", "יחידה", "מסגרתמשובצת", "שיבוץ", "team", "unit", "framework"]],
 ];
 
@@ -131,6 +134,7 @@ export async function proposeMappingWithAgent(
   const targets = [
     `firstName · שם פרטי`, `lastName · שם משפחה`, `fullName · שם מלא`,
     `birthDate · תאריך לידה`, `recruitmentDate · תאריך גיוס`, `placementDate · תאריך הצבה ביחידה`,
+    `endOfServiceDate · תאריך סיום שירות (תת״ש)`,
     `framework · המסגרת/הצוות שהאדם משובץ בו`,
     ...defs.map((d) => `custom:${d.id} · ${d.label}`),
     `ignore · עמודה שאינה שייכת לכרטיס`,
@@ -152,7 +156,7 @@ ${targets.map((t) => `- ${t}`).join("\n")}
   try {
     const { output } = await runClaudeRaw(prompt, dir, 120_000);
     const m = output.match(/\{[\s\S]*\}/);
-    const valid = new Set<string>(["firstName","lastName","fullName","birthDate","recruitmentDate","placementDate","framework","ignore",...defs.map((d)=>`custom:${d.id}`)]);
+    const valid = new Set<string>(["firstName","lastName","fullName","birthDate","recruitmentDate","placementDate","endOfServiceDate","framework","ignore",...defs.map((d)=>`custom:${d.id}`)]);
     const out = new Map<string, ColumnTarget>();
     if (m) {
       try {
@@ -333,6 +337,8 @@ export type RowPlan =
         birthDate: string; // dd/mm/yyyy, validated
         recruitmentDate: string;
         placementDate: string;
+        /** optional and nullable — absent when the file carried none */
+        endOfServiceDate?: string;
         custom: { fieldDefId: string; value: string }[];
       };
     };
@@ -469,6 +475,7 @@ export async function classifyRows(
       ["birthDate", "תאריך לידה", true],
       ["recruitmentDate", "תאריך גיוס", true],
       ["placementDate", "תאריך הצבה", false],
+      ["endOfServiceDate", "תאריך סיום שירות", false],
     ] as const) {
       const rawVal = v[field];
       if (!rawVal) {
@@ -532,6 +539,8 @@ export async function classifyRows(
         birthDate: dates.birthDate,
         recruitmentDate: dates.recruitmentDate,
         placementDate: dates.placementDate ?? dates.recruitmentDate,
+        // no fallback: a service-end the file did not give stays absent
+        endOfServiceDate: dates.endOfServiceDate,
         custom: customs,
       },
     });

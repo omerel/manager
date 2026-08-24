@@ -253,6 +253,7 @@ type LoadedPerson = {
   birthDate: Date | null;
   recruitmentDate: Date;
   placementDate: Date;
+  endOfServiceDate: Date | null;
   fieldValues: { fieldDefId: string; value: string }[];
   pointProgress: { pointEventId: string; doneOn: Date }[];
   metricReadings: { metricId: string; value: number }[];
@@ -283,6 +284,19 @@ function compareTarget(
     if (!d) return null; // unreadable → no proposal; never guessed
     const proposed = formatIsraeliDate(d);
     return proposed === current ? null : { key: target, label: labels[target], current, proposed };
+  }
+
+  // ---- the one NULLABLE core date: emptiness is legal and proposes deletion
+  if (target === "endOfServiceDate") {
+    const current = person.endOfServiceDate ? formatIsraeliDate(person.endOfServiceDate) : "";
+    if (!raw) {
+      if (!current) return null;
+      return { key: target, label: "תאריך סיום שירות", current, proposed: "", kind: "delete" };
+    }
+    const d = dateOf(raw);
+    if (!d) return null; // unreadable → no proposal; never guessed
+    const proposed = formatIsraeliDate(d);
+    return proposed === current ? null : { key: target, label: "תאריך סיום שירות", current, proposed };
   }
 
   // ---- configurable fields (custom:<defId> from part 1's mapping language)

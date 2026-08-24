@@ -44,6 +44,7 @@ async function targetOptions() {
     { value: "birthDate", label: "תאריך לידה" },
     { value: "recruitmentDate", label: "תאריך גיוס" },
     { value: "placementDate", label: "תאריך הצבה" },
+    { value: "endOfServiceDate", label: "תאריך סיום שירות" },
     { value: "framework", label: "מסגרת" },
     ...defs.map((d) => ({ value: `custom:${d.id}`, label: d.label })),
   ];
