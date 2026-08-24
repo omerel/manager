@@ -3,15 +3,15 @@
 import { revalidatePath } from "next/cache";
 import { logActivity } from "@/lib/activity-log";
 import { requireAdmin } from "@/lib/authz";
-import { wipeCategories } from "@/lib/dev-wipe";
+import { dataWipeEnabled, wipeCategories } from "@/lib/dev-wipe";
 import { WIPE_CATEGORIES, type WipeCategory } from "@/lib/dev-wipe-categories";
 
 export type WipeState = { ok: true; counts: { label: string; count: number }[] } | { ok: false; error: string } | null;
 
 export async function devWipe(_prev: WipeState, formData: FormData): Promise<WipeState> {
-  // the production check comes FIRST: on a shipped build this tool does not
-  // exist, for any role, with any session
-  if (process.env.NODE_ENV === "production") return { ok: false, error: "כלי פיתוח בלבד — אינו זמין בסביבת ייצור." };
+  // the availability check comes FIRST: on a shipped build this tool does not
+  // exist — for any role, with any session — unless ENABLE_DATA_WIPE=1 opens it
+  if (!dataWipeEnabled()) return { ok: false, error: "כלי פיתוח בלבד — אינו זמין בסביבת ייצור." };
   try {
     await requireAdmin();
   } catch {

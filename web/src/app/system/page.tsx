@@ -9,6 +9,7 @@ import { FileDrop } from "@/components/FileDrop";
 import { ActionForm } from "@/components/ActionForm";
 import { Palette, DatabaseBackup, Download, Upload, ExternalLink, Eraser } from "lucide-react";
 import { DevWipe } from "@/components/DevWipe";
+import { dataWipeEnabled } from "@/lib/dev-wipe";
 
 export default async function SystemSettingsPage({
   searchParams,
@@ -140,7 +141,7 @@ export default async function SystemSettingsPage({
         </ActionForm>
       </section>
 
-      {process.env.NODE_ENV !== "production" && (
+      {dataWipeEnabled() && (
         <section className="space-y-4 rounded-xl border border-red-200 bg-card p-5 shadow-sm">
           <h2 className="flex items-center gap-2 text-lg font-semibold">
             <Eraser className="h-5 w-5 text-red-600" aria-hidden />

@@ -126,10 +126,20 @@ async function main() {
     const fd = new FormData();
     fd.append("category", "people");
     const prevEnv = process.env.NODE_ENV;
+    const prevGate = process.env.ENABLE_DATA_WIPE;
     (process.env as Record<string, string>).NODE_ENV = "production";
+    delete process.env.ENABLE_DATA_WIPE;
     const inProd = await devWipe(null, fd);
-    (process.env as Record<string, string>).NODE_ENV = prevEnv ?? "";
     check("a production build refuses before anything else", inProd !== null && !inProd.ok && /ייצור/.test(!inProd.ok ? inProd.error : ""));
+    // ENABLE_DATA_WIPE=1 opens the first gate — the NEXT gate (admin session)
+    // now refuses instead, proving the override took without wiping anything
+    (process.env as Record<string, string>).ENABLE_DATA_WIPE = "1";
+    const gated = await devWipe(null, fd);
+    check("ENABLE_DATA_WIPE=1 opens production up to the admin gate",
+      gated !== null && !gated.ok && /אדמין/.test(!gated.ok ? gated.error : ""), !gated?.ok ? gated?.error : "");
+    (process.env as Record<string, string>).NODE_ENV = prevEnv ?? "";
+    if (prevGate === undefined) delete process.env.ENABLE_DATA_WIPE;
+    else (process.env as Record<string, string>).ENABLE_DATA_WIPE = prevGate;
     const noSession = await devWipe(null, fd);
     check("outside an admin session the action refuses", noSession !== null && !noSession.ok);
   } finally {

@@ -3,6 +3,16 @@ import { WIPE_CATEGORIES, type WipeCategory } from "@/lib/dev-wipe-categories";
 export { WIPE_CATEGORIES, type WipeCategory };
 
 /**
+ * Is the wipe tool available here? A development build, always; a shipped
+ * image only when its runtime environment says so explicitly — the same shape
+ * as DEV_USER_SWITCH. Server-side only: a non-NEXT_PUBLIC env read from a
+ * client bundle would silently inline undefined.
+ */
+export function dataWipeEnabled(): boolean {
+  return process.env.NODE_ENV !== "production" || process.env.ENABLE_DATA_WIPE === "1";
+}
+
+/**
  * Development-only data wipe, by category. The schema's cascades carry the
  * children; each category names only its deletion ROOTS, and the returned
  * counts are root counts — what the user ticked, not the cascade totals.
