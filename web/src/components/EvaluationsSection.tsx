@@ -6,6 +6,7 @@ import { ActionForm } from "@/components/ActionForm";
 import { FileDrop } from "@/components/FileDrop";
 import { DateField } from "@/components/DateField";
 import { EVAL_SCALE, scoreLabel } from "@/lib/eval-scale";
+import { dueLevel } from "@/lib/gaps";
 
 const inputCls = "rounded-md border border-border px-3 py-1.5 text-sm";
 
@@ -59,19 +60,28 @@ export function EvaluationsSection({
             {visibleSlots.map((s) => {
               const entry = s.filledByEntryId ? entryById.get(s.filledByEntryId) : undefined;
               const pastDue = !entry && !s.waived && s.dueDate.getTime() < today.getTime();
+              // the same rule the dashboard counts 🟡 by — the two screens must agree
+              const approaching = !entry && !s.waived && !pastDue && dueLevel(s.dueDate, today) === "APPROACHING";
               return (
                 <li
                   key={`${s.recurringEventId}:${s.offsetMonths}`}
                   className={`rounded-md border px-3 py-2 text-sm ${
-                    entry ? "border-emerald-200 bg-emerald-50/50" : pastDue ? "border-red-200 bg-red-50/50" : "border-border"
+                    entry
+                      ? "border-emerald-200 bg-emerald-50/50"
+                      : pastDue
+                        ? "border-red-200 bg-red-50/50"
+                        : approaching
+                          ? "border-amber-200 bg-amber-50/50"
+                          : "border-border"
                   }`}
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <span>
-                      {entry ? "✅" : pastDue ? "🔴" : s.waived ? "⊘" : "⬜"}{" "}
+                      {entry ? "✅" : pastDue ? "🔴" : s.waived ? "⊘" : approaching ? "🟡" : "⬜"}{" "}
                       <span className="font-medium">{s.label}</span>{" "}
                       <span className="text-muted">· יעד {fmtDate(s.dueDate)}</span>
                       {pastDue && <span className="text-red-700"> · טרם מולא</span>}
+                      {approaching && <span className="text-amber-700"> · מתקרב</span>}
                       {s.waived && <span className="text-muted"> · פטור</span>}
                     </span>
                     {editing && entry && (
