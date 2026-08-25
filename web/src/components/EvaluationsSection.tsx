@@ -95,6 +95,11 @@ export function EvaluationsSection({
 
                   {entry && (
                     <div className="mt-2 space-y-1">
+                      {entry.score != null && (
+                        <span className="inline-block rounded-full bg-brand-50 px-2 py-0.5 text-xs font-medium text-brand-800">
+                          {scoreLabel(entry.score)}
+                        </span>
+                      )}
                       {entry.content && <p className="whitespace-pre-wrap">{entry.content}</p>}
                       <AttachmentLinks attachments={entry.attachments} />
                       <p className="text-xs text-muted">הוזן {fmtDate(entry.createdAt)}</p>
@@ -112,6 +117,19 @@ export function EvaluationsSection({
                         placeholder="תוכן חוות הדעת…"
                         className={`${inputCls} min-w-64 flex-1`}
                       />
+                      {s.withScore && (
+                        <div className="flex flex-col">
+                          <label className="mb-1 text-sm text-muted">דירוג (אופציונלי)</label>
+                          <select name="score" defaultValue="" className={inputCls}>
+                            <option value="">ללא דירוג</option>
+                            {EVAL_SCALE.map((sc) => (
+                              <option key={sc.value} value={sc.value}>
+                                {sc.value} · {sc.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
                       <FileDrop name="file" label="גרור/י קובץ" className="min-w-48" />
                       <button className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700">
                         מלא מופע

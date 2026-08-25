@@ -402,6 +402,8 @@ model RecurringEvent {
   display          RecurringDisplay  @default(MARKER)
   stopMode         RecurringStopMode
   stopOffsetMonths Int? // required when stopMode = UNTIL_OFFSET
+  /// Filling an occurrence offers the interview-style optional 1–5 rating.
+  withScore        Boolean           @default(false)
   color            String? // soft-palette color assigned at creation (stable)
   evalEntries      EvalEntry[]
   waivers          PlanWaiver[]

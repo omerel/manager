@@ -115,6 +115,14 @@ export async function fillSlot(formData: FormData) {
   const anchor = await prisma.person.findUniqueOrThrow({ where: { id: personId }, select: { placementDate: true } });
 
   const content = str(formData.get("content"));
+  // the rating exists only where the event asks for it; a posted score for an
+  // unflagged event is ignored, not an error — a stale form must not block a fill
+  let score: number | null = null;
+  if (rec.withScore) {
+    const parsed = parseScore(str(formData.get("score")));
+    if (parsed === undefined) throw new Error("דירוג לא תקין — יש לבחור ערך בין 1 ל-5, או להשאיר ריק.");
+    score = parsed;
+  }
   const entry = await prisma.evalEntry.upsert({
     where: {
       personId_recurringEventId_occurrenceOffset: { personId, recurringEventId, occurrenceOffset },
@@ -126,8 +134,9 @@ export async function fillSlot(formData: FormData) {
       eventDate: addMonths(anchor.placementDate, occurrenceOffset),
       title: `${rec.label} · גיוס +${formatYearsMonths(occurrenceOffset)}`,
       content: content || null,
+      score,
     },
-    update: { content: content || null },
+    update: { content: content || null, score },
   });
   await attachIfPresent(entry.id, personId, formData);
   await logActivity({ action: "eval.fill", description: `מילא מופע חוות דעת עבור ${(await prisma.person.findUnique({ where: { id: personId }, select: { fullName: true } }))?.fullName ?? personId}`, subjectType: "person", subjectId: personId });

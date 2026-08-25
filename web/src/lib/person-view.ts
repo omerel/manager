@@ -86,6 +86,8 @@ export type RecurrenceRow = {
   dueDate: Date;
   filledByEntryId: string | null;
   waived: boolean;
+  /** filling this occurrence offers the interview-style optional rating */
+  withScore: boolean;
 };
 
 /**
@@ -176,6 +178,7 @@ export function buildPersonTimeline(person: PersonFull) {
       dueDate: addMonths(rec, off),
       filledByEntryId: entryBySlot.get(`${r.id}:${off}`) ?? null,
       waived: isOccurrenceWaived(ctx, r.id, off),
+      withScore: r.withScore,
     })),
   );
 

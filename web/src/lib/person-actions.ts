@@ -352,6 +352,7 @@ export async function assignPlan(formData: FormData) {
         display: r.display,
         stopMode: "UNTIL_OFFSET",
         stopOffsetMonths: r.stopOffsetMonths,
+        withScore: r.withScore,
         color: r.color,
       },
     });

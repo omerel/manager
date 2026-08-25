@@ -276,7 +276,7 @@ function RecurringSection({ plan, admin }: { plan: PlanWithEvents; admin: boolea
                 </span>{" "}
                 {stop ? (
                   <span className="text-sm text-muted">
-                    · כל {r.intervalMonths} חודשים · {stop} · {r.display === "CARD" ? "כרטיס בכל מופע" : "סימון על הציר"} · מופעים: {preview.map((o) => `+${formatYearsMonths(o)}`).join(", ") || "—"}
+                    · כל {r.intervalMonths} חודשים · {stop} · {r.display === "CARD" ? "כרטיס בכל מופע" : "סימון על הציר"}{r.withScore ? " · מילוי עם דירוג" : ""} · מופעים: {preview.map((o) => `+${formatYearsMonths(o)}`).join(", ") || "—"}
                   </span>
                 ) : (
                   <span className="text-sm font-medium text-red-700">
@@ -312,6 +312,7 @@ function RecurringSection({ plan, admin }: { plan: PlanWithEvents; admin: boolea
                       required
                     />
                     <DisplayField name={`rdisp-${r.id}`} defaultValue={r.display} />
+                    <ScoreFlagField name={`rscore-${r.id}`} defaultChecked={r.withScore} />
                   </InlineEdit>
                 ) : (
                   summary
@@ -331,6 +332,7 @@ function RecurringSection({ plan, admin }: { plan: PlanWithEvents; admin: boolea
           <OffsetField name="startOffsetMonths" label="התחלה (שנים.חודשים מההצבה)" defaultMonths={6} required />
           <OffsetField name="stopOffsetMonths" label="עד (שנים.חודשים מההצבה)" defaultMonths={DEFAULT_STOP_MONTHS} required />
           <DisplayField name="display-new" defaultValue="MARKER" />
+          <ScoreFlagField name="rscore-new" defaultChecked={false} />
           <AddButton>הוסף מחזורי</AddButton>
         </ActionForm>
       )}
@@ -419,6 +421,16 @@ function DisplayField({ name, defaultValue }: { name: string; defaultValue: "MAR
       </select>
       <span className="mt-0.5 text-xs text-muted">״כרטיס בכל מופע״ מצייר כרטיס לכל חזרה</span>
     </div>
+  );
+}
+
+/** Opt-in to the interview-style optional 1–5 rating on each fill. */
+function ScoreFlagField({ name, defaultChecked }: { name: string; defaultChecked: boolean }) {
+  return (
+    <label htmlFor={name} className="flex items-center gap-2 pb-1.5 text-sm">
+      <input id={name} type="checkbox" name="withScore" value="1" defaultChecked={defaultChecked} />
+      מילוי עם דירוג
+    </label>
   );
 }
 

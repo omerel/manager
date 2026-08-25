@@ -178,6 +178,7 @@ export async function addRecurringEvent(formData: FormData) {
       stopMode: "UNTIL_OFFSET",
       ...span,
       display: displayFrom(formData),
+      withScore: str(formData.get("withScore")) === "1",
       color: nextColorKey(existing),
     },
   });
@@ -237,6 +238,7 @@ export async function updateRecurringEvent(formData: FormData) {
       stopMode: "UNTIL_OFFSET",
       ...recurringSpanFrom(formData),
       display: displayFrom(formData),
+      withScore: str(formData.get("withScore")) === "1",
     },
   });
   await logItem("plan.item.update", "ערך אירוע מחזורי", planId);
