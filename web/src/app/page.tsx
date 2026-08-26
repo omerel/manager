@@ -10,6 +10,7 @@ import {
   attentionList,
   narrowTree,
   GAP_KIND_LABEL,
+  UNASSIGNED_NODE_ID,
 } from "@/lib/gap-dashboard";
 import { GapDashboard } from "@/components/GapDashboard";
 import { DashboardFilters } from "@/components/DashboardFilters";
@@ -35,6 +36,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const roots = chosen ? [chosen] : allRoots;
 
   const total = roots.reduce((s, r) => s + r.total, 0);
+  // within the current narrowing: narrowing to a subtree without the node yields 0
+  const unassignedCount = roots.reduce((s, r) => s + (findNode([r], UNASSIGNED_NODE_ID)?.total ?? 0), 0);
   const red = roots.reduce((s, r) => s + r.red, 0);
   const overdueEvents = roots.reduce((s, r) => s + r.overdueEvents, 0);
   const approachingEvents = roots.reduce((s, r) => s + r.approachingEvents, 0);
@@ -91,7 +94,13 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           label="אירועים מתקרבים"
           tone={approachingEvents > 0 ? "amber" : "green"}
         />
-        <StatTile icon={<Users className="h-5 w-5" aria-hidden />} value={total} label="אנשים תחת ניהולי" tone="mint" />
+        <StatTile
+          icon={<Users className="h-5 w-5" aria-hidden />}
+          value={total}
+          label="אנשים תחת ניהולי"
+          sub={unassignedCount > 0 ? `(מתוכם ${unassignedCount} ללא שיוך)` : undefined}
+          tone="mint"
+        />
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
@@ -216,11 +225,14 @@ function StatTile({
   icon,
   value,
   label,
+  sub,
   tone,
 }: {
   icon: React.ReactNode;
   value: number;
   label: string;
+  /** small parenthetical line under the label, e.g. the unassigned count */
+  sub?: string;
   tone: "red" | "amber" | "green" | "mint";
 }) {
   const tones = {
@@ -235,6 +247,7 @@ function StatTile({
       <div>
         <div className="text-2xl font-bold">{value}</div>
         <div className="text-sm text-muted">{label}</div>
+        {sub && <div className="text-xs text-muted">{sub}</div>}
       </div>
     </div>
   );

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { ChevronDown, ChevronLeft, Minimize2, Maximize2 } from "lucide-react";
 import { KIND_LABEL } from "@/lib/org-kinds";
-import { GAP_META, type GapLevel } from "@/lib/gap-meta";
+import { GAP_META, UNASSIGNED_NODE_ID, type GapLevel } from "@/lib/gap-meta";
 import type { GapTreeNode } from "@/lib/gap-dashboard";
 
 function Counts({ node }: { node: GapTreeNode }) {
@@ -68,7 +68,11 @@ function Node({
           ) : (
             <span className="inline-block w-5" />
           )}
-          <span className="text-xs text-muted">{KIND_LABEL[node.kind]}</span>
+          {node.id === UNASSIGNED_NODE_ID ? (
+            <span className="rounded bg-stone-100 px-1.5 py-0.5 text-xs text-stone-600">ללא שיוך</span>
+          ) : (
+            <span className="text-xs text-muted">{KIND_LABEL[node.kind]}</span>
+          )}
           <span className="font-medium">{node.name}</span>
           {node.commander && (
             <span className="rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-900">מפקד: {node.commander}</span>

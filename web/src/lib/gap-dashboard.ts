@@ -2,6 +2,8 @@ import type { AccessLevel, OrgKind } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import type { Visibility } from "@/lib/access";
 import { computePersonGaps, type GapLevel } from "@/lib/gaps";
+import { UNASSIGNED_NODE_ID, UNASSIGNED_NODE_NAME } from "@/lib/gap-meta";
+export { UNASSIGNED_NODE_ID };
 
 const personGapInclude = {
   pointProgress: true,
@@ -101,8 +103,52 @@ export async function buildGapTree(visibility: Visibility, today: Date): Promise
     };
   };
 
-  const roots = visible.filter((n) => !n.parentId || !visibleIds.has(n.parentId));
-  return roots.sort((a, b) => a.name.localeCompare(b.name, "he")).map((r) => build(r.id));
+  const roots = visible
+    .filter((n) => !n.parentId || !visibleIds.has(n.parentId))
+    .sort((a, b) => a.name.localeCompare(b.name, "he"))
+    .map((r) => build(r.id));
+
+  // The synthetic «לא משויכים» node: people outside every framework, shown
+  // under the first visible root CENTER — a presentation choice, since they
+  // belong to no center. A viewer without a center in sight does not get the
+  // node at all: what is outside every framework is not under their
+  // management. The node is fabricated here and exists on no other screen.
+  const centerRoot = roots.find((r) => r.kind === "CENTER" && r.id !== UNASSIGNED_NODE_ID);
+  if (centerRoot) {
+    const unassigned = await prisma.person.findMany({ where: { teamId: null }, include: personGapInclude });
+    const people: GapPerson[] = [];
+    let overdueEvents = 0;
+    let approachingEvents = 0;
+    for (const p of unassigned) {
+      // gap-computed like anyone else: losing a framework must not hide a gap
+      const { status, items } = computePersonGaps(p, today);
+      people.push({ id: p.id, name: p.fullName, status });
+      overdueEvents += items.filter((i) => i.level === "OVERDUE").length;
+      approachingEvents += items.filter((i) => i.level === "APPROACHING").length;
+    }
+    const node: GapTreeNode = {
+      id: UNASSIGNED_NODE_ID,
+      name: UNASSIGNED_NODE_NAME,
+      kind: "TEAM", // people hang on it, and collapse-all-teams naturally includes it
+      level: null,
+      commander: null,
+      total: people.length,
+      red: people.filter((p) => p.status === "OVERDUE").length,
+      yellow: people.filter((p) => p.status === "APPROACHING").length,
+      overdueEvents,
+      approachingEvents,
+      people: people.sort((a, b) => a.name.localeCompare(b.name, "he")),
+      children: [],
+    };
+    centerRoot.children.push(node); // last among the center's children, deliberately
+    centerRoot.total += node.total;
+    centerRoot.red += node.red;
+    centerRoot.yellow += node.yellow;
+    centerRoot.overdueEvents += node.overdueEvents;
+    centerRoot.approachingEvents += node.approachingEvents;
+  }
+
+  return roots;
 }
 
 /**
