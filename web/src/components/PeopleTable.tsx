@@ -2,7 +2,7 @@
 
 /* eslint-disable @next/next/no-img-element */
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { FilterX, Trash2 } from "lucide-react";
 import { versionedUrl } from "@/lib/upload-version";
 import { ConfirmDelete, plural } from "@/components/ConfirmDelete";
@@ -45,12 +45,23 @@ const EMPTY: Filters = { name: "", org: "", date: "", status: "", plan: "" };
 const has = (haystack: string, needle: string) =>
   haystack.toLowerCase().includes(needle.trim().toLowerCase());
 
+/**
+ * How many rows are rendered at once, and how many more each press reveals.
+ *
+ * The ceiling applies to the FILTERED rows, never to the loaded ones: filtering
+ * still runs over everything the user may see, so a person past the ceiling is
+ * still found. Measured reason for the ceiling: a thousand rows rendered at
+ * once is 1.7MB of HTML and 68,000 DOM nodes, on a page 68 screens tall.
+ */
+const PAGE = 100;
+
 export function PeopleTable({ rows }: { rows: PeopleRow[] }) {
   // the column exists when the viewer may delete anyone here; the control
   // itself is then per row, because authority follows each person's team
   const anyDeletable = rows.some((r) => r.canDelete);
   const [f, setF] = useState<Filters>(EMPTY);
   const [pendingDelete, setPendingDelete] = useState<PeopleRow | null>(null);
+  const [limit, setLimit] = useState(PAGE);
   const active = Object.values(f).some((v) => v !== "");
 
   // Closed-set filters offer only what is present in this user's own rows, so a
@@ -80,6 +91,11 @@ export function PeopleTable({ rows }: { rows: PeopleRow[] }) {
     [rows, f],
   );
 
+  // a new filter shows its results from the top — otherwise a narrowed list
+  // would inherit a ceiling raised for the previous, wider one
+  useEffect(() => setLimit(PAGE), [f]);
+  const visible = shown.slice(0, limit);
+
   const set = (k: keyof Filters) => (e: { target: { value: string } }) =>
     setF((prev) => ({ ...prev, [k]: e.target.value }));
 
@@ -107,9 +123,12 @@ export function PeopleTable({ rows }: { rows: PeopleRow[] }) {
         )}
       </div>
 
-      <div className="overflow-x-auto rounded-xl border border-border/70 bg-card shadow-sm">
+      {/* the list scrolls inside its own area: the page stays about one screen
+          tall however large the registry, and the sticky header keeps the
+          column labels AND the filter row usable while the body scrolls */}
+      <div className="max-h-[70vh] overflow-auto rounded-xl border border-border/70 bg-card shadow-sm">
         <table className="w-full text-start text-sm">
-          <thead className="bg-stone-50 text-muted">
+          <thead className="sticky top-0 z-10 bg-stone-50 text-muted shadow-[0_1px_0_var(--color-border)]">
             <tr>
               <Th>שם</Th>
               <Th>מסגרת</Th>
@@ -152,7 +171,7 @@ export function PeopleTable({ rows }: { rows: PeopleRow[] }) {
             </tr>
           </thead>
           <tbody>
-            {shown.map((p) => (
+            {visible.map((p) => (
               <tr key={p.id} className="border-t border-border hover:bg-stone-50">
                 <td className="px-4 py-2.5">
                   <Link
@@ -209,6 +228,23 @@ export function PeopleTable({ rows }: { rows: PeopleRow[] }) {
         </table>
         {shown.length === 0 && (
           <p className="px-4 py-6 text-center text-sm text-muted">לא נמצאו אנשים התואמים לסינון.</p>
+        )}
+
+        {/* inside the scrolling area, so it meets the reader at the end of the
+            rows instead of waiting below the fold of the page */}
+        {shown.length > visible.length && (
+          <div className="flex items-center justify-center gap-3 border-t border-border bg-stone-50/60 px-4 py-3 text-sm">
+            <span className="text-muted">
+              מוצגים <b>{visible.length}</b> מתוך {shown.length}
+            </span>
+            <button
+              type="button"
+              onClick={() => setLimit((n) => n + PAGE)}
+              className="rounded-md border border-border bg-card px-3 py-1 text-xs hover:bg-stone-50"
+            >
+              הצג עוד {Math.min(PAGE, shown.length - visible.length)}
+            </button>
+          </div>
         )}
       </div>
 

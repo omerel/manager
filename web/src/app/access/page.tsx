@@ -140,7 +140,9 @@ export default async function AccessPage({ searchParams }: { searchParams: Promi
       {users.length === 0 ? (
         <p className="text-muted">{query ? `לא נמצאו משתמשים התואמים ל״${query}״.` : "אין משתמשים להצגה."}</p>
       ) : (
-        <div className="space-y-4">
+        // the user list scrolls in place: it grows with the organization, and
+        // the search above it must stay reachable
+        <div className="max-h-[70vh] space-y-4 overflow-y-auto">
           {users.map((u) => (
             <div key={u.id} className="rounded-xl border border-border/70 bg-card shadow-sm p-4">
               {isAdmin && editUserId === u.id ? (

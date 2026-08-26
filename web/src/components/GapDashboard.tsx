@@ -84,8 +84,13 @@ function Node({
       {!isCollapsed && (
         <>
           {/* drill-down: people at the team level */}
+          {/* a large team scrolls its own people rather than burying the
+              frameworks below it under hundreds of rows */}
           {node.people.length > 0 && (
-            <div style={{ paddingInlineStart: `${(depth + 1) * 20 + 8}px` }}>
+            <div
+              className={node.people.length > 12 ? "max-h-64 overflow-y-auto" : undefined}
+              style={{ paddingInlineStart: `${(depth + 1) * 20 + 8}px` }}
+            >
               {node.people.map((p) => (
                 <PersonRow key={p.id} id={p.id} name={p.name} status={p.status} />
               ))}

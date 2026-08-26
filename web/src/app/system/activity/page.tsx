@@ -86,9 +86,9 @@ export default async function ActivityPage({
       {rows.length === 0 ? (
         <p className="text-muted">{filtered ? "אין רשומות התואמות לסינון." : "עדיין לא נרשמה פעילות."}</p>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-border/70 bg-card shadow-sm">
+        <div className="max-h-[70vh] overflow-auto rounded-xl border border-border/70 bg-card shadow-sm">
           <table className="w-full text-start text-sm">
-            <thead className="bg-stone-50 text-muted">
+            <thead className="sticky top-0 z-10 bg-stone-50 text-muted shadow-[0_1px_0_var(--color-border)]">
               <tr>
                 <th className="px-4 py-2 text-start font-medium">מתי</th>
                 <th className="px-4 py-2 text-start font-medium">מי</th>
