@@ -14,6 +14,7 @@ import {
 } from "@/lib/gap-dashboard";
 import { GapDashboard } from "@/components/GapDashboard";
 import { DashboardFilters } from "@/components/DashboardFilters";
+import { OrgExportDialog } from "@/components/OrgExportDialog";
 import { GAP_META } from "@/lib/gaps";
 
 export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ node?: string; kind?: string }> }) {
@@ -179,6 +180,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           עץ ארגוני מלא · פערים מתגלגלים
         </summary>
         <div className="border-t border-border/70 p-3">
+          <div className="mb-2 flex justify-end px-2">
+            <OrgExportDialog roots={treeRoots} node={chosen?.id ?? ""} />
+          </div>
           <GapDashboard roots={treeRoots} />
           <p className="mt-2 px-2 text-xs text-muted">
             המספרים מתגלגלים בעץ ואינם מושפעים מבורר סוג האירוע. לחיצה על שם פותחת את כרטיס העובד.
