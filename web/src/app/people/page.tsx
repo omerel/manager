@@ -5,15 +5,21 @@ import { isAdmin } from "@/lib/authz";
 import { getVisiblePeople, getEnrollableTeams, STATUS_LABEL, formatDate } from "@/lib/people";
 import { PeopleTable, type PeopleRow } from "@/components/PeopleTable";
 import { IntakeSection } from "@/components/IntakeSection";
+import { PeopleExportDialog } from "@/components/PeopleExportDialog";
+import { getFieldDefs } from "@/lib/person-schema";
+import { exportColumns } from "@/lib/people-export";
 
 export default async function PeoplePage() {
   const user = await getSessionUser();
   const visibility = await computeVisibility(user);
-  const [people, admin, enrollable] = await Promise.all([
+  const [people, admin, enrollable, fieldDefs] = await Promise.all([
     getVisiblePeople(visibility),
     isAdmin(),
     getEnrollableTeams(visibility),
+    getFieldDefs(),
   ]);
+  // the catalogue is built here, on the server: the dialog is a dumb renderer
+  const exportable = exportColumns(fieldDefs).map((c) => ({ key: c.key, label: c.label }));
   const canEnroll = enrollable.length > 0;
 
   // The server loads and permission-clips; filtering happens in the table over
@@ -37,6 +43,7 @@ export default async function PeoplePage() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <h1 className="text-2xl font-bold">אנשים</h1>
         <div className="flex gap-2">
+          <PeopleExportDialog columns={exportable} />
           {admin && (
             <Link href="/people/card-schema" className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-stone-50">
               שדות כרטיס

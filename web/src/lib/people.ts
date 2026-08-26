@@ -42,7 +42,7 @@ const IMPACT_COUNTS = {
 export const NO_PLAN_LABEL = "ללא מסלול";
 
 /** Build "center ▸ domain ▸ section ▸ team" for a team node (or the unassigned label). */
-async function buildPathResolver() {
+export async function buildPathResolver() {
   const nodes = await prisma.orgNode.findMany();
   const byId = new Map(nodes.map((n) => [n.id, n]));
   return (teamId: string | null): string => {
