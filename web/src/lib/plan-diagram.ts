@@ -57,7 +57,73 @@ type EventCard = {
   bg?: string;
   accent?: string;
   border?: string;
+  /** this person's standing against the item, when the diagram is drawn for one */
+  status?: VectorStatus;
+  /** added for this person alone — drawn with its own marker */
+  personal?: boolean;
 };
+
+/**
+ * How one person stands against one plan item. Passed in only when the diagram
+ * is drawn on a person's card; the plan page and the PDF pass nothing and get
+ * exactly the drawing they got before.
+ */
+export type VectorStatus = "OVERDUE" | "APPROACHING" | "MET" | "WAIVED";
+
+/**
+ * The key to the colours, stated once and read by everyone who shows them —
+ * the card's legend line and the PDF's. Two hand-written lists of the same
+ * four colours is how a legend comes to disagree with its drawing.
+ */
+export const VECTOR_LEGEND: { status: VectorStatus; label: string }[] = [
+  { status: "OVERDUE", label: "פער" },
+  { status: "APPROACHING", label: "מתקרב" },
+  { status: "MET", label: "תקין" },
+  { status: "WAIVED", label: "פטור" },
+];
+
+/** Colours per status — the same vocabulary the badges use, in the drawing's palette. */
+export const STATUS_STYLE: Record<VectorStatus, { bg: string; accent: string; border: string }> = {
+  OVERDUE: { bg: "#fef2f2", accent: "#dc2626", border: "#fca5a5" },
+  APPROACHING: { bg: "#fffbeb", accent: "#d97706", border: "#fcd34d" },
+  MET: { bg: "#ecfdf5", accent: "#059669", border: "#6ee7b7" },
+  WAIVED: { bg: "#fafaf9", accent: "#a8a29e", border: "#e7e5e4" },
+};
+
+/**
+ * Movement is reserved for the states that ask for action — a drawing where
+ * everything pulses says nothing. Held inside a reduced-motion guard, so the
+ * static, colour-only version is what a viewer who asked for less motion gets;
+ * no JavaScript is involved either way.
+ */
+const ANIMATION_CSS = `
+  .vs-overdue .vs-ring { opacity: 0; }
+  .vs-approach .vs-ring { opacity: 0; }
+  @media (prefers-reduced-motion: no-preference) {
+    @keyframes vsPulse { 0%,100% { opacity: 0; r: 16; } 50% { opacity: .55; r: 27; } }
+    @keyframes vsGlow  { 0%,100% { opacity: 0; r: 16; } 50% { opacity: .30; r: 23; } }
+    .vs-overdue .vs-ring  { animation: vsPulse 2s ease-in-out infinite; }
+    .vs-approach .vs-ring { animation: vsGlow 3s ease-in-out infinite; }
+  }
+  .vs-waived { opacity: .55; }
+  /* print captures one arbitrary frame of a loop, so the halo would land at a
+     random opacity in the PDF. The colour carries the meaning on paper. */
+  @media print { .vs-ring { display: none; } }
+`;
+
+/** The mark that says "this one is yours" — a shape, so it survives any palette. */
+function personalStar(cx: number, cy: number): string {
+  const pts = Array.from({ length: 10 }, (_, i) => {
+    const r = i % 2 === 0 ? 12 : 5.2;
+    const a = (Math.PI / 5) * i - Math.PI / 2;
+    return `${(cx + r * Math.cos(a)).toFixed(1)},${(cy + r * Math.sin(a)).toFixed(1)}`;
+  }).join(" ");
+  // the white disc behind it keeps the star legible over a connector or a card
+  return (
+    `<circle cx="${cx}" cy="${cy}" r="13" fill="white"/>` +
+    `<polygon points="${pts}" fill="#fbbf24" stroke="#b45309" stroke-width="1.4"><title>אירוע אישי</title></polygon>`
+  );
+}
 
 function iconDisc(kind: EventCard["kind"] | "repeat", cx: number, cy: number, fill?: string): string {
   const disc = fill ?? (kind === "point" ? C.action : kind === "metric" ? C.deep : C.amber);
@@ -65,11 +131,30 @@ function iconDisc(kind: EventCard["kind"] | "repeat", cx: number, cy: number, fi
   return `<g><circle cx="${cx}" cy="${cy}" r="16" fill="${disc}"/><g transform="translate(${cx - 11},${cy - 11}) scale(0.92)">${icon}</g></g>`;
 }
 
-export function buildPlanDiagramSvg(plan: PlanWithEvents): string {
+/**
+ * @param status per-item standing, keyed by the item's own id (point event,
+ *   checkpoint, or recurring event). Omitted on the plan page and in the PDF,
+ *   where the drawing describes the TRACK and nobody's standing against it.
+ */
+export function buildPlanDiagramSvg(plan: PlanWithEvents, status?: Map<string, VectorStatus>): string {
+  // when a status is given it REPLACES the palette colour: the card must say
+  // how this person stands, not which metric it belongs to
+  const styled = (id: string, fallback: { bg?: string; accent?: string; border?: string }) => {
+    const s = status?.get(id);
+    return s ? { ...STATUS_STYLE[s], status: s } : fallback;
+  };
+
   // ---- collect events ----
   const cards: EventCard[] = [];
   for (const e of plan.pointEvents) {
-    cards.push({ offset: e.offsetMonths, title: e.label, sub: `${formatYearsMonths(e.offsetMonths)} מההצבה (${monthsAsWords(e.offsetMonths)})`, kind: "point" });
+    cards.push({
+      offset: e.offsetMonths,
+      title: e.label,
+      sub: `${formatYearsMonths(e.offsetMonths)} מההצבה (${monthsAsWords(e.offsetMonths)})`,
+      kind: "point",
+      personal: e.personal,
+      ...styled(e.id, {}),
+    });
   }
   plan.cumulativeMetrics.forEach((m, mi) => {
     const col = softColorFor(m.color, mi); // one colour per metric, shared by all its checkpoints
@@ -79,9 +164,7 @@ export function buildPlanDiagramSvg(plan: PlanWithEvents): string {
         title: `${m.name}: ${c.target} ${m.unit}`,
         sub: `יעד עד ${formatYearsMonths(c.offsetMonths)} מההצבה`,
         kind: "metric",
-        bg: col.bg,
-        accent: col.accent,
-        border: col.border,
+        ...styled(c.id, { bg: col.bg, accent: col.accent, border: col.border }),
       });
     }
   });
@@ -91,14 +174,15 @@ export function buildPlanDiagramSvg(plan: PlanWithEvents): string {
   // to remember the rule.
   const allRecurring = plan.recurringEvents.map((r, ri) => {
     const col = softColorFor(r.color, ri);
+    const st = status?.get(r.id);
     return {
+      id: r.id,
+      status: st,
       label: r.label,
       interval: r.intervalMonths,
       stop: `מ-${formatYearsMonths(r.startOffsetMonths)} עד ${formatYearsMonths(r.stopOffsetMonths ?? 0)} מההצבה`,
       offsets: unrollRecurring(r.intervalMonths, r.stopOffsetMonths, r.startOffsetMonths),
-      accent: col.accent,
-      bg: col.bg,
-      border: col.border,
+      ...(st ? STATUS_STYLE[st] : { accent: col.accent, bg: col.bg, border: col.border }),
       asCards: r.display === "CARD",
     };
   });
@@ -113,6 +197,7 @@ export function buildPlanDiagramSvg(plan: PlanWithEvents): string {
         bg: r.bg,
         accent: r.accent,
         border: r.border,
+        status: r.status,
       });
     }
   }
@@ -180,6 +265,9 @@ export function buildPlanDiagramSvg(plan: PlanWithEvents): string {
      <filter id="soft" x="-20%" y="-20%" width="140%" height="140%">
        <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#00000022"/>
      </filter></defs>`,
+    // emitted ONLY for a person's vector: without it the plan page and the PDF
+    // are byte-identical to what they were before this change
+    status ? `<style>${ANIMATION_CSS}</style>` : "",
     `<rect width="${W}" height="${H}" fill="white"/>`,
     // title
     `<text x="${CX}" y="44" text-anchor="middle" font-size="22" font-weight="700" fill="${C.deep}">${esc(plan.name)}</text>`,
@@ -241,19 +329,38 @@ export function buildPlanDiagramSvg(plan: PlanWithEvents): string {
 
     // text as real HTML (foreignObject): proper Hebrew bidi + ellipsis,
     // rendered identically by browsers and by Chromium's PDF print.
+    // the status class carries both the animation and the waived dimming; with
+    // no status given the group is unclassed and looks exactly as it always did
+    const cls =
+      card.status === "OVERDUE" ? "vs-overdue" :
+      card.status === "APPROACHING" ? "vs-approach" :
+      card.status === "WAIVED" ? "vs-waived" : "";
+
     parts.push(
+      `<g class="${cls}">`,
       // elbow connector: spine → out → card
       `<path d="M ${CX} ${anchorY} h ${side === "R" ? 46 : -46} L ${innerEdge} ${cardCy}" fill="none" stroke="${card.border ?? C.border}" stroke-width="2"/>`,
       `<circle cx="${CX}" cy="${anchorY}" r="7" fill="white" stroke="${card.accent ?? C.action}" stroke-width="3"/>`,
       // card
       `<g filter="url(#soft)"><rect x="${cardX}" y="${cardCy - CARD_H / 2}" width="${CARD_W}" height="${CARD_H}" rx="14" fill="${card.bg ?? (card.kind === "metric" ? C.mist : "white")}" stroke="${card.border ?? C.border}"/></g>`,
+      // the halo that pulses, drawn beneath the disc. Emitted ONLY for the two
+      // states that animate: without it the plan page and the PDF keep exactly
+      // the markup they had before this change.
+      card.status === "OVERDUE" || card.status === "APPROACHING"
+        ? `<circle class="vs-ring" cx="${discX}" cy="${cardCy}" r="16" fill="none" stroke="${card.accent ?? C.action}" stroke-width="3" opacity="0"/>`
+        : "",
       iconDisc(card.kind, discX, cardCy, card.accent),
+      // a personal event says so by its SHAPE, so it reads even in one colour.
+      // Placed on the card's OUTER edge — away from the spine — because the
+      // inside is the text block's, and a star there lands under a long label.
+      card.personal ? personalStar(side === "R" ? cardX - 15 : cardX + CARD_W + 15, cardCy) : "",
       `<foreignObject x="${cardX + 10}" y="${cardCy - CARD_H / 2 + 6}" width="${CARD_W - 62}" height="${CARD_H - 10}">
          <div xmlns="http://www.w3.org/1999/xhtml" dir="rtl" style="font-family:Rubik,'Noto Sans Hebrew',sans-serif;height:100%;display:flex;flex-direction:column;justify-content:center;overflow:hidden">
            <div style="font-size:14px;font-weight:600;color:${C.ink};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(card.title)}</div>
            <div style="font-size:11px;color:${C.muted};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(card.sub)}</div>
          </div>
        </foreignObject>`,
+      `</g>`,
     );
   });
 

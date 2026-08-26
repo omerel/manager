@@ -351,6 +351,12 @@ model PointEvent {
   planId       String
   label        String
   offsetMonths Int
+  /// Added for ONE person by their commander, on their own plan copy — an
+  /// obligation of theirs rather than of the track. It is a point event in
+  /// every other respect (gaps, waivers, progress), and travels with them
+  /// when they are moved to another plan. Never true on a template.
+  personal      Boolean        @default(false)
+  createdByName String? // who added a personal event, for the card to name
   progress     PointProgress[]
   waivers      PlanWaiver[]
 }

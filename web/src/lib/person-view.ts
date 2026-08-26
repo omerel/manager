@@ -8,6 +8,9 @@ import {
   type WaiverOverride,
 } from "@/lib/waivers";
 import { addMonths, monthsBetween } from "@/lib/dates";
+import { dueLevel, evalMetric, levelForPoint } from "@/lib/gaps";
+import type { GapLevel } from "@/lib/gap-meta";
+import type { VectorStatus } from "@/lib/plan-diagram";
 
 export async function getPersonFull(id: string) {
   return prisma.person.findUnique({
@@ -68,12 +71,16 @@ export type PointRow = {
   waived: boolean;
   /** credited from a previous plan rather than done under this one */
   carriedFrom: string | null;
+  /** added for this person alone, by a commander — not required by the track */
+  personal: boolean;
+  createdByName: string | null;
 };
 export type MetricRow = {
   id: string;
   name: string;
   unit: string;
-  checkpoints: { offsetMonths: number; target: number; dueDate: Date; waived: boolean }[];
+  /** `id` is the checkpoint's own — the career vector draws one card per checkpoint */
+  checkpoints: { id: string; offsetMonths: number; target: number; dueDate: Date; waived: boolean }[];
   value: number | null;
   asOf: Date | null;
   note: string | null;
@@ -141,6 +148,8 @@ export function buildPersonTimeline(person: PersonFull) {
       note: prog?.note ?? null,
       waived: isPointWaived(ctx, e.id, e.offsetMonths),
       carriedFrom: carriedPoint.get(e.id) ?? null,
+      personal: e.personal,
+      createdByName: e.createdByName,
     };
   });
 
@@ -151,6 +160,7 @@ export function buildPersonTimeline(person: PersonFull) {
       name: m.name,
       unit: m.unit,
       checkpoints: m.checkpoints.map((c) => ({
+        id: c.id,
         offsetMonths: c.offsetMonths,
         target: c.target,
         dueDate: addMonths(rec, c.offsetMonths),
@@ -183,4 +193,59 @@ export function buildPersonTimeline(person: PersonFull) {
   );
 
   return { points, metrics, recurrences };
+}
+
+/**
+ * The person's standing per plan item, keyed by the item's own id — what the
+ * career vector on their card is coloured by.
+ *
+ * Every kind of item is included, not only point events: a drawing that marked
+ * some cards and left the rest grey reads as a fault rather than as a picture.
+ * A metric or a recurring event has many dated parts, so it takes the WORST
+ * standing among the ones that count for this person — the drawing answers
+ * "does this need me?", and the lists beneath it hold the detail.
+ */
+export function buildVectorStatus(
+  timeline: ReturnType<typeof buildPersonTimeline>,
+  placementDate: Date,
+  today: Date,
+): Map<string, VectorStatus> {
+  const out = new Map<string, VectorStatus>();
+  const rank: Record<VectorStatus, number> = { WAIVED: 0, MET: 1, APPROACHING: 2, OVERDUE: 3 };
+  const worst = (a: VectorStatus | undefined, b: VectorStatus) => (!a || rank[b] > rank[a] ? b : a);
+  const ofLevel = (l: GapLevel): VectorStatus => (l === "OVERDUE" ? "OVERDUE" : l === "APPROACHING" ? "APPROACHING" : "MET");
+
+  for (const p of timeline.points) {
+    out.set(p.id, p.waived ? "WAIVED" : ofLevel(levelForPoint({ dueDate: p.dueDate, done: p.done, doneOn: p.doneOn }, today)));
+  }
+
+  for (const m of timeline.metrics) {
+    const live = m.checkpoints.filter((x) => !x.waived);
+    // the metric is evaluated once, against the targets that still count for
+    // this person; each of its cards then wears that verdict
+    const level = live.length
+      ? ofLevel(
+          evalMetric(
+            { name: m.name, unit: m.unit, checkpoints: live.map((x) => ({ offsetMonths: x.offsetMonths, target: x.target })), value: m.value },
+            placementDate,
+            today,
+          ).level,
+        )
+      : "MET";
+    for (const c of m.checkpoints) out.set(c.id, c.waived ? "WAIVED" : level);
+  }
+
+  for (const r of timeline.recurrences) {
+    const status = r.waived
+      ? "WAIVED"
+      : r.filledByEntryId
+        ? "MET"
+        : r.dueDate.getTime() < today.getTime()
+          ? "OVERDUE"
+          : ofLevel(dueLevel(r.dueDate, today));
+    // one card per recurring EVENT, so its occurrences fold into the worst one
+    out.set(r.recurringEventId, worst(out.get(r.recurringEventId), status));
+  }
+
+  return out;
 }

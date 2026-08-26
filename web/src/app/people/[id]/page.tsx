@@ -9,15 +9,18 @@ import { ageFromBirthDate } from "@/lib/person-name";
 import { fmtDate, addMonths } from "@/lib/dates";
 import { DateField } from "@/components/DateField";
 import { ActionForm } from "@/components/ActionForm";
-import { getPersonFull, buildPersonTimeline, type PersonFull } from "@/lib/person-view";
+import { getPersonFull, buildPersonTimeline, buildVectorStatus, type PersonFull } from "@/lib/person-view";
+import { getPlan } from "@/lib/plans";
+import { buildPlanDiagramSvg, STATUS_STYLE, VECTOR_LEGEND } from "@/lib/plan-diagram";
 import { computePersonGaps, levelForPoint, evalMetric, GAP_META, type GapLevel } from "@/lib/gaps";
 import { PersonFormFields } from "@/components/PersonFormFields";
 import { MetricCurve } from "@/components/MetricCurve";
-import { CircleDot, History, Map as MapIcon, TrendingUp } from "lucide-react";
+import { CircleDot, FileDown, History, Map as MapIcon, Route, Star, TrendingUp } from "lucide-react";
 import { EvaluationsSection } from "@/components/EvaluationsSection";
 import { ExtractionPanel, type ExtractionJobView } from "@/components/ExtractionPanel";
 import { FileDrop } from "@/components/FileDrop";
 import { PhotoLightbox } from "@/components/PhotoLightbox";
+import { VectorLightbox } from "@/components/VectorLightbox";
 import { setProfilePhoto, type ProposalItem } from "@/lib/extract-actions";
 import { effectiveStatus, staleError, STALE_MS } from "@/lib/jobs";
 import { versionedUrl } from "@/lib/upload-version";
@@ -25,6 +28,8 @@ import {
   updatePerson,
   unassignPlan,
   setPointDone,
+  addPersonalEvent,
+  removePersonalEvent,
   clearPointDone,
   setMetricReading,
   reassignTeam,
@@ -76,6 +81,17 @@ export default async function PersonPage({
   const timeline = buildPersonTimeline(person);
   const today = new Date();
   const gaps = computePersonGaps(person, today);
+
+  // The career vector: built HERE, on every open, from the person's own plan
+  // copy — nothing is stored and nothing needs syncing. Coloured by this
+  // person's standing, which is why it must draw their copy and not the
+  // template they came from.
+  const planForVector = person.assignedPlanId ? await getPlan(person.assignedPlanId) : null;
+  const vectorSvg = planForVector
+    ? buildPlanDiagramSvg(planForVector, buildVectorStatus(timeline, person.placementDate, today))
+    : null;
+  // adding an obligation to someone's path is an establishment act, like enrolling them
+  const canAddPersonal = person.teamId ? visibility.mayEstablishAt(person.teamId) : visibility.isAdmin;
 
   const proposalRow = editing
     ? await prisma.extractionProposal.findFirst({ where: { personId: person.id }, orderBy: { createdAt: "desc" } })
@@ -186,12 +202,54 @@ export default async function PersonPage({
         />
       )}
 
-      <PersonalDetails person={person} defs={defs} valueByDef={valueByDef} canEdit={editing} />
+      {/* Details on the primary (right) side, the career vector on the left.
+          Details come FIRST in the DOM, so a narrow screen stacks them above
+          the drawing rather than below it. */}
+      <div className={vectorSvg ? "grid gap-6 lg:grid-cols-2" : undefined}>
+        <PersonalDetails person={person} defs={defs} valueByDef={valueByDef} canEdit={editing} />
+        {vectorSvg && (
+          <section className="space-y-3 rounded-xl border border-border/70 bg-card p-5 shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="flex items-center gap-2 text-lg font-semibold">
+                <Route className="h-5 w-5 text-brand-600" aria-hidden />
+                תכנית קריירה
+              </h2>
+              <a
+                href={`/people/${person.id}/plan-pdf`}
+                className="flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm hover:bg-stone-50"
+              >
+                <FileDown className="h-4 w-4 text-brand-600" aria-hidden />
+                הפק PDF
+              </a>
+            </div>
+            {/* the legend reads the same list the drawing and the PDF do */}
+            <p className="flex flex-wrap items-center gap-1.5 text-sm text-muted">
+              המסלול של {person.firstName} כפי שהוא נמדד — מצבו מול כל אירוע:
+              {VECTOR_LEGEND.map((l) => {
+                const c = STATUS_STYLE[l.status];
+                return (
+                  <span
+                    key={l.status}
+                    className="rounded-full border px-2 text-xs font-medium"
+                    style={{ backgroundColor: c.bg, borderColor: c.border, color: c.accent }}
+                  >
+                    {l.label}
+                  </span>
+                );
+              })}
+              <span className="rounded-full border border-amber-300 bg-amber-50 px-2 text-xs font-medium text-amber-700">
+                ★ אירוע אישי
+              </span>
+            </p>
+            <VectorLightbox svg={vectorSvg} />
+          </section>
+        )}
+      </div>
 
       {preview ? (
         <AssignmentReview preview={preview} backHref={`/people/${person.id}?edit=1`} />
       ) : (
-        <PlanSection person={person} templates={templates} timeline={timeline} canEdit={editing} today={today} />
+        <PlanSection person={person} templates={templates} timeline={timeline} canEdit={editing} canAddPersonal={canAddPersonal} today={today} />
       )}
 
       <PlanHistorySection person={person} />
@@ -336,12 +394,15 @@ function PlanSection({
   templates,
   timeline,
   canEdit,
+  canAddPersonal,
   today,
 }: {
   person: PersonFull;
   templates: { id: string; name: string }[];
   timeline: ReturnType<typeof buildPersonTimeline>;
   canEdit: boolean;
+  /** establishment authority: may add or remove this person's own events */
+  canAddPersonal: boolean;
   today: Date;
 }) {
 
@@ -410,6 +471,22 @@ function PlanSection({
                 <span className={p.waived ? "text-muted" : "font-medium"}>{p.label}</span>
                 <span className="text-muted">· יעד: {fmtDate(p.dueDate)}</span>
                 {p.carriedFrom && <CarriedBadge from={p.carriedFrom} />}
+                {p.personal && (
+                  <span
+                    className="flex items-center gap-1 rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-900"
+                    title={p.createdByName ? `אירוע אישי — הוסיף ${p.createdByName}` : "אירוע אישי"}
+                  >
+                    <Star className="h-3 w-3" aria-hidden />
+                    אישי
+                  </span>
+                )}
+                {p.personal && canAddPersonal && canEdit && (
+                  <ActionForm action={removePersonalEvent}>
+                    <input type="hidden" name="personId" value={person.id} />
+                    <input type="hidden" name="pointEventId" value={p.id} />
+                    <button className="text-xs text-red-600 hover:underline">הסר</button>
+                  </ActionForm>
+                )}
               </span>
               {p.done ? (
                 <div className="flex flex-col items-end gap-0.5">
@@ -444,6 +521,29 @@ function PlanSection({
           ))}
           {timeline.points.length === 0 && <li className="px-3 py-2 text-sm text-muted">—</li>}
         </ul>
+
+        {/* an obligation of this person's own — section level and above, and
+            only while editing: adding one is a change, not a way to read */}
+        {canAddPersonal && canEdit && (
+          <ActionForm action={addPersonalEvent} className="mt-2 flex flex-wrap items-end gap-2 rounded-md border border-dashed border-border p-3">
+            <input type="hidden" name="personId" value={person.id} />
+            <div className="flex flex-col">
+              <label className="mb-1 text-xs text-muted">אירוע אישי</label>
+              <input name="label" required placeholder="למשל: חפיפה עם הקודם" className="rounded-md border border-border px-2 py-1 text-sm" />
+            </div>
+            <div className="flex flex-col">
+              <label className="mb-1 text-xs text-muted">מועד (שנים.חודשים מההצבה)</label>
+              <input name="offset" required placeholder="1.6" dir="ltr" className="w-28 rounded-md border border-border px-2 py-1 text-sm text-end" />
+            </div>
+            <button className="flex items-center gap-1.5 rounded-md bg-brand-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-700">
+              <Star className="h-3.5 w-3.5" aria-hidden />
+              הוסף אירוע אישי
+            </button>
+            <p className="w-full text-xs text-muted">
+              אירוע שנדרש מ{person.firstName} בלבד. הוא נמדד ונספר כפער ככל אירוע, מסומן ★ על הוקטור, ועובר איתו במעבר מסלול.
+            </p>
+          </ActionForm>
+        )}
       </div>
 
       {/* Cumulative metrics */}

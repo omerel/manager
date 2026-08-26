@@ -18,6 +18,7 @@ import { assertIdentityFree } from "@/lib/identity-keys";
 import { emitMovement } from "@/lib/movements";
 import { monthsSince } from "@/lib/waivers";
 import { parseIsraeliDate } from "@/lib/dates";
+import { parseYearsMonths } from "@/lib/years-months";
 
 function str(v: FormDataEntryValue | null): string {
   return String(v ?? "").trim();
@@ -309,6 +310,14 @@ export async function assignPlan(formData: FormData) {
     where: { id: personId },
     select: { placementDate: true, assignedPlanId: true },
   });
+  // personal events belong to the PERSON, not to the track they are leaving —
+  // so they are carried onto the new copy rather than re-approved every move
+  const personalEvents = person.assignedPlanId
+    ? await prisma.pointEvent.findMany({
+        where: { planId: person.assignedPlanId, personal: true },
+        select: { label: true, offsetMonths: true, createdByName: true },
+      })
+    : [];
 
   const now = new Date();
   // measured on the plan's own axis: months in this unit, not total service
@@ -326,6 +335,14 @@ export async function assignPlan(formData: FormData) {
       data: { planId: copy.id, label: e.label, offsetMonths: e.offsetMonths },
     });
     pointIdOf.set(e.id, c.id);
+  }
+  // the person's own obligations, re-created on the new copy. They are NOT in
+  // `pointIdOf`: that map exists to translate TEMPLATE ids into copy ids for
+  // the review screen's decisions, and a personal event has no template id.
+  for (const e of personalEvents) {
+    await prisma.pointEvent.create({
+      data: { planId: copy.id, label: e.label, offsetMonths: e.offsetMonths, personal: true, createdByName: e.createdByName },
+    });
   }
   const metricIdOf = new Map<string, string>();
   const checkpointIdOf = new Map<string, string>();
@@ -530,6 +547,74 @@ export async function removePerson(formData: FormData) {
   revalidatePath("/plans");
   revalidatePath("/hierarchy");
   revalidatePath("/", "layout");
+}
+
+/* ---------- Personal events (section level and above) ---------- */
+
+/**
+ * A point event that belongs to ONE person rather than to their track.
+ *
+ * It lives on their own plan copy — which already belongs to exactly them — so
+ * it is a point event in every mechanical sense: it is measured, it counts
+ * toward gaps, it can be marked done and it can be waived. `personal` is what
+ * keeps it from being mistaken for something the track requires, and what lets
+ * it travel with the person when they are moved to another plan.
+ *
+ * Authority is the establishment rule, not plain EDIT: adding an obligation to
+ * someone's path is the same kind of act as enrolling them.
+ */
+export async function addPersonalEvent(formData: FormData) {
+  const personId = str(formData.get("personId"));
+  const me = await requireEstablishForPerson(personId);
+  const label = str(formData.get("label"));
+  if (!label) throw new Error("שם האירוע לא יכול להיות ריק.");
+  const offsetMonths = parseYearsMonths(str(formData.get("offset")));
+  if (offsetMonths === null) {
+    throw new Error("מועד האירוע: יש להזין שנים.חודשים (למשל 1.6 = שנה וחצי מההצבה; החודשים 0–11).");
+  }
+
+  const person = await prisma.person.findUniqueOrThrow({
+    where: { id: personId },
+    select: { fullName: true, assignedPlanId: true },
+  });
+  // without a plan there is no copy to hang it on, and no vector to draw it on
+  if (!person.assignedPlanId) {
+    throw new Error("כדי להוסיף אירוע אישי יש לשייך תחילה מסלול קריירה לאיש.");
+  }
+
+  await prisma.pointEvent.create({
+    data: { planId: person.assignedPlanId, label, offsetMonths, personal: true, createdByName: me.name },
+  });
+  await logActivity({
+    action: "person.personalEvent",
+    description: `הוסיף אירוע אישי ״${label}״ עבור ${person.fullName}`,
+    subjectType: "person",
+    subjectId: personId,
+  });
+  revalidatePath(`/people/${personId}`);
+  revalidatePath("/");
+}
+
+/** Remove a personal event. Only a personal one — a track's event is not the commander's to delete. */
+export async function removePersonalEvent(formData: FormData) {
+  const personId = str(formData.get("personId"));
+  await requireEstablishForPerson(personId);
+  const id = str(formData.get("pointEventId"));
+  const ev = await prisma.pointEvent.findUnique({ where: { id }, select: { label: true, personal: true, planId: true } });
+  if (!ev?.personal) throw new Error("ניתן למחוק אירועים אישיים בלבד — אירוע של המסלול נערך בעמוד התכנית.");
+  const person = await prisma.person.findUniqueOrThrow({ where: { id: personId }, select: { fullName: true, assignedPlanId: true } });
+  // and only from THIS person's plan: an id from elsewhere is not theirs to touch
+  if (ev.planId !== person.assignedPlanId) throw new Error("האירוע אינו שייך למסלול של איש זה.");
+
+  await prisma.pointEvent.delete({ where: { id } });
+  await logActivity({
+    action: "person.personalEvent",
+    description: `מחק את האירוע האישי ״${ev.label}״ של ${person.fullName}`,
+    subjectType: "person",
+    subjectId: personId,
+  });
+  revalidatePath(`/people/${personId}`);
+  revalidatePath("/");
 }
 
 /* ---------- Progress recording (Editor on the team) ---------- */
