@@ -23,9 +23,18 @@ export async function getPersonFull(id: string) {
       evalEntries: { include: { attachments: true, recurringEvent: true }, orderBy: { createdAt: "desc" } },
       assignedPlan: {
         include: {
-          pointEvents: { orderBy: { offsetMonths: "asc" } },
+          // `source` is the TEMPLATE item this copy was made from; its guideline
+          // is read through it at every open, so replacing the file on the
+          // template reaches everyone already assigned
+          pointEvents: {
+            orderBy: { offsetMonths: "asc" },
+            include: { source: { select: { guideName: true, guidePath: true } } },
+          },
           cumulativeMetrics: { include: { checkpoints: { orderBy: { offsetMonths: "asc" } } }, orderBy: { name: "asc" } },
-          recurringEvents: { orderBy: { intervalMonths: "asc" } },
+          recurringEvents: {
+            orderBy: { intervalMonths: "asc" },
+            include: { source: { select: { guideName: true, guidePath: true } } },
+          },
           assignment: { include: { waivers: true, carryOvers: true } },
         },
       },
@@ -74,6 +83,8 @@ export type PointRow = {
   /** added for this person alone, by a commander — not required by the track */
   personal: boolean;
   createdByName: string | null;
+  /** «פורמטים והנחיות» from the template item, read live; null when there is none */
+  guide: { name: string; href: string } | null;
 };
 export type MetricRow = {
   id: string;
@@ -95,6 +106,8 @@ export type RecurrenceRow = {
   waived: boolean;
   /** filling this occurrence offers the interview-style optional rating */
   withScore: boolean;
+  /** the event's guideline — the same file at every occurrence */
+  guide: { name: string; href: string } | null;
 };
 
 /**
@@ -121,6 +134,22 @@ export function unrollForPerson(
   const out: number[] = [];
   for (let m = startOffsetMonths; m <= cap; m += intervalMonths) out.push(m);
   return out;
+}
+
+/**
+ * The guideline to offer at one of this person's plan items.
+ *
+ * Resolved from the item's SOURCE — the template item — never from a copy of
+ * the file, which is what keeps «the current document» current. The link points
+ * at the person's own item id; the route follows the same pointer.
+ */
+function guideOf(
+  kind: "point" | "recurring",
+  item: { id: string; source?: { guideName: string | null; guidePath: string | null } | null },
+): { name: string; href: string } | null {
+  const g = item.source;
+  if (!g?.guidePath || !g.guideName) return null;
+  return { name: g.guideName, href: `/plan-guide/${kind}/${item.id}` };
 }
 
 export function buildPersonTimeline(person: PersonFull) {
@@ -150,6 +179,7 @@ export function buildPersonTimeline(person: PersonFull) {
       carriedFrom: carriedPoint.get(e.id) ?? null,
       personal: e.personal,
       createdByName: e.createdByName,
+      guide: guideOf("point", e),
     };
   });
 
@@ -189,6 +219,7 @@ export function buildPersonTimeline(person: PersonFull) {
       filledByEntryId: entryBySlot.get(`${r.id}:${off}`) ?? null,
       waived: isOccurrenceWaived(ctx, r.id, off),
       withScore: r.withScore,
+      guide: guideOf("recurring", r), // the same file at every occurrence
     })),
   );
 

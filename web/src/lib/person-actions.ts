@@ -332,7 +332,10 @@ export async function assignPlan(formData: FormData) {
   const pointIdOf = new Map<string, string>();
   for (const e of tpl.pointEvents) {
     const c = await prisma.pointEvent.create({
-      data: { planId: copy.id, label: e.label, offsetMonths: e.offsetMonths },
+      // sourceEventId is how the copy finds the template item's «פורמטים
+      // והנחיות» file at read time — the guideline is never copied, only
+      // pointed at, so replacing it reaches everyone already assigned
+      data: { planId: copy.id, label: e.label, offsetMonths: e.offsetMonths, sourceEventId: e.id },
     });
     pointIdOf.set(e.id, c.id);
   }
@@ -370,6 +373,7 @@ export async function assignPlan(formData: FormData) {
         stopMode: "UNTIL_OFFSET",
         stopOffsetMonths: r.stopOffsetMonths,
         withScore: r.withScore,
+        sourceEventId: r.id, // as above: the guideline is read through this
         color: r.color,
       },
     });

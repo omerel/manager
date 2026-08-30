@@ -4,6 +4,7 @@ import { computeVisibility } from "@/lib/access";
 import { getSessionUser } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { getFieldDefs, formatFieldValue } from "@/lib/person-schema";
+import { getInterviewFormat } from "@/lib/branding";
 import { STATUS_LABEL, getEditableTeams, UNASSIGNED_LABEL } from "@/lib/people";
 import { ageFromBirthDate } from "@/lib/person-name";
 import { fmtDate, addMonths } from "@/lib/dates";
@@ -15,7 +16,7 @@ import { buildPlanDiagramSvg, STATUS_STYLE, VECTOR_LEGEND } from "@/lib/plan-dia
 import { computePersonGaps, levelForPoint, evalMetric, GAP_META, type GapLevel } from "@/lib/gaps";
 import { PersonFormFields } from "@/components/PersonFormFields";
 import { MetricCurve } from "@/components/MetricCurve";
-import { CircleDot, FileDown, History, Map as MapIcon, Route, Star, TrendingUp } from "lucide-react";
+import { CircleDot, FileDown, History, Map as MapIcon, Paperclip, Route, Star, TrendingUp } from "lucide-react";
 import { EvaluationsSection } from "@/components/EvaluationsSection";
 import { ExtractionPanel, type ExtractionJobView } from "@/components/ExtractionPanel";
 import { FileDrop } from "@/components/FileDrop";
@@ -92,6 +93,7 @@ export default async function PersonPage({
     : null;
   // adding an obligation to someone's path is an establishment act, like enrolling them
   const canAddPersonal = person.teamId ? visibility.mayEstablishAt(person.teamId) : visibility.isAdmin;
+  const interviewFormat = await getInterviewFormat();
 
   const proposalRow = editing
     ? await prisma.extractionProposal.findFirst({ where: { personId: person.id }, orderBy: { createdAt: "desc" } })
@@ -254,7 +256,7 @@ export default async function PersonPage({
 
       <PlanHistorySection person={person} />
 
-      <EvaluationsSection person={person} recurrences={timeline.recurrences} editing={editing} today={today} />
+      <EvaluationsSection person={person} recurrences={timeline.recurrences} editing={editing} today={today} interviewFormat={interviewFormat} />
     </div>
   );
 }
@@ -479,6 +481,16 @@ function PlanSection({
                     <Star className="h-3 w-3" aria-hidden />
                     אישי
                   </span>
+                )}
+                {p.guide && (
+                  <a
+                    href={p.guide.href}
+                    className="flex items-center gap-1 rounded bg-brand-50 px-1.5 py-0.5 text-xs text-brand-800 hover:bg-brand-100"
+                    title={`פורמטים והנחיות: ${p.guide.name}`}
+                  >
+                    <Paperclip className="h-3 w-3" aria-hidden />
+                    פורמט
+                  </a>
                 )}
                 {p.personal && canAddPersonal && canEdit && (
                   <ActionForm action={removePersonalEvent}>

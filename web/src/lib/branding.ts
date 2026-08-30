@@ -72,3 +72,40 @@ export async function setLogoPath(path: string | null): Promise<void> {
     });
   }
 }
+
+/* ---------- The house format for an interview summary ---------- */
+
+const INTERVIEW_FORMAT_NAME = "interviewFormatName";
+const INTERVIEW_FORMAT_PATH = "interviewFormatPath";
+const INTERVIEW_FORMAT_MIME = "interviewFormatMime";
+
+export type InterviewFormat = { name: string; path: string; mime: string } | null;
+
+/**
+ * One file for the whole house — the format an interview summary is written on.
+ *
+ * Unlike a plan item's guideline this belongs to no plan and to no person: it
+ * is the Admin's, set once under system settings, and offered on every card.
+ * Null until one is uploaded, and the card then reads exactly as it did before.
+ */
+export async function getInterviewFormat(): Promise<InterviewFormat> {
+  const rows = await prisma.appSetting.findMany({
+    where: { key: { in: [INTERVIEW_FORMAT_NAME, INTERVIEW_FORMAT_PATH, INTERVIEW_FORMAT_MIME] } },
+  });
+  const of = (key: string) => rows.find((r) => r.key === key)?.value;
+  const name = of(INTERVIEW_FORMAT_NAME);
+  const path = of(INTERVIEW_FORMAT_PATH);
+  if (!name || !path) return null;
+  return { name, path, mime: of(INTERVIEW_FORMAT_MIME) || "application/octet-stream" };
+}
+
+/** Passing null clears it — the same act as removal, as elsewhere in this module. */
+export async function setInterviewFormat(input: { name: string; path: string; mime: string } | null): Promise<void> {
+  const put = async (key: string, value: string) => {
+    if (!value) await prisma.appSetting.deleteMany({ where: { key } });
+    else await prisma.appSetting.upsert({ where: { key }, create: { key, value }, update: { value } });
+  };
+  await put(INTERVIEW_FORMAT_NAME, input?.name ?? "");
+  await put(INTERVIEW_FORMAT_PATH, input?.path ?? "");
+  await put(INTERVIEW_FORMAT_MIME, input?.mime ?? "");
+}

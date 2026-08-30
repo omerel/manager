@@ -5,7 +5,7 @@ import { OffsetField } from "@/components/OffsetField";
 import { SubmitButton } from "@/components/SubmitButton";
 import { formatYearsMonths } from "@/lib/years-months";
 import { buildPlanDiagramSvg } from "@/lib/plan-diagram";
-import { Route, FileDown } from "lucide-react";
+import { Route, FileDown, Paperclip, X } from "lucide-react";
 import { isAdmin } from "@/lib/authz";
 import {
   addPointEvent,
@@ -19,8 +19,11 @@ import {
   updateCumulativeMetric,
   updateCheckpoint,
   updateRecurringEvent,
+  uploadItemGuide,
+  removeItemGuide,
 } from "@/lib/plan-actions";
 import { InlineEdit } from "@/components/InlineEdit";
+import { FileDrop } from "@/components/FileDrop";
 import { ActionForm } from "@/components/ActionForm";
 import { softColorFor } from "@/lib/palette";
 
@@ -106,6 +109,50 @@ function Timeline({ plan }: { plan: PlanWithEvents }) {
   );
 }
 
+/**
+ * «פורמטים והנחיות» — the item's one file: the form to fill in, or the guidance.
+ *
+ * Held on the item authored HERE and read live by every person assigned it, so
+ * replacing the file is how a new version reaches people assigned long ago.
+ * Shown to the Admin only, beside the item it belongs to.
+ */
+function GuideControl({ planId, kind, id, name }: { planId: string; kind: string; id: string; name: string | null }) {
+  return (
+    <div className="flex items-center gap-1">
+      {name ? (
+        <>
+          <a
+            href={`/plan-guide/${kind}/${id}`}
+            title={`פורמטים והנחיות: ${name}`}
+            className="flex items-center gap-1 rounded bg-brand-50 px-1.5 py-0.5 text-xs text-brand-800 hover:bg-brand-100"
+          >
+            <Paperclip className="h-3 w-3" aria-hidden />
+            {name.length > 18 ? `${name.slice(0, 17)}…` : name}
+          </a>
+          <ActionForm action={removeItemGuide}>
+            <input type="hidden" name="planId" value={planId} />
+            <input type="hidden" name="kind" value={kind} />
+            <input type="hidden" name="id" value={id} />
+            <button className="rounded p-1 text-muted hover:bg-red-50 hover:text-red-600" title="הסר קובץ">
+              <X className="h-3.5 w-3.5" aria-hidden />
+            </button>
+          </ActionForm>
+        </>
+      ) : (
+        <ActionForm action={uploadItemGuide} className="flex items-center gap-1">
+          <input type="hidden" name="planId" value={planId} />
+          <input type="hidden" name="kind" value={kind} />
+          <input type="hidden" name="id" value={id} />
+          {/* the house file control — Hebrew, and the same one every other
+              upload on the site uses */}
+          <FileDrop name="guide" required label="פורמטים והנחיות" className="w-44 text-xs" />
+          <button className="rounded border border-border px-2 py-1 text-xs hover:bg-stone-50">צרף</button>
+        </ActionForm>
+      )}
+    </div>
+  );
+}
+
 function DeleteButton({ planId, kind, id }: { planId: string; kind: string; id: string }) {
   return (
     <ActionForm action={deletePlanItem}>
@@ -147,6 +194,7 @@ function PointEventsSection({ plan, admin }: { plan: PlanWithEvents; admin: bool
                 ) : (
                   summary
                 )}
+                {admin && <GuideControl planId={plan.id} kind="point" id={e.id} name={e.guideName} />}
                 {admin && <DeleteButton planId={plan.id} kind="point" id={e.id} />}
               </li>
             );
@@ -317,6 +365,7 @@ function RecurringSection({ plan, admin }: { plan: PlanWithEvents; admin: boolea
                 ) : (
                   summary
                 )}
+                {admin && <GuideControl planId={plan.id} kind="recurring" id={r.id} name={r.guideName} />}
                 {admin && <DeleteButton planId={plan.id} kind="recurring" id={r.id} />}
               </li>
             );

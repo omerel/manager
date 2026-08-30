@@ -1,13 +1,13 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/session";
-import { getLogoPath, getSystemName, getLoginLink, DEFAULT_SYSTEM_NAME, DEFAULT_LOGIN_LINK_TEXT } from "@/lib/branding";
-import { uploadLogo, resetLogo, updateSystemName, updateLoginLink } from "@/lib/branding-actions";
+import { getLogoPath, getSystemName, getLoginLink, getInterviewFormat, DEFAULT_SYSTEM_NAME, DEFAULT_LOGIN_LINK_TEXT } from "@/lib/branding";
+import { uploadLogo, resetLogo, updateSystemName, updateLoginLink, uploadInterviewFormat, clearInterviewFormat } from "@/lib/branding-actions";
 import { importBundle } from "@/lib/portability-actions";
 import { AppLogo, LogoMark } from "@/components/Logo";
 import { FileDrop } from "@/components/FileDrop";
 import { ActionForm } from "@/components/ActionForm";
-import { Palette, DatabaseBackup, Download, Upload, ExternalLink, Eraser } from "lucide-react";
+import { Palette, DatabaseBackup, Download, Upload, ExternalLink, Eraser, Paperclip } from "lucide-react";
 import { DevWipe } from "@/components/DevWipe";
 import { dataWipeEnabled } from "@/lib/dev-wipe";
 
@@ -23,6 +23,7 @@ export default async function SystemSettingsPage({
   const customLogo = !!logoPath;
   const systemName = await getSystemName();
   const loginLink = await getLoginLink();
+  const interviewFormat = await getInterviewFormat();
 
   return (
     <div className="space-y-6">
@@ -138,6 +139,40 @@ export default async function SystemSettingsPage({
             שמור קישור
           </button>
           <p className="w-full text-xs text-muted">{`ניקוי הטקסט מחזיר לברירת המחדל "${DEFAULT_LOGIN_LINK_TEXT}"; ניקוי הכתובת מסתיר את הכרטיס.`}</p>
+        </ActionForm>
+      </section>
+
+      {/* the house format an interview summary is written on */}
+      <section className="space-y-4 rounded-xl border border-border/70 bg-card p-5 shadow-sm">
+        <h2 className="flex items-center gap-2 text-lg font-semibold">
+          <Paperclip className="h-5 w-5 text-brand-600" aria-hidden />
+          פורמט סיכום ראיון
+        </h2>
+        <p className="text-sm text-muted">
+          קובץ אחד לכל המערכת — הפורמט שעליו נכתב סיכום ראיון. הוא יוצע להורדה לצד טופס הראיון בכרטיס כל עובד.
+          העלאת קובץ חדש מחליפה את הקודם.
+        </p>
+        {interviewFormat ? (
+          <div className="flex flex-wrap items-center gap-3">
+            <a
+              href="/interview-format"
+              className="flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm hover:bg-stone-50"
+            >
+              <Paperclip className="h-4 w-4 text-brand-600" aria-hidden />
+              {interviewFormat.name}
+            </a>
+            <ActionForm action={clearInterviewFormat}>
+              <button className="text-sm text-red-600 hover:underline">הסר פורמט</button>
+            </ActionForm>
+          </div>
+        ) : (
+          <p className="text-sm text-muted">לא הוגדר פורמט — לא יוצעה הורדה בכרטיסים.</p>
+        )}
+        <ActionForm action={uploadInterviewFormat} className="flex flex-wrap items-end gap-2">
+          <FileDrop name="format" required label="גרור/י קובץ פורמט" className="min-w-64" />
+          <button className="rounded-md bg-brand-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-brand-700">
+            {interviewFormat ? "החלף פורמט" : "העלה פורמט"}
+          </button>
         </ActionForm>
       </section>
 

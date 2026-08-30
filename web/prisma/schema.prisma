@@ -357,6 +357,20 @@ model PointEvent {
   /// when they are moved to another plan. Never true on a template.
   personal      Boolean        @default(false)
   createdByName String? // who added a personal event, for the card to name
+  /// «פורמטים והנחיות»: one optional file — the form to fill in, or the
+  /// guidance for the event. Held on the TEMPLATE item and read live through
+  /// `source`, so replacing it reaches everyone already assigned.
+  guideName     String?
+  guidePath     String?
+  guideMime     String?
+  guideSize     Int?
+  /// A copy's link back to the template item it was made from — how a person's
+  /// event finds its guideline. Null on templates, on personal events, and on
+  /// copies made before this existed. SetNull: deleting the template item
+  /// leaves the copy intact and simply guideline-less.
+  source        PointEvent?    @relation("PointEventSource", fields: [sourceEventId], references: [id], onDelete: SetNull)
+  sourceEventId String?
+  copies        PointEvent[]   @relation("PointEventSource")
   progress     PointProgress[]
   waivers      PlanWaiver[]
 }
@@ -410,6 +424,15 @@ model RecurringEvent {
   stopOffsetMonths Int? // required when stopMode = UNTIL_OFFSET
   /// Filling an occurrence offers the interview-style optional 1–5 rating.
   withScore        Boolean           @default(false)
+  /// «פורמטים והנחיות» — one file, shown at EVERY occurrence, since each
+  /// occurrence needs the same form. See PointEvent for the live-read rule.
+  guideName        String?
+  guidePath        String?
+  guideMime        String?
+  guideSize        Int?
+  source           RecurringEvent?   @relation("RecurringEventSource", fields: [sourceEventId], references: [id], onDelete: SetNull)
+  sourceEventId    String?
+  copies           RecurringEvent[]  @relation("RecurringEventSource")
   color            String? // soft-palette color assigned at creation (stable)
   evalEntries      EvalEntry[]
   waivers          PlanWaiver[]

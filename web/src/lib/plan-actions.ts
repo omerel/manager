@@ -7,7 +7,11 @@ import { requireAdmin } from "@/lib/authz";
 import { nextColorKey } from "@/lib/palette";
 import { parseYearsMonths } from "@/lib/years-months";
 import { logActivity } from "@/lib/activity-log";
+import { saveUpload, deleteUpload } from "@/lib/storage";
 import type { RecurringDisplay } from "@/generated/prisma/client";
+
+/** Same ceiling the other uploads use — a guidance document, not an archive. */
+const MAX_GUIDE_BYTES = 10 * 1024 * 1024;
 
 function int(v: FormDataEntryValue | null, fallback = 0): number {
   const n = Number(String(v ?? "").trim());
@@ -247,11 +251,77 @@ export async function updateRecurringEvent(formData: FormData) {
 
 type DeletableKind = "point" | "metric" | "recurring" | "checkpoint";
 
+/* ---------- «פורמטים והנחיות»: one file on a point or recurring event ---------- */
+
+/** Only these two kinds take a guideline; a cumulative metric deliberately does not. */
+type GuidedKind = "point" | "recurring";
+const guidedKind = (v: string): GuidedKind | null => (v === "point" || v === "recurring" ? v : null);
+
+const readGuide = (kind: GuidedKind, id: string) =>
+  kind === "point"
+    ? prisma.pointEvent.findUnique({ where: { id }, select: { guidePath: true, planId: true } })
+    : prisma.recurringEvent.findUnique({ where: { id }, select: { guidePath: true, planId: true } });
+
+const writeGuide = (kind: GuidedKind, id: string, data: Record<string, string | number | null>) =>
+  kind === "point"
+    ? prisma.pointEvent.update({ where: { id }, data })
+    : prisma.recurringEvent.update({ where: { id }, data });
+
+/**
+ * Attach (or replace) the item's format/guidance file.
+ *
+ * Held on the item the ADMIN authored — a template item in practice — and read
+ * live by everyone assigned it, so replacing the file here is how a new version
+ * reaches people who were assigned long ago.
+ */
+export async function uploadItemGuide(formData: FormData) {
+  await requireAdmin();
+  const planId = str(formData.get("planId"));
+  const kind = guidedKind(str(formData.get("kind")));
+  const id = str(formData.get("id"));
+  if (!kind) throw new Error("סוג פריט שאינו נושא קובץ הנחיות.");
+  const file = formData.get("guide");
+  if (!(file instanceof File) || file.size === 0) throw new Error("לא נבחר קובץ.");
+  if (file.size > MAX_GUIDE_BYTES) throw new Error("הקובץ גדול מ-10MB.");
+
+  const before = await readGuide(kind, id);
+  if (!before) throw new Error("הפריט לא נמצא.");
+  const { storagePath, size } = await saveUpload("plan-guides", file);
+  await writeGuide(kind, id, {
+    guideName: file.name,
+    guidePath: storagePath,
+    guideMime: file.type || "application/octet-stream",
+    guideSize: size,
+  });
+  await deleteUpload(before.guidePath); // the replaced file is unreferenced from here on
+  await logItem("plan.item.guide", `צירף קובץ הנחיות ״${file.name}״`, planId);
+  revalidatePath(`/plans/${planId}`);
+  revalidatePath("/people", "layout");
+}
+
+export async function removeItemGuide(formData: FormData) {
+  await requireAdmin();
+  const planId = str(formData.get("planId"));
+  const kind = guidedKind(str(formData.get("kind")));
+  const id = str(formData.get("id"));
+  if (!kind) throw new Error("סוג פריט שאינו נושא קובץ הנחיות.");
+  const before = await readGuide(kind, id);
+  if (!before) return;
+  await writeGuide(kind, id, { guideName: null, guidePath: null, guideMime: null, guideSize: null });
+  await deleteUpload(before.guidePath);
+  await logItem("plan.item.guide", "הסיר קובץ הנחיות", planId);
+  revalidatePath(`/plans/${planId}`);
+  revalidatePath("/people", "layout");
+}
+
 export async function deletePlanItem(formData: FormData) {
   await requireAdmin();
   const planId = str(formData.get("planId"));
   const kind = str(formData.get("kind")) as DeletableKind;
   const id = str(formData.get("id"));
+  // the item's guideline goes with it — its file is referenced by nothing else
+  const guided = guidedKind(kind);
+  if (guided) await deleteUpload((await readGuide(guided, id))?.guidePath);
   // deleteMany, deliberately: a double-click submits twice, and the second
   // delete finding nothing must be a no-op — not a P2025 crash page (observed
   // in the dev log, twice).

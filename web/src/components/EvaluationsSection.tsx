@@ -15,11 +15,14 @@ export function EvaluationsSection({
   recurrences,
   editing,
   today,
+  interviewFormat,
 }: {
   person: PersonFull;
   recurrences: RecurrenceRow[];
   editing: boolean;
   today: Date;
+  /** the house format for an interview summary; null when none is configured */
+  interviewFormat: { name: string } | null;
 }) {
   const entryById = new Map(person.evalEntries.map((e) => [e.id, e]));
   // Two orthogonal questions, each asked where it belongs: recurringEventId
@@ -83,6 +86,17 @@ export function EvaluationsSection({
                       {pastDue && <span className="text-red-700"> · טרם מולא</span>}
                       {approaching && <span className="text-amber-700"> · מתקרב</span>}
                       {s.waived && <span className="text-muted"> · פטור</span>}
+                      {/* the event's format — the same file at every occurrence */}
+                      {s.guide && (
+                        <a
+                          href={s.guide.href}
+                          className="mx-1 inline-flex items-center gap-1 rounded bg-brand-50 px-1.5 py-0.5 text-xs text-brand-800 hover:bg-brand-100"
+                          title={`פורמטים והנחיות: ${s.guide.name}`}
+                        >
+                          <Paperclip className="h-3 w-3" aria-hidden />
+                          פורמט
+                        </a>
+                      )}
                     </span>
                     {editing && entry && (
                       <ActionForm action={deleteEntry}>
@@ -187,6 +201,16 @@ export function EvaluationsSection({
         {editing && (
           <ActionForm action={addInterview} className="mt-3 flex flex-wrap items-end gap-2 rounded-md border border-dashed border-border p-3">
             <input type="hidden" name="personId" value={person.id} />
+            {interviewFormat && (
+              <a
+                href="/interview-format"
+                className="flex items-center gap-1.5 self-end rounded-md border border-border px-2.5 py-1.5 text-xs hover:bg-stone-50"
+                title={`פורמט סיכום ראיון: ${interviewFormat.name}`}
+              >
+                <Paperclip className="h-3.5 w-3.5 text-brand-600" aria-hidden />
+                פורמט סיכום
+              </a>
+            )}
             <div className="flex flex-col">
               <label className="mb-1 text-sm text-muted">נושא</label>
               <input name="title" required placeholder="למשל: ראיון אמצע שנה" className={inputCls} />
