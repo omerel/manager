@@ -6,7 +6,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/session";
 import { requireAdmin } from "@/lib/authz";
-import { logActivity } from "@/lib/activity-log";
+import { logActivity, logLogin } from "@/lib/activity-log";
 import { hashPassword, verifyPassword } from "@/lib/password";
 import { SESSION_COOKIE, SESSION_TTL_MS, createSessionToken } from "@/lib/auth";
 
@@ -38,6 +38,7 @@ export async function login(formData: FormData) {
     redirect("/login?error=1");
   }
 
+  await logLogin(user); // before the redirect throws its control-flow error
   await setSessionCookie(user.id);
   redirect("/");
 }

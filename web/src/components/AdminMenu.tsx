@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { Settings, Shield, Network, SlidersHorizontal } from "lucide-react";
+import { Activity, Network, Settings, Shield, SlidersHorizontal } from "lucide-react";
 
 /** Compact dropdown for admin-only pages (+ optional dev user-switcher slot). */
 export function AdminMenu({ children }: { children?: React.ReactNode }) {
@@ -37,6 +37,9 @@ export function AdminMenu({ children }: { children?: React.ReactNode }) {
           </MenuLink>
           <MenuLink href="/system" onPick={() => setOpen(false)}>
             <SlidersHorizontal className="h-4 w-4 text-brand-600" aria-hidden /> הגדרות מערכת
+          </MenuLink>
+          <MenuLink href="/system/usage" onPick={() => setOpen(false)}>
+            <Activity className="h-4 w-4 text-brand-600" aria-hidden /> דשבורד פעילות
           </MenuLink>
           {children && <div className="mt-1 border-t border-border/70 px-2.5 py-2">{children}</div>}
         </div>

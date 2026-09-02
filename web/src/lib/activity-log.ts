@@ -71,6 +71,40 @@ export async function logActivity(entry: {
   }
 }
 
+/**
+ * Record a sign-in — the ONE place an actor is supplied rather than resolved.
+ *
+ * `logActivity` reads the actor from the session on purpose, and writes nothing
+ * when there is none. During a sign-in there is none yet: the cookie is being
+ * set in this very request. Calling it there would silently record nothing and
+ * look like it had worked.
+ *
+ * So this door exists, and it is deliberately narrow: it takes the user the
+ * caller has JUST authenticated, it is called from exactly one place, and it
+ * cannot be used to attribute anything else to anyone. Everywhere else the rule
+ * stands — no caller names the actor.
+ */
+export async function logLogin(user: { id: string; name: string }): Promise<void> {
+  try {
+    await prisma.$transaction([
+      prisma.activityLog.create({
+        data: {
+          actorId: user.id,
+          actorName: user.name,
+          action: "auth.login",
+          description: "התחבר למערכת",
+          subjectType: "user",
+          subjectId: user.id,
+        },
+      }),
+      // the pruning-proof half: dormancy is judged from this, not from the log
+      prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } }),
+    ]);
+  } catch {
+    // as with logActivity: observing a sign-in must never prevent one
+  }
+}
+
 async function prune(): Promise<void> {
   const days = retentionDays();
   if (days === 0) return;

@@ -86,6 +86,10 @@ model User {
   queryInbox       QueryTarget[] @relation("QueryTargetUser")
   agentRuns        AgentRun[]
   rules            Rule[]
+  /// When they last signed in. Stamped here rather than derived from the
+  /// activity log, which is pruned: "has not signed in for a month" must not
+  /// become true the moment the evidence is deleted.
+  lastLoginAt      DateTime?
   createdAt        DateTime      @default(now())
 }
 
