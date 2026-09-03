@@ -11,19 +11,17 @@ function str(v: FormDataEntryValue | null): string {
   return String(v ?? "").trim();
 }
 
-// Expected parent kind for each non-root kind, and the allowed child kind.
-const PARENT_KIND: Record<Exclude<OrgKind, "CENTER">, OrgKind> = {
-  DOMAIN: "CENTER",
-  SECTION: "DOMAIN",
-  TEAM: "SECTION",
-};
-const CHILD_KIND: Record<OrgKind, OrgKind | null> = {
-  CENTER: "DOMAIN",
-  DOMAIN: "SECTION",
-  SECTION: "TEAM",
-  TEAM: null,
-};
-const KIND_LABEL: Record<OrgKind, string> = { CENTER: "מרכז", DOMAIN: "תחום", SECTION: "מדור", TEAM: "צוות" };
+// The nesting rule lives in `org-nesting` so the importer enforces the SAME one
+// this form does; two copies would be two truths to keep in step.
+import { PARENT_KIND, CHILD_KIND, KIND_LABEL } from "@/lib/org-nesting";
+import { parseTable } from "@/lib/hr-import";
+import {
+  recognizeOrgHeaders,
+  validateOrgRows,
+  type OrgFault,
+  type OrgMapping,
+  type OrgPlanNode,
+} from "@/lib/org-import";
 
 function isKind(v: string): v is OrgKind {
   return ["CENTER", "DOMAIN", "SECTION", "TEAM"].includes(v);
@@ -184,4 +182,117 @@ export async function removeOrgNode(formData: FormData) {
   revalidatePath("/hierarchy");
   revalidatePath("/people");
   revalidatePath("/", "layout");
+}
+
+/* ---------- Importing the whole tree from a file (Admin) ---------- */
+
+/**
+ * What replacing the tree costs, counted from the database rather than
+ * described in words.
+ *
+ * Deleting the nodes cascades their grants and queries away — the schema's own
+ * behaviour, not this import's invention. Saying "the old tree will be deleted"
+ * while silently taking every manager's visibility with it would be the more
+ * dangerous kind of honest, so each number is read and shown.
+ */
+export type OrgImportCost = {
+  frameworks: number;
+  grants: number;
+  queries: number;
+  commanders: number;
+  peopleUnassigned: number;
+};
+
+export async function orgImportCost(): Promise<OrgImportCost> {
+  const [frameworks, grants, queries, commanders, peopleUnassigned] = await Promise.all([
+    prisma.orgNode.count(),
+    prisma.accessGrant.count(),
+    prisma.query.count(),
+    prisma.user.count({ where: { commandsNodeId: { not: null } } }),
+    prisma.person.count({ where: { teamId: { not: null } } }),
+  ]);
+  return { frameworks, grants, queries, commanders, peopleUnassigned };
+}
+
+export type OrgImportState =
+  | { step: "idle" }
+  | { step: "map"; headers: string[]; mapping: OrgMapping; rows: string[][]; filename: string }
+  | { step: "review"; faults: OrgFault[]; plan: OrgPlanNode[]; cost: OrgImportCost; mapping: OrgMapping; rows: string[][]; filename: string }
+  | { step: "done"; created: number }
+  | { step: "error"; error: string };
+
+/** Stage one: read the file and PROPOSE a mapping. Nothing is validated yet. */
+export async function uploadOrgFile(_prev: OrgImportState, formData: FormData): Promise<OrgImportState> {
+  try {
+    await requireAdmin();
+    const file = formData.get("file");
+    if (!(file instanceof File) || file.size === 0) return { step: "error", error: "לא נבחר קובץ." };
+    if (file.size > 10 * 1024 * 1024) return { step: "error", error: "הקובץ גדול מ-10MB." };
+    const parsed = parseTable(Buffer.from(await file.arrayBuffer()), file.name);
+    return {
+      step: "map",
+      headers: parsed.headers,
+      mapping: recognizeOrgHeaders(parsed.headers),
+      rows: parsed.rows,
+      filename: file.name,
+    };
+  } catch (e) {
+    return { step: "error", error: e instanceof Error ? e.message : "קריאת הקובץ נכשלה." };
+  }
+}
+
+/** Stage two: validate BY THE APPROVED MAPPING, and price the replacement. */
+export async function reviewOrgImport(_prev: OrgImportState, formData: FormData): Promise<OrgImportState> {
+  try {
+    await requireAdmin();
+    const payload = JSON.parse(str(formData.get("payload"))) as { rows: string[][]; headers: string[]; filename: string };
+    const mapping: OrgMapping = payload.headers.map((header, i) => ({
+      header,
+      target: (str(formData.get(`col_${i}`)) || "ignore") as OrgMapping[number]["target"],
+    }));
+    const { faults, plan } = validateOrgRows({ headers: payload.headers, rows: payload.rows }, mapping);
+    return { step: "review", faults, plan, cost: await orgImportCost(), mapping, rows: payload.rows, filename: payload.filename };
+  } catch (e) {
+    return { step: "error", error: e instanceof Error ? e.message : "הבדיקה נכשלה." };
+  }
+}
+
+/**
+ * Stage three: replace the tree, in ONE transaction.
+ *
+ * Re-validated here rather than trusted from the review: the plan travels
+ * through the browser, and a tree is not something to build from a posted
+ * value. Roots are written first so a parent always exists for its children.
+ */
+export async function applyOrgImport(_prev: OrgImportState, formData: FormData): Promise<OrgImportState> {
+  try {
+    await requireAdmin();
+    const payload = JSON.parse(str(formData.get("payload"))) as { rows: string[][]; headers: string[]; mapping: OrgMapping };
+    const { faults, plan } = validateOrgRows({ headers: payload.headers, rows: payload.rows }, payload.mapping);
+    if (faults.length) return { step: "error", error: "הקובץ אינו תקין — יש לתקן ולהעלות שוב." };
+    if (plan.length === 0) return { step: "error", error: "אין מסגרות לייבוא." };
+
+    await prisma.$transaction(async (tx) => {
+      // a half-replaced org is worse than either state, so both halves are here
+      await tx.orgNode.deleteMany({});
+      const idOf = new Map<string, string>();
+      for (const node of plan) {
+        const created = await tx.orgNode.create({
+          data: { name: node.name, kind: node.kind, parentId: node.parentName ? idOf.get(node.parentName) ?? null : null },
+        });
+        idOf.set(node.name, created.id);
+      }
+    });
+
+    await logActivity({
+      action: "org.import",
+      description: `ייבא עץ מבנה מקובץ: ${plan.length} מסגרות (העץ הקודם הוחלף)`,
+      subjectType: "org",
+    });
+    revalidatePath("/hierarchy");
+    revalidatePath("/", "layout");
+    return { step: "done", created: plan.length };
+  } catch (e) {
+    return { step: "error", error: e instanceof Error ? e.message : "הייבוא נכשל." };
+  }
 }

@@ -6,6 +6,7 @@ import { KIND_LABEL } from "@/lib/org-kinds";
 import { addOrgNode } from "@/lib/org-actions";
 import { addEnumOption, removeEnumOption } from "@/lib/person-actions";
 import { HierarchyTree, type HierarchyNode } from "@/components/HierarchyTree";
+import { OrgImport } from "@/components/OrgImport";
 import { ActionForm } from "@/components/ActionForm";
 
 const inputCls = "rounded-md border border-border px-3 py-1.5 text-sm";
@@ -56,6 +57,8 @@ export default async function HierarchyPage() {
           יש {unassigned} אנשים ללא שיוך למסגרת. ניתן לשייך אותם מחדש מכרטיס העובד.
         </div>
       )}
+
+      <OrgImport />
 
       <HierarchyTree nodes={treeNodes} />
 
