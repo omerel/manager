@@ -5,7 +5,7 @@ import { AlertTriangle, CheckCircle2, FileSpreadsheet, Upload } from "lucide-rea
 import { FileDrop } from "@/components/FileDrop";
 import { applyOrgImport, reviewOrgImport, uploadOrgFile, type OrgImportState } from "@/lib/org-actions";
 import { MEANING_LABEL, planAsTree, type OrgPreviewNode } from "@/lib/org-import";
-import { KIND_LABEL } from "@/lib/org-nesting";
+import { frameworkLabel } from "@/lib/org-nesting";
 
 /**
  * Building the whole tree from a file, in three deliberate steps.
@@ -24,8 +24,10 @@ export function OrgImport() {
         ייבוא עץ מקובץ
       </h2>
       <p className="text-sm text-muted">
-        קובץ Excel או CSV שבו כל שורה היא מסגרת: <b>שם המסגרת</b>, <b>סוג המסגרת</b> (מרכז / תחום / מדור / צוות)
+        קובץ Excel או CSV שבו כל שורה היא מסגרת: <b>שם המסגרת</b>, <b>סוג המסגרת</b> (מרכז / תחום / מדור / צוות / מפקדים)
         ו<b>מסגרת אב</b>. שמות העמודות אינם חייבים להיות מדויקים — המערכת תציע התאמה, ותוכל לתקן אותה לפני הבדיקה.
+        <br />
+        מסגרת <b>מפקדים</b> יכולה לשבת תחת מרכז, תחום או מדור — לא תחת צוות — ושמה חייב להיות ייחודי בכל הקובץ.
       </p>
 
       {state.step === "error" && (
@@ -208,7 +210,7 @@ function PreviewNode({ node, depth }: { node: OrgPreviewNode; depth: number }) {
   return (
     <div>
       <div style={{ paddingInlineStart: `${depth * 18}px` }} className="py-0.5">
-        <span className="text-xs text-muted">{KIND_LABEL[node.kind]}</span> <span className="font-medium">{node.name}</span>
+        <span className="font-medium">{frameworkLabel(node.kind, node.name)}</span>
       </div>
       {node.children.map((c) => (
         <PreviewNode key={c.name} node={c} depth={depth + 1} />

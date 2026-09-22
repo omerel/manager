@@ -81,6 +81,25 @@ export async function assertCanCommand(role: Role, grants: Grant[], nodeId: stri
   );
 }
 
+/**
+ * Refuse an appointment over a commanders framework.
+ *
+ * Enforced rather than merely hidden from the picker. A commanders framework is
+ * absent from the query recipient list and from the ‎@‎ picker because it has no
+ * commander — `commandedFrameworks()` keeps only frameworks that DO. If that
+ * absence rested on nobody having got round to appointing one, the first Admin
+ * who did would quietly put back the unanswerable row this change removed. The
+ * one answerable for a commanders framework is the commander of its parent.
+ */
+export async function assertCommandable(nodeId: string) {
+  const node = await prisma.orgNode.findUnique({ where: { id: nodeId }, select: { kind: true } });
+  if (node?.kind !== "COMMANDERS") return;
+  const path = (await commandedPath(nodeId)) || "המסגרת שנבחרה";
+  throw new Error(
+    `לא ניתן למנות מפקד על ${path}: מסגרת מפקדים מחזיקה כרטיסים בלבד, והאחראי עליה הוא מפקד מסגרת האב.`,
+  );
+}
+
 /** The commanded framework's path, for messages and display. Empty string when none. */
 export async function commandedPath(nodeId: string | null): Promise<string> {
   if (!nodeId) return "";

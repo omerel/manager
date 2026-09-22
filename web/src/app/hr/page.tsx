@@ -30,6 +30,7 @@ import { parseIsraeliDate, formatIsraeliDate } from "@/lib/dates";
 import type { MovementKind } from "@/generated/prisma/client";
 import { resolveProposalItem } from "@/lib/extract-actions";
 import { HrUpdateReview, type ReviewPerson } from "@/components/HrUpdateReview";
+import { holdsPeople, KIND_ORDER } from "@/lib/org-nesting";
 
 const inputCls = "rounded-md border border-border px-3 py-1.5 text-sm";
 
@@ -92,8 +93,11 @@ export default async function HrPage({ searchParams }: { searchParams: Promise<{
   const movementActors = [...new Map(movements.map((m) => [m.actorId, m.actorName])).entries()];
   const prevDay = formatIsraeliDate(new Date(day.getTime() - 86400_000));
   const nextDay = formatIsraeliDate(new Date(day.getTime() + 86400_000));
-  const scopeTeams = (await prisma.orgNode.findMany({ where: { kind: "TEAM" }, orderBy: { name: "asc" } }))
-    .filter((t) => visibility.canEdit(t.id));
+  // the movement log filters by the framework a person sat in, so the choices
+  // are every kind that holds people — a commanders framework included
+  const scopeTeams = (
+    await prisma.orgNode.findMany({ where: { kind: { in: KIND_ORDER.filter(holdsPeople) } }, orderBy: { name: "asc" } })
+  ).filter((t) => visibility.canEdit(t.id));
   const state = current?.state ?? null;
   const upd = updateRun?.state ?? null;
   // every target names its SOURCE — the card, or the plans that carry the label

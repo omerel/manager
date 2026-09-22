@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/session";
-import { KIND_LABEL } from "@/lib/org-kinds";
+import { frameworkLabel } from "@/lib/org-nesting";
 import { addOrgNode } from "@/lib/org-actions";
 import { addEnumOption, removeEnumOption } from "@/lib/person-actions";
 import { HierarchyTree, type HierarchyNode } from "@/components/HierarchyTree";
@@ -40,7 +40,7 @@ export default async function HierarchyPage() {
   const unassigned = people.filter((p) => !p.teamId).length;
 
   const parentOptions = nodes
-    .map((n) => ({ id: n.id, label: `${KIND_LABEL[n.kind]}: ${n.name}` }))
+    .map((n) => ({ id: n.id, label: frameworkLabel(n.kind, n.name) }))
     .sort((a, b) => a.label.localeCompare(b.label, "he"));
 
   return (
@@ -48,7 +48,7 @@ export default async function HierarchyPage() {
       <div>
         <h1 className="text-2xl font-bold">היררכיה והתמחויות</h1>
         <p className="mt-1 text-muted">
-          מבנה המסגרות (מרכז ▸ תחום ▸ מדור ▸ צוות) והרשימות הסגורות של כרטיס העובד. המבנה מזין את ההרשאות; הרשימות מזינות את שדות הכרטיס.
+          מבנה המסגרות (מרכז ▸ תחום ▸ מדור ▸ צוות), מסגרות המפקדים שלצדו, והרשימות הסגורות של כרטיס העובד. המבנה מזין את ההרשאות; הרשימות מזינות את שדות הכרטיס.
         </p>
       </div>
 
@@ -74,6 +74,7 @@ export default async function HierarchyPage() {
             <option value="DOMAIN">תחום</option>
             <option value="SECTION">מדור</option>
             <option value="TEAM">צוות</option>
+            <option value="COMMANDERS">מפקדים</option>
           </select>
         </div>
         <div className="flex flex-col">
@@ -91,6 +92,9 @@ export default async function HierarchyPage() {
         <p className="w-full text-xs text-muted">
           כלל: אב של תחום = מרכז · אב של מדור = תחום · אב של צוות = מדור. עריכה (✏️) מאפשרת לשנות שם, סוג ומסגרת אב.
           מחיקה מוחקת גם את תתי-המסגרות — יוצג אישור עם הפירוט; אנשים משויכים יעברו ל״ללא שיוך״.
+          <br />
+          מסגרת <b>מפקדים</b> יושבת לצד המסגרות הרגילות — תחת מרכז, תחום או מדור, אך לא תחת צוות — ומחזיקה את כרטיסי מפקדי
+          המסגרות שתחתיה, כדי שמפקד לא ימלא על עצמו. שמה חייב להיות ייחודי בכל המערכת.
         </p>
       </ActionForm>
 

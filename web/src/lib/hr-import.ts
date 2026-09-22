@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma";
 import type { Visibility } from "@/lib/access";
 import { parseIsraeliDate, formatIsraeliDate } from "@/lib/dates";
 import { normalizeIdentity } from "@/lib/identity-keys";
+import { holdsPeople } from "@/lib/org-nesting";
+import type { OrgKind } from "@/generated/prisma/client";
 
 /**
  * The table-import engine: parse, map, classify. No writing happens here —
@@ -275,7 +277,7 @@ export type TeamResolution =
  */
 export function resolveTeamByName(
   visibility: Visibility,
-  nodes: { id: string; name: string; parentId: string | null; kind: string }[],
+  nodes: { id: string; name: string; parentId: string | null; kind: OrgKind }[],
   raw: string,
 ): TeamResolution {
   const wanted = String(raw ?? "").trim();
@@ -297,7 +299,7 @@ export function resolveTeamByName(
   const context = segments.slice(0, -1);
 
   const candidates = nodes.filter(
-    (n) => n.kind === "TEAM" && visibility.canEdit(n.id) && n.name.trim() === teamName,
+    (n) => holdsPeople(n.kind) && visibility.canEdit(n.id) && n.name.trim() === teamName,
   );
   const matching = context.length
     ? candidates.filter((c) => {

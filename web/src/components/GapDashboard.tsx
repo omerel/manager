@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { ChevronDown, ChevronLeft, Minimize2, Maximize2 } from "lucide-react";
 import { KIND_LABEL } from "@/lib/org-kinds";
+import { holdsPeople } from "@/lib/org-nesting";
 import { GAP_META, UNASSIGNED_NODE_ID, type GapLevel } from "@/lib/gap-meta";
 import type { GapTreeNode } from "@/lib/gap-dashboard";
 
@@ -106,11 +107,13 @@ function Node({
 }
 
 export function GapDashboard({ roots }: { roots: GapTreeNode[] }) {
-  // team ids — the "collapse all teams" target (teams are where the people hang)
+  // the "collapse all" target: every node people hang on — teams and commanders
+  // frameworks alike, and the synthetic «לא משויכים», which reports itself as a
+  // team precisely so it is swept up by this
   const teamIds = useMemo(() => {
     const ids: string[] = [];
     const walk = (n: GapTreeNode) => {
-      if (n.kind === "TEAM") ids.push(n.id);
+      if (holdsPeople(n.kind)) ids.push(n.id);
       n.children.forEach(walk);
     };
     roots.forEach(walk);

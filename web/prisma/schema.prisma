@@ -53,11 +53,23 @@ enum AccessLevel {
   EDIT // read + manual data entry
 }
 
+/// The four ladder kinds, plus one that stands beside the ladder.
+///
+/// COMMANDERS (מפקדים) exists so a commander's card never sits inside the
+/// framework they command: placed under X, it holds the cards of the commanders
+/// of X's children and is filled by the commander of X. Being a SIBLING of the
+/// frameworks whose commanders it holds is the whole mechanism — it falls
+/// outside their subtrees and inside their parent's, so the existing visibility
+/// rules produce the right answer with no new access rule at all.
+///
+/// It is never permitted under a TEAM: a team has no child frameworks, and so
+/// no subordinate commanders to hold.
 enum OrgKind {
   CENTER // מרכז
   DOMAIN // תחום
   SECTION // מדור
   TEAM // צוות
+  COMMANDERS // מפקדים — beside the ladder, not a rung on it
 }
 
 enum EmploymentStatus {

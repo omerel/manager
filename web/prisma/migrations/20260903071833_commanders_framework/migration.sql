@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "OrgKind" ADD VALUE 'COMMANDERS';

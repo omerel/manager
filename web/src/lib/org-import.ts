@@ -1,5 +1,5 @@
 import type { OrgKind } from "@/generated/prisma/client";
-import { CHILD_KIND, KIND_LABEL, KIND_ORDER, PARENT_KIND, isOrgKind } from "@/lib/org-nesting";
+import { CHILD_KINDS, KIND_LABEL, KIND_ORDER, PARENT_KINDS, isOrgKind, kindList } from "@/lib/org-nesting";
 
 /**
  * Building the whole org tree from one file.
@@ -35,6 +35,10 @@ const KIND_BY_TEXT = new Map<string, OrgKind>([
   ...KIND_ORDER.map((k) => [norm(k), k] as [string, OrgKind]),
   ["מרכזי", "CENTER"],
   ["ראשי", "CENTER"],
+  ["מפקד", "COMMANDERS"],
+  ["סגלפיקודי", "COMMANDERS"],
+  ["commanders", "COMMANDERS"],
+  ["commander", "COMMANDERS"],
 ]);
 
 /**
@@ -121,6 +125,21 @@ export function validateOrgRows(parsed: OrgParsed, mapping: OrgMapping): OrgVali
     if (k && !kindOf.has(r.name)) kindOf.set(r.name, k);
   }
 
+  // A commanders framework's name is unique across the WHOLE tree, not merely
+  // among its siblings: the HR importer resolves a person's framework by name,
+  // and two «מפקדים מדור תשתיות» in different branches is exactly the ambiguity
+  // that naming convention exists to avoid.
+  //
+  // Counted WITHIN THE FILE, deliberately never against the database — this
+  // import REPLACES the tree, so whatever stands today is about to be gone and
+  // colliding with it would be colliding with a ghost.
+  const commandersNames = new Map<string, number>();
+  for (const r of rows) {
+    if (r.name && KIND_BY_TEXT.get(norm(r.kindRaw)) === "COMMANDERS") {
+      commandersNames.set(r.name, (commandersNames.get(r.name) ?? 0) + 1);
+    }
+  }
+
   const seenSibling = new Set<string>();
   for (const r of rows) {
     if (!r.name) {
@@ -137,6 +156,17 @@ export function validateOrgRows(parsed: OrgParsed, mapping: OrgMapping): OrgVali
       continue;
     }
 
+    // every offending row is named, not just the second one — the report is
+    // taken back to the file, and "one of them is wrong" is not actionable
+    const repeats = commandersNames.get(r.name) ?? 0;
+    if (kind === "COMMANDERS" && repeats > 1) {
+      faults.push({
+        row: r.row,
+        name: r.name,
+        reason: `שם מסגרת ${KIND_LABEL.COMMANDERS} חייב להיות ייחודי בכל המערכת, ו״${r.name}״ מופיע ${repeats} פעמים בקובץ.`,
+      });
+    }
+
     if (!r.parent) {
       if (kind !== "CENTER") {
         faults.push({ row: r.row, name: r.name, reason: `${KIND_LABEL[kind]} חייב מסגרת אב; ללא אב מותר ${KIND_LABEL.CENTER} בלבד.` });
@@ -149,17 +179,25 @@ export function validateOrgRows(parsed: OrgParsed, mapping: OrgMapping): OrgVali
         faults.push({ row: r.row, name: r.name, reason: `שם מסגרת האב ״${r.parent}״ מופיע ${parentCount} פעמים — לא ניתן לדעת לאיזו התכוונת.` });
       } else {
         const parentKind = kindOf.get(r.parent);
-        const expected = kind === "CENTER" ? null : PARENT_KIND[kind];
-        if (parentKind && expected && parentKind !== expected) {
+        const expected = kind === "CENTER" ? null : PARENT_KINDS[kind];
+        if (kind === "CENTER") {
+          faults.push({ row: r.row, name: r.name, reason: `${KIND_LABEL.CENTER} אינו יכול להיות תחת מסגרת אחרת.` });
+        } else if (parentKind && expected && !expected.includes(parentKind)) {
+          // the team case is refused for a reason, not merely by the table
+          const why =
+            kind === "COMMANDERS" && parentKind === "TEAM"
+              ? `לצוות אין תתי-מסגרות, ולכן אין לו מפקדי-משנה להחזיק.`
+              : `אב של ${KIND_LABEL[kind]} חייב להיות ${kindList(expected)}, ו״${r.parent}״ הוא ${KIND_LABEL[parentKind]}.`;
+          faults.push({ row: r.row, name: r.name, reason: why });
+        } else if (parentKind && !CHILD_KINDS[parentKind].includes(kind)) {
+          const allowed = CHILD_KINDS[parentKind];
           faults.push({
             row: r.row,
             name: r.name,
-            reason: `אב של ${KIND_LABEL[kind]} חייב להיות ${KIND_LABEL[expected]}, ו״${r.parent}״ הוא ${KIND_LABEL[parentKind]}.`,
+            reason: allowed.length
+              ? `תחת ${KIND_LABEL[parentKind]} יכולים להיות ${kindList(allowed)} בלבד.`
+              : `${KIND_LABEL[parentKind]} אינו יכול להכיל תת-מסגרות.`,
           });
-        } else if (kind === "CENTER") {
-          faults.push({ row: r.row, name: r.name, reason: `${KIND_LABEL.CENTER} אינו יכול להיות תחת מסגרת אחרת.` });
-        } else if (parentKind && CHILD_KIND[parentKind] !== kind) {
-          faults.push({ row: r.row, name: r.name, reason: `תחת ${KIND_LABEL[parentKind]} יכולים להיות ${KIND_LABEL[CHILD_KIND[parentKind]!]} בלבד.` });
         }
       }
       const siblingKey = `${r.parent}\u0000${r.name}`;

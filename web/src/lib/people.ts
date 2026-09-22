@@ -1,6 +1,7 @@
 import type { EmploymentStatus } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { KIND_LABEL } from "@/lib/org";
+import { holdsPeople } from "@/lib/org-nesting";
 import type { Visibility } from "@/lib/access";
 import type { DeletionImpact } from "@/lib/deletion-impact";
 
@@ -71,11 +72,15 @@ function canDeletePerson(visibility: Visibility, teamId: string | null): boolean
   return teamId ? visibility.mayEstablishAt(teamId) : visibility.isAdmin;
 }
 
-/** Teams matching a predicate, with their org path, sorted for a picker. */
+/**
+ * People-holding frameworks matching a predicate, with their org path, sorted
+ * for a picker. Teams and commanders frameworks alike — the authority rule is
+ * the caller's predicate and is not relaxed for either.
+ */
 async function teamsWhere(allow: (nodeId: string) => boolean): Promise<{ id: string; path: string }[]> {
   const [nodes, resolvePath] = await Promise.all([prisma.orgNode.findMany(), buildPathResolver()]);
   return nodes
-    .filter((n) => n.kind === "TEAM" && allow(n.id))
+    .filter((n) => holdsPeople(n.kind) && allow(n.id))
     .map((n) => ({ id: n.id, path: resolvePath(n.id) }))
     .sort((a, b) => a.path.localeCompare(b.path, "he"));
 }

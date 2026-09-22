@@ -11,4 +11,5 @@ export const KIND_LABEL: Record<OrgKind, string> = {
   DOMAIN: "תחום",
   SECTION: "מדור",
   TEAM: "צוות",
+  COMMANDERS: "מפקדים",
 };

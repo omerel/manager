@@ -13,7 +13,8 @@ function str(v: FormDataEntryValue | null): string {
 
 // The nesting rule lives in `org-nesting` so the importer enforces the SAME one
 // this form does; two copies would be two truths to keep in step.
-import { PARENT_KIND, CHILD_KIND, KIND_LABEL } from "@/lib/org-nesting";
+import { PARENT_KINDS, CHILD_KINDS, KIND_LABEL, holdsPeople, kindList, parentRefusal } from "@/lib/org-nesting";
+import { commandersNameClash } from "@/lib/org";
 import { parseTable } from "@/lib/hr-import";
 import {
   recognizeOrgHeaders,
@@ -24,7 +25,7 @@ import {
 } from "@/lib/org-import";
 
 function isKind(v: string): v is OrgKind {
-  return ["CENTER", "DOMAIN", "SECTION", "TEAM"].includes(v);
+  return ["CENTER", "DOMAIN", "SECTION", "TEAM", "COMMANDERS"].includes(v);
 }
 
 /** Ids of a node's whole subtree, including itself (depth-first, parents first). */
@@ -55,16 +56,17 @@ export async function addOrgNode(formData: FormData) {
   if (!isKind(kindRaw)) throw new Error("סוג מסגרת לא תקין.");
   const kind = kindRaw;
 
+  const clash = await commandersNameClash(kind, name, null);
+  if (clash) throw new Error(clash);
+
   if (kind === "CENTER") {
     const created = await prisma.orgNode.create({ data: { name, kind, parentId: null } });
     await logActivity({ action: "org.create", description: `יצר ${KIND_LABEL[kind]} ${name}`, subjectType: "org", subjectId: created.id });
   } else {
     if (!parentId) throw new Error("יש לבחור מסגרת אב.");
     const parent = await prisma.orgNode.findUnique({ where: { id: parentId } });
-    const expected = PARENT_KIND[kind];
-    if (!parent || parent.kind !== expected) {
-      throw new Error(`מסגרת אב של ${KIND_LABEL[kind]} חייבת להיות ${KIND_LABEL[expected]}.`);
-    }
+    const refusal = parentRefusal(kind, parent);
+    if (refusal) throw new Error(refusal);
     const created = await prisma.orgNode.create({ data: { name, kind, parentId } });
     await logActivity({ action: "org.create", description: `יצר ${KIND_LABEL[kind]} ${name}`, subjectType: "org", subjectId: created.id });
   }
@@ -97,39 +99,43 @@ export async function updateOrgNode(_prev: OrgEditState, formData: FormData): Pr
   });
   if (!node) return { error: "מסגרת לא נמצאה." };
 
+  // a rename must not walk into a name another commanders framework holds
+  const clash = await commandersNameClash(kind, name, id);
+  if (clash) return { error: clash };
+
   // parent rules
   if (kind === "CENTER") {
     if (parentId) return { error: "מרכז הוא מסגרת שורש — בחר ״ללא״ כמסגרת אב." };
   } else {
-    if (!parentId) return { error: `יש לבחור מסגרת אב מסוג ${KIND_LABEL[PARENT_KIND[kind]]}.` };
+    if (!parentId) return { error: `יש לבחור מסגרת אב מסוג ${kindList(PARENT_KINDS[kind])}.` };
     if (parentId === id) return { error: "מסגרת אינה יכולה להיות אב של עצמה." };
     const descendants = new Set(await subtreeIds(id));
     if (descendants.has(parentId)) {
       return { error: "לא ניתן להעביר מסגרת אל תוך מסגרת שנמצאת תחתיה." };
     }
     const parent = await prisma.orgNode.findUnique({ where: { id: parentId } });
-    const expected = PARENT_KIND[kind];
-    if (!parent || parent.kind !== expected) {
-      return { error: `מסגרת אב של ${KIND_LABEL[kind]} חייבת להיות ${KIND_LABEL[expected]}.` };
-    }
+    const refusal = parentRefusal(kind, parent);
+    if (refusal) return { error: refusal };
   }
 
   // kind rules — children and attached people must stay valid
   if (kind !== node.kind) {
-    const allowedChild = CHILD_KIND[kind];
-    const badChild = node.children.find((c) => c.kind !== allowedChild);
+    const allowedChildren = CHILD_KINDS[kind];
+    const badChild = node.children.find((c) => !allowedChildren.includes(c.kind));
     if (badChild) {
       return {
         error:
           `לא ניתן לשנות ל${KIND_LABEL[kind]}: תחת המסגרת יש ${KIND_LABEL[badChild.kind]} — ` +
-          (allowedChild
-            ? `תחת ${KIND_LABEL[kind]} יכולים להיות רק ${KIND_LABEL[allowedChild]}.`
+          (allowedChildren.length
+            ? `תחת ${KIND_LABEL[kind]} יכולים להיות רק ${kindList(allowedChildren)}.`
             : `${KIND_LABEL[kind]} אינו יכול להכיל תת-מסגרות.`),
       };
     }
-    if (kind !== "TEAM" && node._count.people > 0) {
+    // people survive a change BETWEEN people-holding kinds — turning a team into
+    // a commanders framework is a legitimate correction, not a data loss
+    if (!holdsPeople(kind) && node._count.people > 0) {
       return {
-        error: `לא ניתן לשנות ל${KIND_LABEL[kind]}: משויכים למסגרת ${node._count.people} אנשים, ואנשים משויכים לצוות בלבד.`,
+        error: `לא ניתן לשנות ל${KIND_LABEL[kind]}: משויכים למסגרת ${node._count.people} אנשים, ואנשים משויכים ל${KIND_LABEL.TEAM} או למסגרת ${KIND_LABEL.COMMANDERS} בלבד.`,
       };
     }
   }

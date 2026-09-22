@@ -80,6 +80,10 @@ export async function recipientsOf(nodeId: string): Promise<Recipient[]> {
   ]);
   const resolve = pathResolver(nodes);
   return children
+    // a commanders framework is a child, but never a recipient: it has no
+    // commander of its own — the one answerable for it is the commander of its
+    // parent, who is the sender. A row for it would be a row nobody can fill.
+    .filter((c) => c.kind !== "COMMANDERS")
     .map((c) => ({
       nodeId: c.id,
       name: c.name,

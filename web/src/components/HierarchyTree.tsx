@@ -3,6 +3,7 @@
 import { useActionState, useEffect, useMemo, useState } from "react";
 import { Pencil, Trash2 } from "lucide-react";
 import { KIND_LABEL, type OrgKindStr } from "@/lib/org-kinds";
+import { bySiblingOrder, frameworkLabel } from "@/lib/org-nesting";
 import { updateOrgNode, removeOrgNode, type OrgEditState } from "@/lib/org-actions";
 import { ConfirmDelete, plural } from "@/components/ConfirmDelete";
 
@@ -20,7 +21,7 @@ export type HierarchyNode = {
 type ParentOption = { id: string; label: string };
 
 const inputCls = "rounded-md border border-border px-2 py-1 text-sm";
-const KINDS: OrgKindStr[] = ["CENTER", "DOMAIN", "SECTION", "TEAM"];
+const KINDS: OrgKindStr[] = ["CENTER", "DOMAIN", "SECTION", "TEAM", "COMMANDERS"];
 
 /** Edit form for one framework. Validation failures come back as text, not as a page error. */
 function EditRow({
@@ -133,7 +134,7 @@ export function HierarchyTree({ nodes }: { nodes: HierarchyNode[] }) {
       arr.push(n);
       map.set(n.parentId, arr);
     }
-    for (const arr of map.values()) arr.sort((a, b) => a.name.localeCompare(b.name, "he"));
+    for (const arr of map.values()) arr.sort(bySiblingOrder);
 
     const walk = (id: string): HierarchyNode[] => {
       const out: HierarchyNode[] = [];
@@ -153,7 +154,7 @@ export function HierarchyTree({ nodes }: { nodes: HierarchyNode[] }) {
     const blocked = new Set([node.id, ...descendantsOf(node.id).map((n) => n.id)]);
     return nodes
       .filter((n) => !blocked.has(n.id))
-      .map((n) => ({ id: n.id, label: `${KIND_LABEL[n.kind]}: ${n.name}` }))
+      .map((n) => ({ id: n.id, label: frameworkLabel(n.kind, n.name) }))
       .sort((a, b) => a.label.localeCompare(b.label, "he"));
   };
 

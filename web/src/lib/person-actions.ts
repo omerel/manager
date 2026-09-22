@@ -19,6 +19,7 @@ import { emitMovement } from "@/lib/movements";
 import { monthsSince } from "@/lib/waivers";
 import { parseIsraeliDate } from "@/lib/dates";
 import { parseYearsMonths } from "@/lib/years-months";
+import { holdsPeople, KIND_LABEL } from "@/lib/org-nesting";
 
 function str(v: FormDataEntryValue | null): string {
   return String(v ?? "").trim();
@@ -156,7 +157,9 @@ export async function reassignTeam(formData: FormData) {
   const teamId = str(formData.get("teamId"));
   await requireEditForNode(teamId); // must be able to edit the destination
   const team = await prisma.orgNode.findUnique({ where: { id: teamId } });
-  if (!team || team.kind !== "TEAM") throw new Error("יש לשייך לצוות (צומת מסוג צוות).");
+  if (!team || !holdsPeople(team.kind)) {
+    throw new Error(`יש לשייך ל${KIND_LABEL.TEAM} או למסגרת ${KIND_LABEL.COMMANDERS} — מסגרות אלו בלבד מחזיקות אנשים.`);
+  }
   // the movement needs WHERE FROM — read before the update erases it
   const before = await prisma.person.findUnique({ where: { id: personId }, select: { teamId: true } });
   const previousTeamId = before?.teamId ?? null;
@@ -174,7 +177,9 @@ export async function createPerson(formData: FormData) {
   await requireEstablishForNode(teamId);
 
   const team = await prisma.orgNode.findUnique({ where: { id: teamId } });
-  if (!team || team.kind !== "TEAM") throw new Error("יש לשייך איש לצוות (צומת מסוג צוות).");
+  if (!team || !holdsPeople(team.kind)) {
+    throw new Error(`יש לשייך איש ל${KIND_LABEL.TEAM} או למסגרת ${KIND_LABEL.COMMANDERS} — מסגרות אלו בלבד מחזיקות אנשים.`);
+  }
 
   const recruitmentDate = dateOrNull(formData.get("recruitmentDate"));
   if (!recruitmentDate) throw new Error("חובה להזין תאריך גיוס.");

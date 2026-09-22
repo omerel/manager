@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import type { Visibility } from "@/lib/access";
 import { computePersonGaps, type GapLevel } from "@/lib/gaps";
 import { UNASSIGNED_NODE_ID, UNASSIGNED_NODE_NAME } from "@/lib/gap-meta";
+import { bySiblingOrder } from "@/lib/org-nesting";
 export { UNASSIGNED_NODE_ID };
 
 const personGapInclude = {
@@ -78,9 +79,7 @@ export async function buildGapTree(visibility: Visibility, today: Date): Promise
 
   const build = (id: string): GapTreeNode => {
     const node = visible.find((n) => n.id === id)!;
-    const children = (childrenOf.get(id) ?? [])
-      .sort((a, b) => a.name.localeCompare(b.name, "he"))
-      .map((c) => build(c.id));
+    const children = (childrenOf.get(id) ?? []).sort(bySiblingOrder).map((c) => build(c.id));
     const own = peopleByTeam.get(id) ?? [];
     const total = own.length + children.reduce((s, c) => s + c.total, 0);
     const red = own.filter((p) => p.status === "OVERDUE").length + children.reduce((s, c) => s + c.red, 0);
@@ -105,7 +104,7 @@ export async function buildGapTree(visibility: Visibility, today: Date): Promise
 
   const roots = visible
     .filter((n) => !n.parentId || !visibleIds.has(n.parentId))
-    .sort((a, b) => a.name.localeCompare(b.name, "he"))
+    .sort(bySiblingOrder)
     .map((r) => build(r.id));
 
   // The synthetic «לא משויכים» node: people outside every framework, shown

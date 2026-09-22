@@ -50,6 +50,12 @@ export default async function AccessPage({ searchParams }: { searchParams: Promi
     .map((n) => ({ id: n.id, path: resolvePath(n.id) }))
     .sort((a, b) => a.path.localeCompare(b.path, "he"));
 
+  // A grant may sit on any framework, but a COMMAND may not sit on a commanders
+  // framework — `assertCommandable` refuses it, and a chooser that offered it
+  // would be offering a value the action rejects. The two lists part ways here.
+  const commandableIds = new Set(nodes.filter((n) => n.kind !== "COMMANDERS").map((n) => n.id));
+  const commandOptions = frameworkOptions.filter((o) => commandableIds.has(o.id));
+
   // What each user may be given to command: only what they can already see.
   // The very same function the server action checks against — the chooser must
   // not offer a value the action would refuse.
@@ -120,7 +126,7 @@ export default async function AccessPage({ searchParams }: { searchParams: Promi
             </label>
             <select id="commandsNodeId" name="commandsNodeId" defaultValue="" className={inputCls}>
               <option value="">ללא</option>
-              {frameworkOptions.map((n) => (
+              {commandOptions.map((n) => (
                 <option key={n.id} value={n.id}>
                   {n.path}
                 </option>
@@ -164,7 +170,7 @@ export default async function AccessPage({ searchParams }: { searchParams: Promi
                           can still be read and cleared here. */}
                       <select name="commandsNodeId" defaultValue={u.commandsNodeId ?? ""} className={inputCls}>
                         <option value="">ללא</option>
-                        {frameworkOptions
+                        {commandOptions
                           .filter((n) => visibleTo(u).has(n.id) || n.id === u.commandsNodeId)
                           .map((n) => (
                             <option key={n.id} value={n.id}>

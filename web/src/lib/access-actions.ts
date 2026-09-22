@@ -8,6 +8,7 @@ import { logActivity } from "@/lib/activity-log";
 import { hashPassword } from "@/lib/password";
 import {
   assertCanCommand,
+  assertCommandable,
   assertFrameworkFree,
   assertGrantIsRemovable,
   commandedPath,
@@ -62,6 +63,7 @@ export async function createUser(formData: FormData) {
   if (commandsNodeId) {
     const node = await prisma.orgNode.findUnique({ where: { id: commandsNodeId }, select: { id: true } });
     if (!node) throw new Error("המסגרת שנבחרה לפיקוד אינה קיימת.");
+    await assertCommandable(commandsNodeId);
     await assertFrameworkFree(commandsNodeId);
     // The prospective grants, not the stored ones — there are none yet.
     await assertCanCommand(role, grantNodeId ? [{ nodeId: grantNodeId, level: grantLevel }] : [], commandsNodeId, { atCreation: true });
@@ -137,6 +139,7 @@ export async function updateUserProfile(formData: FormData) {
   if (commandChanged && commandsNodeId) {
     const node = await prisma.orgNode.findUnique({ where: { id: commandsNodeId }, select: { id: true } });
     if (!node) throw new Error("המסגרת שנבחרה לפיקוד אינה קיימת.");
+    await assertCommandable(commandsNodeId);
     await assertFrameworkFree(commandsNodeId, userId);
     await assertCanCommand(before.role, before.grants, commandsNodeId);
   }
