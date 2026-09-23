@@ -10,7 +10,9 @@ import {
 import { addMonths, monthsBetween } from "@/lib/dates";
 import { dueLevel, evalMetric, levelForPoint } from "@/lib/gaps";
 import type { GapLevel } from "@/lib/gap-meta";
-import type { VectorStatus } from "@/lib/plan-diagram";
+// the status map is the diagram's input, so its key format is defined there and
+// read here — the entry-per-slot map below keys by the same thing
+import { occurrenceKey, type VectorStatus } from "@/lib/plan-diagram";
 
 export async function getPersonFull(id: string) {
   return prisma.person.findUnique({
@@ -206,7 +208,7 @@ export function buildPersonTimeline(person: PersonFull) {
   const entryBySlot = new Map<string, string>();
   for (const e of person.evalEntries) {
     if (e.recurringEventId != null && e.occurrenceOffset != null) {
-      entryBySlot.set(`${e.recurringEventId}:${e.occurrenceOffset}`, e.id);
+      entryBySlot.set(occurrenceKey(e.recurringEventId, e.occurrenceOffset), e.id);
     }
   }
 
@@ -216,7 +218,7 @@ export function buildPersonTimeline(person: PersonFull) {
       label: r.label,
       offsetMonths: off,
       dueDate: addMonths(rec, off),
-      filledByEntryId: entryBySlot.get(`${r.id}:${off}`) ?? null,
+      filledByEntryId: entryBySlot.get(occurrenceKey(r.id, off)) ?? null,
       waived: isOccurrenceWaived(ctx, r.id, off),
       withScore: r.withScore,
       guide: guideOf("recurring", r), // the same file at every occurrence
@@ -227,14 +229,23 @@ export function buildPersonTimeline(person: PersonFull) {
 }
 
 /**
- * The person's standing per plan item, keyed by the item's own id — what the
- * career vector on their card is coloured by.
+ * The person's standing per plan item, keyed by **the item the drawing shows** —
+ * what the career vector on their card is coloured by.
  *
  * Every kind of item is included, not only point events: a drawing that marked
  * some cards and left the rest grey reads as a fault rather than as a picture.
- * A metric or a recurring event has many dated parts, so it takes the WORST
- * standing among the ones that count for this person — the drawing answers
- * "does this need me?", and the lists beneath it hold the detail.
+ *
+ * The key is the unit of DRAWING, not the unit of authoring, and the difference
+ * is the whole point. A recurring event is authored once and drawn once per
+ * occurrence, so its occurrences are keyed separately: they have separate dates
+ * and separate filed content, and one occurrence's standing says nothing about
+ * the next. This map used to fold them onto the event's id and take the worst,
+ * which painted every occurrence of an event — the ones already filled, and the
+ * ones still years away — in the colour of its single worst one.
+ *
+ * A metric is the deliberate exception, and stays keyed per checkpoint with one
+ * shared verdict: its checkpoints are cumulative targets on ONE running value,
+ * so they genuinely do stand or fall together.
  */
 export function buildVectorStatus(
   timeline: ReturnType<typeof buildPersonTimeline>,
@@ -242,9 +253,10 @@ export function buildVectorStatus(
   today: Date,
 ): Map<string, VectorStatus> {
   const out = new Map<string, VectorStatus>();
-  const rank: Record<VectorStatus, number> = { WAIVED: 0, MET: 1, APPROACHING: 2, OVERDUE: 3 };
-  const worst = (a: VectorStatus | undefined, b: VectorStatus) => (!a || rank[b] > rank[a] ? b : a);
-  const ofLevel = (l: GapLevel): VectorStatus => (l === "OVERDUE" ? "OVERDUE" : l === "APPROACHING" ? "APPROACHING" : "MET");
+  // one-to-one: FUTURE used to be crushed onto MET, which told the viewer that
+  // an item nobody had reached yet was already done
+  const ofLevel = (l: GapLevel): VectorStatus =>
+    l === "OVERDUE" ? "OVERDUE" : l === "APPROACHING" ? "APPROACHING" : l === "FUTURE" ? "NOT_DUE" : "MET";
 
   for (const p of timeline.points) {
     out.set(p.id, p.waived ? "WAIVED" : ofLevel(levelForPoint({ dueDate: p.dueDate, done: p.done, doneOn: p.doneOn }, today)));
@@ -267,15 +279,16 @@ export function buildVectorStatus(
   }
 
   for (const r of timeline.recurrences) {
-    const status = r.waived
+    // filled BEFORE its date is still met, never "not due yet": the person did
+    // the thing, and the drawing should say so rather than hold it as pending
+    const status: VectorStatus = r.waived
       ? "WAIVED"
       : r.filledByEntryId
         ? "MET"
         : r.dueDate.getTime() < today.getTime()
           ? "OVERDUE"
           : ofLevel(dueLevel(r.dueDate, today));
-    // one card per recurring EVENT, so its occurrences fold into the worst one
-    out.set(r.recurringEventId, worst(out.get(r.recurringEventId), status));
+    out.set(occurrenceKey(r.recurringEventId, r.offsetMonths), status);
   }
 
   return out;

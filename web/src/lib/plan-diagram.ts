@@ -68,25 +68,59 @@ type EventCard = {
  * is drawn on a person's card; the plan page and the PDF pass nothing and get
  * exactly the drawing they got before.
  */
-export type VectorStatus = "OVERDUE" | "APPROACHING" | "MET" | "WAIVED";
+/**
+ * NOT_DUE is not a new idea: `gap-engine` has always defined ⬜ future as one of
+ * the three states, and `GapLevel` carries it. The drawing was the only place
+ * that lost it — it mapped FUTURE onto MET, so an item nobody had reached yet
+ * was painted in the colour of an item already done.
+ */
+export type VectorStatus = "OVERDUE" | "APPROACHING" | "MET" | "NOT_DUE" | "WAIVED";
+
+/**
+ * How one drawn occurrence of a recurring event is addressed in the status map.
+ *
+ * The map's keys are the things the diagram DRAWS, so the key format is part of
+ * this module's input contract and lives with it — a point event or a metric
+ * checkpoint is keyed by its bare id, and a recurring event, which is drawn once
+ * per occurrence, by event and offset together.
+ *
+ * Written by hand at each call site it would be one typo from a silent miss: a
+ * lookup that finds nothing falls back to the palette colour, so the item would
+ * look plausible and be wrong. A cuid contains no `:`, so an occurrence key can
+ * never collide with a bare id in the same map.
+ */
+export function occurrenceKey(recurringEventId: string, offsetMonths: number): string {
+  return `${recurringEventId}:${offsetMonths}`;
+}
 
 /**
  * The key to the colours, stated once and read by everyone who shows them —
  * the card's legend line and the PDF's. Two hand-written lists of the same
- * four colours is how a legend comes to disagree with its drawing.
+ * colours is how a legend comes to disagree with its drawing.
  */
 export const VECTOR_LEGEND: { status: VectorStatus; label: string }[] = [
   { status: "OVERDUE", label: "פער" },
   { status: "APPROACHING", label: "מתקרב" },
   { status: "MET", label: "תקין" },
+  { status: "NOT_DUE", label: "טרם הגיע" },
   { status: "WAIVED", label: "פטור" },
 ];
 
-/** Colours per status — the same vocabulary the badges use, in the drawing's palette. */
+/**
+ * Colours per status — the same vocabulary the badges use, in the drawing's palette.
+ *
+ * NOT_DUE and WAIVED are both grey, and deliberately not the SAME grey: waived
+ * is dimmed to .55 on top of its colour and means "never asked of this person",
+ * while not-yet-due is at full strength and means "asked, just not yet". A
+ * slate cast against the waived stone keeps the two readable side by side.
+ * Its border and accent carry the weight — a light background alone would
+ * vanish into the drawing's white.
+ */
 export const STATUS_STYLE: Record<VectorStatus, { bg: string; accent: string; border: string }> = {
   OVERDUE: { bg: "#fef2f2", accent: "#dc2626", border: "#fca5a5" },
   APPROACHING: { bg: "#fffbeb", accent: "#d97706", border: "#fcd34d" },
   MET: { bg: "#ecfdf5", accent: "#059669", border: "#6ee7b7" },
+  NOT_DUE: { bg: "#f8fafc", accent: "#64748b", border: "#94a3b8" },
   WAIVED: { bg: "#fafaf9", accent: "#a8a29e", border: "#e7e5e4" },
 };
 
@@ -174,15 +208,15 @@ export function buildPlanDiagramSvg(plan: PlanWithEvents, status?: Map<string, V
   // to remember the rule.
   const allRecurring = plan.recurringEvents.map((r, ri) => {
     const col = softColorFor(r.color, ri);
-    const st = status?.get(r.id);
     return {
       id: r.id,
-      status: st,
       label: r.label,
       interval: r.intervalMonths,
       stop: `מ-${formatYearsMonths(r.startOffsetMonths)} עד ${formatYearsMonths(r.stopOffsetMonths ?? 0)} מההצבה`,
       offsets: unrollRecurring(r.intervalMonths, r.stopOffsetMonths, r.startOffsetMonths),
-      ...(st ? STATUS_STYLE[st] : { accent: col.accent, bg: col.bg, border: col.border }),
+      // the event's OWN colour, which is its identity in the legend and never a
+      // status: an occurrence's standing is asked for one occurrence at a time
+      palette: { accent: col.accent, bg: col.bg, border: col.border },
       asCards: r.display === "CARD",
     };
   });
@@ -194,10 +228,9 @@ export function buildPlanDiagramSvg(plan: PlanWithEvents, status?: Map<string, V
         title: r.label,
         sub: `${formatYearsMonths(off)} מההצבה · כל ${r.interval} חודשים`,
         kind: "recurring",
-        bg: r.bg,
-        accent: r.accent,
-        border: r.border,
-        status: r.status,
+        // asked per OCCURRENCE: this event's other occurrences have their own
+        // dates and their own filed content, and say nothing about this one
+        ...styled(occurrenceKey(r.id, off), r.palette),
       });
     }
   }
@@ -400,8 +433,11 @@ export function buildPlanDiagramSvg(plan: PlanWithEvents, status?: Map<string, V
     for (const off of r.offsets) {
       if (!slotY.has(off)) continue; // every occurrence has a slot; guards month 0
       const yy = y(off);
+      // per occurrence, exactly as the card mode is: the two ways of drawing a
+      // recurring event are two pictures of the same fact, and must agree
+      const fill = styled(occurrenceKey(r.id, off), r.palette).accent;
       parts.push(
-        `<rect x="${mx - 6}" y="${yy - 6}" width="12" height="12" rx="2.5" transform="rotate(45 ${mx} ${yy})" fill="${r.accent}" stroke="white" stroke-width="2"/>`,
+        `<rect x="${mx - 6}" y="${yy - 6}" width="12" height="12" rx="2.5" transform="rotate(45 ${mx} ${yy})" fill="${fill}" stroke="white" stroke-width="2"/>`,
       );
     }
   });
@@ -440,12 +476,15 @@ export function buildPlanDiagramSvg(plan: PlanWithEvents, status?: Map<string, V
         `<g transform="translate(${markX - 7.2},${legendY + ROW_H / 2 - 6.2}) scale(0.52)">${ICON.repeat}</g></g>`,
     );
     // one diamond per event, in its own colour — the key that maps a legend row
-    // to its markers on the spine
+    // to its markers on the spine. Deliberately the EVENT's palette colour and
+    // never a status: this diamond answers "which event is this row?", while the
+    // diamonds on the spine answer "how does this person stand at this
+    // occurrence?". Colouring this one by status would collapse two questions.
     recurring.forEach((r, i) => {
       const cy = rowCy(i);
       parts.push(
         `<rect x="${markX - 5}" y="${cy - 5}" width="10" height="10" rx="2" ` +
-          `transform="rotate(45 ${markX} ${cy})" fill="${r.accent}" stroke="white" stroke-width="2"/>`,
+          `transform="rotate(45 ${markX} ${cy})" fill="${r.palette.accent}" stroke="white" stroke-width="2"/>`,
       );
     });
 

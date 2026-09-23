@@ -1,0 +1,129 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 708" font-family="Rubik,'Noto Sans Hebrew',sans-serif" style="max-width:100%;height:auto">
+<defs><linearGradient id="spine" x1="0" y1="1" x2="0" y2="0">
+       <stop offset="0" stop-color="#065f46"/><stop offset="1" stop-color="#34d399"/>
+     </linearGradient>
+     <filter id="soft" x="-20%" y="-20%" width="140%" height="140%">
+       <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#00000022"/>
+     </filter></defs>
+
+<rect width="880" height="708" fill="white"/>
+<text x="440" y="44" text-anchor="middle" font-size="22" font-weight="700" fill="#064e3b">golden fixture · תכנית ייחוס</text>
+<text x="440" y="66" text-anchor="middle" font-size="12" fill="#78716c">מסלול קריירה · ציר לפי אירועים, בשנים.חודשים מההצבה ביחידה (המרווחים אינם פרופורציוניים)</text>
+<rect x="426" y="142" width="28" height="470" rx="10" fill="url(#spine)"/>
+<polygon points="410,148 470,148 440,96" fill="#34d399"/>
+<g transform="translate(478,98) scale(0.9)"><g transform="scale(1)"><path d="M6 18C6 10 12 5 19 4c-1 7-6 13-13 14z" fill="#059669"/></g></g>
+<text x="440" y="82" text-anchor="middle" font-size="14" font-weight="600" fill="#059669">סוף השירות</text>
+<g filter="url(#soft)"><rect x="366" y="608" width="148" height="42" rx="21" fill="#064e3b"/></g>
+<g transform="translate(468,617) scale(1.1)"><path d="M12 3c3 2 4 6 4 9l2 3-3-1c-1 1-2 1.6-3 2-1-.4-2-1-3-2l-3 1 2-3c0-3 1-7 4-9z" fill="white"/><circle cx="12" cy="10" r="1.6" fill="#059669"/></g>
+<text x="430" y="635" text-anchor="middle" font-size="16" font-weight="700" fill="white">הצבה</text>
+<path d="M 420 587 l 16 -10 M 438 587 l 16 -10" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" opacity="0.95"/>
+<line x1="418" y1="523" x2="462" y2="523" stroke="white" stroke-width="1.5" opacity="0.8"/>
+<line x1="418" y1="449" x2="462" y2="449" stroke="white" stroke-width="1.5" opacity="0.8"/>
+<line x1="418" y1="375" x2="462" y2="375" stroke="white" stroke-width="1.5" opacity="0.8"/>
+<line x1="418" y1="301" x2="462" y2="301" stroke="white" stroke-width="1.5" opacity="0.8"/>
+<line x1="418" y1="227" x2="462" y2="227" stroke="white" stroke-width="1.5" opacity="0.8"/>
+<g class="">
+<path d="M 440 523 h 46 L 520 523" fill="none" stroke="#e7e5e4" stroke-width="2"/>
+<circle cx="440" cy="523" r="7" fill="white" stroke="#059669" stroke-width="3"/>
+<g filter="url(#soft)"><rect x="520" y="494" width="292" height="58" rx="14" fill="white" stroke="#e7e5e4"/></g>
+
+<g><circle cx="782" cy="523" r="16" fill="#059669"/><g transform="translate(771,512) scale(0.92)"><path d="M5 21V4h11l-2.5 4L16 12H5" fill="none" stroke="white" stroke-width="2" stroke-linejoin="round"/></g></g>
+
+<foreignObject x="530" y="500" width="230" height="48">
+         <div xmlns="http://www.w3.org/1999/xhtml" dir="rtl" style="font-family:Rubik,'Noto Sans Hebrew',sans-serif;height:100%;display:flex;flex-direction:column;justify-content:center;overflow:hidden">
+           <div style="font-size:14px;font-weight:600;color:#1c1917;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">אירוע נקודתי ראשון</div>
+           <div style="font-size:11px;color:#78716c;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">0.6 מההצבה (6 חודשים)</div>
+         </div>
+       </foreignObject>
+</g>
+<g class="">
+<path d="M 440 449 h 46 L 520 449" fill="none" stroke="#bfdbfe" stroke-width="2"/>
+<circle cx="440" cy="449" r="7" fill="white" stroke="#2563eb" stroke-width="3"/>
+<g filter="url(#soft)"><rect x="520" y="420" width="292" height="58" rx="14" fill="#eff6ff" stroke="#bfdbfe"/></g>
+
+<g><circle cx="782" cy="449" r="16" fill="#2563eb"/><g transform="translate(771,438) scale(0.92)"><circle cx="12" cy="12" r="8" fill="none" stroke="white" stroke-width="2"/><circle cx="12" cy="12" r="3.5" fill="white"/></g></g>
+
+<foreignObject x="530" y="426" width="230" height="48">
+         <div xmlns="http://www.w3.org/1999/xhtml" dir="rtl" style="font-family:Rubik,'Noto Sans Hebrew',sans-serif;height:100%;display:flex;flex-direction:column;justify-content:center;overflow:hidden">
+           <div style="font-size:14px;font-weight:600;color:#1c1917;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">מדד מצטבר: 40 שעות</div>
+           <div style="font-size:11px;color:#78716c;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">יעד עד 1.0 מההצבה</div>
+         </div>
+       </foreignObject>
+</g>
+<g class="">
+<path d="M 440 449 h -46 L 360 449" fill="none" stroke="#fecdd3" stroke-width="2"/>
+<circle cx="440" cy="449" r="7" fill="white" stroke="#e11d48" stroke-width="3"/>
+<g filter="url(#soft)"><rect x="68" y="420" width="292" height="58" rx="14" fill="#fff1f2" stroke="#fecdd3"/></g>
+
+<g><circle cx="330" cy="449" r="16" fill="#e11d48"/><g transform="translate(319,438) scale(0.92)"><path d="M4 12a8 8 0 0 1 14-5m2 5a8 8 0 0 1-14 5" fill="none" stroke="white" stroke-width="2" stroke-linecap="round"/><path d="M18 3v4h-4M6 21v-4h4" fill="none" stroke="white" stroke-width="2" stroke-linejoin="round"/></g></g>
+
+<foreignObject x="78" y="426" width="230" height="48">
+         <div xmlns="http://www.w3.org/1999/xhtml" dir="rtl" style="font-family:Rubik,'Noto Sans Hebrew',sans-serif;height:100%;display:flex;flex-direction:column;justify-content:center;overflow:hidden">
+           <div style="font-size:14px;font-weight:600;color:#1c1917;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">מחזורי ככרטיס</div>
+           <div style="font-size:11px;color:#78716c;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">1.0 מההצבה · כל 12 חודשים</div>
+         </div>
+       </foreignObject>
+</g>
+<g class="">
+<path d="M 440 301 h 46 L 520 301" fill="none" stroke="#e7e5e4" stroke-width="2"/>
+<circle cx="440" cy="301" r="7" fill="white" stroke="#059669" stroke-width="3"/>
+<g filter="url(#soft)"><rect x="520" y="272" width="292" height="58" rx="14" fill="white" stroke="#e7e5e4"/></g>
+
+<g><circle cx="782" cy="301" r="16" fill="#059669"/><g transform="translate(771,290) scale(0.92)"><path d="M5 21V4h11l-2.5 4L16 12H5" fill="none" stroke="white" stroke-width="2" stroke-linejoin="round"/></g></g>
+
+<foreignObject x="530" y="278" width="230" height="48">
+         <div xmlns="http://www.w3.org/1999/xhtml" dir="rtl" style="font-family:Rubik,'Noto Sans Hebrew',sans-serif;height:100%;display:flex;flex-direction:column;justify-content:center;overflow:hidden">
+           <div style="font-size:14px;font-weight:600;color:#1c1917;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">אירוע נקודתי שני</div>
+           <div style="font-size:11px;color:#78716c;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">2.0 מההצבה (שנתיים)</div>
+         </div>
+       </foreignObject>
+</g>
+<g class="">
+<path d="M 440 301 h -46 L 360 301" fill="none" stroke="#fecdd3" stroke-width="2"/>
+<circle cx="440" cy="301" r="7" fill="white" stroke="#e11d48" stroke-width="3"/>
+<g filter="url(#soft)"><rect x="68" y="272" width="292" height="58" rx="14" fill="#fff1f2" stroke="#fecdd3"/></g>
+
+<g><circle cx="330" cy="301" r="16" fill="#e11d48"/><g transform="translate(319,290) scale(0.92)"><path d="M4 12a8 8 0 0 1 14-5m2 5a8 8 0 0 1-14 5" fill="none" stroke="white" stroke-width="2" stroke-linecap="round"/><path d="M18 3v4h-4M6 21v-4h4" fill="none" stroke="white" stroke-width="2" stroke-linejoin="round"/></g></g>
+
+<foreignObject x="78" y="278" width="230" height="48">
+         <div xmlns="http://www.w3.org/1999/xhtml" dir="rtl" style="font-family:Rubik,'Noto Sans Hebrew',sans-serif;height:100%;display:flex;flex-direction:column;justify-content:center;overflow:hidden">
+           <div style="font-size:14px;font-weight:600;color:#1c1917;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">מחזורי ככרטיס</div>
+           <div style="font-size:11px;color:#78716c;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">2.0 מההצבה · כל 12 חודשים</div>
+         </div>
+       </foreignObject>
+</g>
+<g class="">
+<path d="M 440 227 h 46 L 520 227" fill="none" stroke="#bfdbfe" stroke-width="2"/>
+<circle cx="440" cy="227" r="7" fill="white" stroke="#2563eb" stroke-width="3"/>
+<g filter="url(#soft)"><rect x="520" y="198" width="292" height="58" rx="14" fill="#eff6ff" stroke="#bfdbfe"/></g>
+
+<g><circle cx="782" cy="227" r="16" fill="#2563eb"/><g transform="translate(771,216) scale(0.92)"><circle cx="12" cy="12" r="8" fill="none" stroke="white" stroke-width="2"/><circle cx="12" cy="12" r="3.5" fill="white"/></g></g>
+
+<foreignObject x="530" y="204" width="230" height="48">
+         <div xmlns="http://www.w3.org/1999/xhtml" dir="rtl" style="font-family:Rubik,'Noto Sans Hebrew',sans-serif;height:100%;display:flex;flex-direction:column;justify-content:center;overflow:hidden">
+           <div style="font-size:14px;font-weight:600;color:#1c1917;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">מדד מצטבר: 100 שעות</div>
+           <div style="font-size:11px;color:#78716c;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">יעד עד 2.6 מההצבה</div>
+         </div>
+       </foreignObject>
+</g>
+<text x="410" y="527" direction="ltr" text-anchor="end" font-size="11" fill="#78716c" stroke="white" stroke-width="4" paint-order="stroke">0.6</text>
+<text x="410" y="453" direction="ltr" text-anchor="end" font-size="11" fill="#78716c" stroke="white" stroke-width="4" paint-order="stroke">1.0</text>
+<text x="410" y="379" direction="ltr" text-anchor="end" font-size="11" fill="#78716c" stroke="white" stroke-width="4" paint-order="stroke">1.6</text>
+<text x="410" y="305" direction="ltr" text-anchor="end" font-size="11" fill="#78716c" stroke="white" stroke-width="4" paint-order="stroke">2.0</text>
+<text x="410" y="231" direction="ltr" text-anchor="end" font-size="11" fill="#78716c" stroke="white" stroke-width="4" paint-order="stroke">2.6</text>
+<text x="410" y="211" direction="ltr" text-anchor="end" font-size="10" fill="#78716c" stroke="white" stroke-width="4" paint-order="stroke">שנים.חודשים</text>
+<rect x="434" y="517" width="12" height="12" rx="2.5" transform="rotate(45 440 523)" fill="#d97706" stroke="white" stroke-width="2"/>
+<rect x="434" y="443" width="12" height="12" rx="2.5" transform="rotate(45 440 449)" fill="#d97706" stroke="white" stroke-width="2"/>
+<rect x="434" y="369" width="12" height="12" rx="2.5" transform="rotate(45 440 375)" fill="#d97706" stroke="white" stroke-width="2"/>
+<rect x="434" y="295" width="12" height="12" rx="2.5" transform="rotate(45 440 301)" fill="#d97706" stroke="white" stroke-width="2"/>
+<rect x="434" y="221" width="12" height="12" rx="2.5" transform="rotate(45 440 227)" fill="#d97706" stroke="white" stroke-width="2"/>
+<g><circle cx="334" cy="658" r="9" fill="#064e3b"/><g transform="translate(327.8,651.8) scale(0.52)"><path d="M4 12a8 8 0 0 1 14-5m2 5a8 8 0 0 1-14 5" fill="none" stroke="white" stroke-width="2" stroke-linecap="round"/><path d="M18 3v4h-4M6 21v-4h4" fill="none" stroke="white" stroke-width="2" stroke-linejoin="round"/></g></g>
+<rect x="330" y="673" width="10" height="10" rx="2" transform="rotate(45 335 678)" fill="#d97706" stroke="white" stroke-width="2"/>
+<foreignObject x="16" y="648" width="330" height="46">
+         <div xmlns="http://www.w3.org/1999/xhtml" dir="rtl" style="font-family:Rubik,'Noto Sans Hebrew',sans-serif;font-size:12px">
+           <div style="font-weight:600;color:#1c1917;height:20px;line-height:20px;padding-right:22px">אירועים מחזוריים המסומנים על הציר:</div>
+           <div style="color:#78716c;height:20px;line-height:20px;padding-right:22px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">מחזורי כסמן — כל 6 חודשים, מ-0.6 עד 2.6 מההצבה</div>
+           
+         </div>
+       </foreignObject>
+</svg>

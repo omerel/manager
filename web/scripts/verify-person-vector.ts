@@ -6,8 +6,10 @@
  *
  *   npx tsx scripts/verify-person-vector.ts
  */
+import { readFileSync } from "node:fs";
 import { prisma } from "@/lib/prisma";
 import { hashPassword } from "@/lib/password";
+import { GOLDEN_PATH, renderGolden } from "@/../scripts/plan-diagram-golden";
 import { createSessionToken, SESSION_COOKIE } from "@/lib/auth";
 import { addMonths } from "@/lib/dates";
 import { buildPlanDiagramSvg } from "@/lib/plan-diagram";
@@ -120,6 +122,19 @@ async function main() {
     check("no status classes", !plain.includes("vs-overdue") && !plain.includes("vs-waived"));
     check("no pulse rings", !plain.includes('class="vs-ring"'));
     check("no personal star", !plain.includes("אירוע אישי"));
+
+    // The four checks above ask "did the status machinery leak?". This one asks
+    // the question that actually protects the plan page: IS IT THE SAME DRAWING?
+    // The person-card colouring runs through this very function, one optional
+    // argument away, so a change meant for the card reaches the plan page unless
+    // something compares the bytes. Re-record with:
+    //   npx tsx scripts/plan-diagram-golden.ts --write
+    const golden = readFileSync(GOLDEN_PATH, "utf8");
+    const now = await renderGolden();
+    check("byte-identical to the recorded golden", now === golden,
+      now === golden ? `${now.length} bytes` : `golden ${golden.length}, now ${now.length}`);
+    check("the golden covers every kind the diagram draws",
+      ["אירוע נקודתי ראשון", "מדד מצטבר", "מחזורי כסמן", "מחזורי ככרטיס"].every((s) => golden.includes(s)));
 
     console.log("\n=== with a status map, the person's standing is painted ===");
     let v = await vectorOf(person.id, today);
@@ -244,8 +259,16 @@ async function main() {
     // page, extracted from the PDF's own text
     const pdfText = pdfBuf.toString("latin1");
     check("the pdf is text-bearing (not a flattened image)", pdfText.includes("/Font"));
-    const { VECTOR_LEGEND } = await import("@/lib/plan-diagram");
-    check("the legend names every status the drawing can paint", VECTOR_LEGEND.length === 4,
+    // Derived from the styles rather than counted: a status that has a colour
+    // is a status the drawing can paint, so the legend must name it. The count
+    // used to be hard-coded at 4, which meant adding a fifth state failed this
+    // check for the wrong reason — and, worse, adding one WITHOUT a legend
+    // entry would have passed.
+    const { VECTOR_LEGEND, STATUS_STYLE } = await import("@/lib/plan-diagram");
+    const named = new Set(VECTOR_LEGEND.map((l) => l.status));
+    const paintable = Object.keys(STATUS_STYLE);
+    check("the legend names every status the drawing can paint",
+      paintable.every((s) => named.has(s as never)) && named.size === paintable.length,
       VECTOR_LEGEND.map((l) => l.label).join(", "));
     // the halo animates, so print would catch it at an arbitrary opacity
     check("the pulse halo is suppressed in print", v.svg.includes("@media print") && v.svg.includes(".vs-ring { display: none"));
