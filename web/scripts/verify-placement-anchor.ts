@@ -27,6 +27,64 @@ function check(label: string, ok: boolean, detail = "") {
 }
 
 const SHIFT = 3; // months
+const TAG = "anchorverify";
+
+async function cleanup() {
+  await prisma.person.deleteMany({ where: { fullName: { startsWith: TAG } } });
+  await prisma.careerPlan.deleteMany({ where: { name: { startsWith: TAG } } });
+  await prisma.orgNode.deleteMany({ where: { name: { startsWith: TAG } } });
+}
+
+/**
+ * The subject the strong claim must hold for, and a control that must not move.
+ *
+ * Built rather than found, and the conditions the old `findFirstOrThrow` asked
+ * for are now GUARANTEED rather than hoped for:
+ *   · plan items to move at all;
+ *   · NO end-of-service date — occurrences clip at it, and a clipped list
+ *     breaks the index-paired comparison for a reason about the fixture rather
+ *     than about the anchor;
+ *   · no waiver overrides, which would hide items from the timeline;
+ *   · placement == recruitment at the start, which is what makes the shift
+ *     observable at all.
+ */
+async function makeSubjects() {
+  const center = await prisma.orgNode.create({ data: { name: `${TAG} מרכז`, kind: "CENTER" } });
+  const domain = await prisma.orgNode.create({ data: { name: `${TAG} תחום`, kind: "DOMAIN", parentId: center.id } });
+  const section = await prisma.orgNode.create({ data: { name: `${TAG} מדור`, kind: "SECTION", parentId: domain.id } });
+  const team = await prisma.orgNode.create({ data: { name: `${TAG} צוות`, kind: "TEAM", parentId: section.id } });
+  const start = new Date("2022-01-01T00:00:00Z");
+
+  const mk = async (last: string) => {
+    const plan = await prisma.careerPlan.create({
+      data: {
+        name: `${TAG} מסלול ${last}`, isTemplate: false,
+        pointEvents: { create: [{ label: `${TAG} נקודתי`, offsetMonths: 12 }, { label: `${TAG} נקודתי ב`, offsetMonths: 30 }] },
+        cumulativeMetrics: {
+          create: [{ name: `${TAG} מדד`, unit: "שעות", checkpoints: { create: [{ offsetMonths: 18, target: 40 }] } }],
+        },
+        recurringEvents: {
+          create: [{ label: `${TAG} מחזורי`, intervalMonths: 6, startOffsetMonths: 6, stopMode: "UNTIL_OFFSET", stopOffsetMonths: 36 }],
+        },
+      },
+    });
+    const person = await prisma.person.create({
+      data: {
+        firstName: TAG, lastName: last, fullName: `${TAG} ${last}`,
+        recruitmentDate: start, placementDate: start, // equal, deliberately
+        endOfServiceDate: null, teamId: team.id, assignedPlanId: plan.id,
+      },
+      select: { id: true, fullName: true, recruitmentDate: true, placementDate: true },
+    });
+    // no waivers on the assignment — the timeline must show every item
+    await prisma.planAssignment.create({
+      data: { personId: person.id, planId: plan.id, templateName: plan.name, assignedAt: start, waiverOffsetMonths: 0 },
+    });
+    return person;
+  };
+
+  return { subject: await mk("נבדק"), control: await mk("בקרה") };
+}
 
 async function main() {
   const { getPersonFull, buildPersonTimeline } = await import("../src/lib/person-view");
@@ -40,20 +98,13 @@ async function main() {
   //     breaks the index-paired comparison below for a reason that is about the
   //     fixture, not about the anchor;
   //   · no waiver overrides, which would hide items from the timeline.
-  const subject = await prisma.person.findFirstOrThrow({
-    where: {
-      assignedPlan: { pointEvents: { some: {} } },
-      endOfServiceDate: null,
-      planAssignments: { none: { endedAt: null, waivers: { some: {} } } },
-    },
-    orderBy: { id: "asc" },
-    select: { id: true, fullName: true, recruitmentDate: true, placementDate: true },
-  });
-  const control = await prisma.person.findFirstOrThrow({
-    where: { id: { not: subject.id }, assignedPlan: { isNot: null }, endOfServiceDate: null },
-    orderBy: { id: "asc" },
-    select: { id: true, fullName: true },
-  });
+  // BUILT, not found. The conditions above describe a person the suite needs
+  // two of, and the database is not obliged to contain them: this used to
+  // crash on `findFirstOrThrow` the moment the demo data held fewer than two
+  // people with a career plan — which is the state it is in now. A suite that
+  // cannot state its own premise cannot report on anything.
+  await cleanup(); // a run killed halfway must not poison the next one
+  const { subject, control } = await makeSubjects();
 
   const dates = (t: Awaited<ReturnType<typeof buildPersonTimeline>>) => [
     ...t.points.map((p) => `P:${p.label}@${p.dueDate.toISOString()}`),
@@ -157,6 +208,13 @@ async function main() {
   const finalState = await prisma.person.findUniqueOrThrow({ where: { id: subject.id }, select: { placementDate: true, recruitmentDate: true } });
   check("restored — the registry is exactly as found",
     finalState.placementDate.getTime() === finalState.recruitmentDate.getTime());
+
+  await cleanup();
+  const residue =
+    (await prisma.person.count({ where: { fullName: { startsWith: TAG } } })) +
+    (await prisma.careerPlan.count({ where: { name: { startsWith: TAG } } })) +
+    (await prisma.orgNode.count({ where: { name: { startsWith: TAG } } }));
+  check("no fixtures left behind", residue === 0, `${residue}`);
 
   console.log(failures === 0 ? `\nall ${checks} checks passed` : `\nFAILED — ${checks} ran, ${failures} failed`);
   await prisma.$disconnect();

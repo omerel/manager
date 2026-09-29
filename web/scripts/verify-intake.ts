@@ -41,7 +41,24 @@ function personDoc(first: string, last: string, extra = "") {
   return `כרטיס עובד\nשם פרטי: ${first}\nשם משפחה: ${last}\nתאריך לידה: 1994-05-01\nתאריך גיוס: 2022-03-01\n${extra}`;
 }
 
+const TARGET_NAME = "אינטייק נבדק";
+
+/**
+ * Everything this run creates, removed BEFORE it starts as well as after.
+ *
+ * The teardown below lives in a `finally`, which is right — but the fixtures
+ * were built BEFORE the `try`, so a crash in between left the users and the
+ * twins behind. The next run then died on `user.create` with a unique-key
+ * violation, for a reason that had nothing to do with intake. Cleaning at the
+ * start is what makes the suite survive its own previous failure.
+ */
+async function cleanup() {
+  await prisma.person.deleteMany({ where: { fullName: { in: ["תאום כפול", "נועם בדיקתי", TARGET_NAME] } } });
+  await prisma.user.deleteMany({ where: { username: { startsWith: "verify.intake" } } });
+}
+
 async function main() {
+  await cleanup();
   const admin = await prisma.user.create({
     data: { username: "verify.intake", email: "vi@example.invalid", name: "בודק", role: "ADMIN", passwordHash: hashPassword(PASSWORD) },
   });
@@ -57,8 +74,16 @@ async function main() {
   const twin1 = await prisma.person.create({ data: twinData });
   const twin2 = await prisma.person.create({ data: twinData });
 
-  const target = await prisma.person.findFirstOrThrow({
-    where: { fullName: "אדוה זילברמן" },
+  // BUILT, not found. This used to look up "אדוה זילברמן" by name — a person
+  // from the demo data — and crashed the whole run once that data no longer
+  // held her. A suite that routes a document to an existing person should
+  // create the person it routes to.
+  const target = await prisma.person.create({
+    data: {
+      firstName: "אינטייק", lastName: "נבדק", fullName: TARGET_NAME,
+      birthDate: new Date("1994-05-01"), recruitmentDate: new Date("2022-03-01"),
+      placementDate: new Date("2022-03-01"), teamId: team?.id ?? null,
+    },
     select: { id: true, firstName: true, lastName: true },
   });
 
@@ -141,7 +166,7 @@ async function main() {
     // ---- queue links ----
     await page.reload();
     const text = (await page.locator("body").textContent()) ?? "";
-    check("queue links an update to the matched person by name", text.includes(intakeUpdateLabel("אדוה זילברמן")));
+    check("queue links an update to the matched person by name", text.includes(intakeUpdateLabel(TARGET_NAME)));
     check("queue links the new-person draft", text.includes(INTAKE_NEW_PERSON_LABEL));
 
     // ---- 3.3 complete an approval from the queue ----
@@ -167,12 +192,13 @@ async function main() {
     const draftIds = runs.map((r) => (r.output?.startsWith("draft:") ? r.output.slice(6) : null)).filter((v): v is string => !!v);
     await prisma.personDraft.deleteMany({ where: { id: { in: draftIds } } });
     await prisma.extractionProposal.deleteMany({ where: { personId: { in: ["", twin1.id, twin2.id] } } });
-    const target2 = await prisma.person.findFirst({ where: { fullName: "אדוה זילברמן" }, select: { id: true } });
-    if (target2) await prisma.extractionProposal.deleteMany({ where: { personId: target2.id } });
-    await prisma.person.deleteMany({ where: { id: { in: [twin1.id, twin2.id] } } });
-    await prisma.person.deleteMany({ where: { fullName: "נועם בדיקתי" } });
-    await prisma.user.deleteMany({ where: { id: { in: [admin.id, manager.id] } } });
+    await prisma.extractionProposal.deleteMany({ where: { personId: target.id } });
+    await cleanup();
     await rm(DIR, { recursive: true, force: true });
+    const residue =
+      (await prisma.person.count({ where: { fullName: { in: ["תאום כפול", "נועם בדיקתי", TARGET_NAME] } } })) +
+      (await prisma.user.count({ where: { username: { startsWith: "verify.intake" } } }));
+    if (residue > 0) console.log(`  ✗ fixtures left behind — ${residue}`);
     if (crashed) console.error("\nRUN CRASHED:", crashed instanceof Error ? crashed.stack : crashed);
     const clean = !crashed && failures === 0 && checksRun > 0;
     console.log(clean ? `\nall ${checksRun} checks passed` : `\nFAILED — ${checksRun} ran, ${failures} failed${crashed ? ", crashed" : ""}`);

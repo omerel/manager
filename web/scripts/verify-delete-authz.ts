@@ -20,6 +20,7 @@ import { prisma } from "../src/lib/prisma";
 import { hashPassword } from "../src/lib/password";
 import { visibilityFrom, type SessionUser } from "../src/lib/access";
 import { getEnrollableTeams, getEditableTeams, getVisiblePerson } from "../src/lib/people";
+import { holdsPeople } from "@/lib/org-nesting";
 
 const BASE = process.env.BASE_URL ?? "http://localhost:4321";
 const PASSWORD = "verify-delete-1234";
@@ -86,7 +87,13 @@ async function expectedEnrollable(grants: { nodeId: string; level: string }[]): 
   const byId = new Map(nodes.map((n) => [n.id, n]));
   const grantAt = new Map(grants.map((g) => [g.nodeId, g.level]));
   const out = new Set<string>();
-  for (const team of nodes.filter((n) => n.kind === "TEAM")) {
+  // Every framework that HOLDS PEOPLE, not every team: a commanders framework
+  // holds cards too, and enrolling into one is the same establishment act. The
+  // walk stays independent where independence matters — it derives the
+  // authority rule itself, rather than asking the code under test — but which
+  // kinds carry people is a definition, and a second copy of it would be a
+  // second truth.
+  for (const team of nodes.filter((n) => holdsPeople(n.kind))) {
     let cur: (typeof nodes)[number] | undefined = team;
     while (cur) {
       const senior = cur.kind === "SECTION" || cur.kind === "DOMAIN" || cur.kind === "CENTER";
@@ -118,7 +125,7 @@ async function checkThePredicate(section: string, team: string) {
     // the two readers must not drift: what the picker offers is exactly what
     // the guard would accept, checked against the independent walk
     const expected = c.user.role === "ADMIN"
-      ? new Set(nodes.filter((n) => n.kind === "TEAM").map((n) => n.id))
+      ? new Set(nodes.filter((n) => holdsPeople(n.kind)).map((n) => n.id))
       : await expectedEnrollable(c.user.grants);
     const offered = new Set((await getEnrollableTeams(v)).map((t) => t.id));
     const same = offered.size === expected.size && [...expected].every((id) => offered.has(id));

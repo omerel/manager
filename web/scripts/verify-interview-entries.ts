@@ -22,7 +22,21 @@ function check(label: string, ok: boolean, detail = "") {
 const iso = (d: Date) => d.toISOString().slice(0, 10);
 
 async function main() {
-  const person = await prisma.person.findFirstOrThrow({ select: { id: true, fullName: true } });
+  // The person must be ASSIGNED TO A FRAMEWORK, and that is not a preference:
+  // the snapshot section below reads `exportScopedSnapshot`, which selects
+  // people by `teamId in <visible nodes>` — an unassigned person is in no
+  // snapshot at all. This used to be `findFirstOrThrow()` with no condition,
+  // which passed only while the row the database happened to return first
+  // happened to have a framework. It stopped being true, and three checks
+  // started failing for a reason that had nothing to do with what they test.
+  const person = await prisma.person.findFirst({
+    where: { teamId: { not: null } },
+    select: { id: true, fullName: true, teamId: true },
+  });
+  if (!person) {
+    console.log("\nFAILED — no person is assigned to a framework; the snapshot checks cannot mean anything.");
+    process.exit(1);
+  }
   const made: string[] = [];
 
   try {
