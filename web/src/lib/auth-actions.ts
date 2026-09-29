@@ -9,6 +9,9 @@ import { requireAdmin } from "@/lib/authz";
 import { logActivity, logLogin } from "@/lib/activity-log";
 import { hashPassword, verifyPassword } from "@/lib/password";
 import { SESSION_COOKIE, SESSION_TTL_MS, createSessionToken } from "@/lib/auth";
+import { GUEST_COOKIE, GUEST_TTL_MS, createGuestToken } from "@/lib/guest-token";
+import { resolveGuest } from "@/lib/guest-session";
+import { parseIsraeliDate } from "@/lib/dates";
 
 function str(v: FormDataEntryValue | null): string {
   return String(v ?? "").trim();
@@ -46,7 +49,34 @@ export async function login(formData: FormData) {
 export async function logout() {
   const jar = await cookies();
   jar.delete(SESSION_COOKIE);
+  jar.delete(GUEST_COOKIE); // one control, both kinds of session
   redirect("/login");
+}
+
+/**
+ * Guest entry: a tracked person admitted to read their own record.
+ *
+ * Every failure redirects to the SAME place with the same marker. The reason is
+ * never carried out of `resolveGuest`, so there is nothing here that could tell
+ * an unknown identity from a wrong date of birth from a person with no plan —
+ * the visitor learns only that nothing was found for them. Nothing is logged:
+ * declined deliberately, see the change's proposal.
+ */
+export async function guestLogin(formData: FormData) {
+  const birthDate = parseIsraeliDate(str(formData.get("birthDate")));
+  const tz = str(formData.get("tz"));
+
+  const person = await resolveGuest(birthDate, tz);
+  if (!person) redirect("/login?guest=0");
+
+  const jar = await cookies();
+  jar.set(GUEST_COOKIE, createGuestToken(person.id), {
+    httpOnly: true,
+    sameSite: "lax",
+    path: "/",
+    maxAge: GUEST_TTL_MS / 1000,
+  });
+  redirect("/me");
 }
 
 /** Self-service password change: requires the current password. */

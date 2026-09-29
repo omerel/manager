@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from "crypto";
+import { isGuestPayload } from "@/lib/guest-token";
 
 // Stateless HMAC-signed session token: "<userId>.<expiresMs>.<hmac>".
 // Signed with APP_SECRET; no DB session table (see design D1).
@@ -28,6 +29,13 @@ export function verifySessionToken(token: string | undefined, now = Date.now()):
   if (lastDot < 0) return null;
   const payload = token.slice(0, lastDot);
   const mac = token.slice(lastDot + 1);
+
+  // A guest token is signed for a different purpose and must never admit its
+  // holder as a user. It would already fail below — the personId would be read
+  // as the expiry and come out NaN — but falling to the safe side by accident
+  // is not the same as refusing on purpose, and only the second survives
+  // someone changing the payload's shape later.
+  if (isGuestPayload(payload)) return null;
   const expected = sign(payload);
   const a = Buffer.from(mac, "utf8");
   const b = Buffer.from(expected, "utf8");
