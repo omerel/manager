@@ -20,7 +20,10 @@ import { readLabeledFields } from "./form-labels";
 import { prisma } from "@/lib/prisma";
 import { computeVisibility } from "@/lib/access";
 import { exportScopedSnapshot, removeSnapshot } from "@/lib/agent-snapshot";
+import { getVisiblePeople } from "@/lib/people";
+import type { Role, AccessLevel } from "@/generated/prisma/client";
 import { ageFromBirthDate } from "@/lib/person-name";
+import { hashPassword } from "@/lib/password";
 
 let failures = 0;
 let checks = 0;
@@ -68,9 +71,113 @@ async function buildSnapshot() {
   return { dir, adminId: admin.id };
 }
 
-async function main() {
-  // a run killed halfway must not be able to fail the next one
+const TAG = "snapverify";
+
+/**
+ * THE POPULATION AXIS — the guarantee this suite did not have.
+ *
+ * Everything above compares FIELDS: does each column of the card reach the
+ * agent. That comparison can be complete and still miss an entire class of
+ * people, and it did — every unassigned person was absent from the agent's data
+ * while every field check passed, because the fields were checked on people who
+ * happened to be present.
+ *
+ * So this compares PEOPLE, and as a set equality rather than an inclusion.
+ * A shortfall is the bug we found; an EXCESS — the agent holding someone the
+ * user's own list does not show — is worse, being a disclosure rather than an
+ * omission. The same comparison catches both for free.
+ */
+async function checkPopulation(label: string, user: { id: string; name: string; role: Role; grants: { nodeId: string; level: AccessLevel }[] }) {
+  const vis = await computeVisibility({ id: user.id, name: user.name, role: user.role, grants: user.grants });
+  const listed = new Set((await getVisiblePeople(vis)).map((p) => p.fullName));
+  const dir = await exportScopedSnapshot(vis, new Date(), user.id);
+  try {
+    const rows = JSON.parse(await readFile(`${dir}/people.json`, "utf8")) as Record<string, unknown>[];
+    const carried = new Set(rows.map((r) => String(r["שם"])));
+    const missing = [...listed].filter((n) => !carried.has(n));
+    const extra = [...carried].filter((n) => !listed.has(n));
+    check(`${label}: the agent carries every person the people list shows`,
+      missing.length === 0, missing.length ? `MISSING ${missing.length}: ${missing.slice(0, 5).join(", ")}` : `${listed.size} people`);
+    check(`${label}: and carries nobody it does not show`,
+      extra.length === 0, extra.length ? `EXTRA ${extra.length}: ${extra.slice(0, 5).join(", ")}` : "none");
+  } finally {
+    await removeSnapshot(dir);
+  }
+}
+
+/**
+ * Everything this run created. Called at the START as well as in `finally`,
+ * because a run killed halfway leaves rows that make the NEXT run fail for a
+ * reason that has nothing to do with the code under test.
+ */
+async function cleanup() {
+  await prisma.person.deleteMany({ where: { fullName: { startsWith: TAG } } });
+  await prisma.user.deleteMany({ where: { username: { startsWith: TAG } } });
+  await prisma.orgNode.deleteMany({ where: { name: { startsWith: TAG } } });
   await prisma.personFieldDef.deleteMany({ where: { label: { in: ["תאריך בדיקה", "שדה ריק לבדיקה"] } } });
+}
+
+/**
+ * The people this suite asserts about, built rather than found.
+ *
+ * They MUST be assigned to a framework: `exportScopedSnapshot` selects people
+ * by `teamId in <visible nodes>`, so an unassigned person is in no snapshot at
+ * all. This suite used to take whichever row the database returned first — with
+ * no condition — and every assertion below silently depended on that row
+ * happening to have a framework. It stopped happening, four checks began
+ * failing for a reason unrelated to what they test, and the run crashed on the
+ * fifth, hiding everything after it.
+ */
+async function makeSubjects() {
+  const center = await prisma.orgNode.create({ data: { name: `${TAG} מרכז`, kind: "CENTER" } });
+  const domain = await prisma.orgNode.create({ data: { name: `${TAG} תחום`, kind: "DOMAIN", parentId: center.id } });
+  const section = await prisma.orgNode.create({ data: { name: `${TAG} מדור`, kind: "SECTION", parentId: domain.id } });
+  const team = await prisma.orgNode.create({ data: { name: `${TAG} צוות`, kind: "TEAM", parentId: section.id } });
+  const base = {
+    recruitmentDate: new Date("2020-01-01"),
+    placementDate: new Date("2020-01-01"),
+    teamId: team.id,
+  };
+  const withDob = await prisma.person.create({
+    data: { firstName: TAG, lastName: "עם-לידה", fullName: `${TAG} עם-לידה`, birthDate: new Date(Date.UTC(1994, 6, 21)), ...base },
+  });
+  const noDob = await prisma.person.create({
+    data: { firstName: TAG, lastName: "ללא-לידה", fullName: `${TAG} ללא-לידה`, birthDate: null, ...base },
+  });
+  // belongs to NO framework — an Admin sees them on the people list, so the
+  // agent must carry them too. This is the person the population axis is for.
+  const unassigned = await prisma.person.create({
+    data: {
+      firstName: TAG, lastName: "ללא-מסגרת", fullName: `${TAG} ללא-מסגרת`,
+      birthDate: new Date(Date.UTC(1990, 0, 5)),
+      recruitmentDate: base.recruitmentDate, placementDate: base.placementDate, teamId: null,
+    },
+  });
+
+  // an Admin and a Manager scoped to one section — the population rule differs
+  // between them, and "the Manager is unaffected" must be checked, not assumed
+  const admin = await prisma.user.create({
+    data: {
+      name: `${TAG} אדמין`, email: `${TAG}a@v.invalid`, username: `${TAG}-adm`,
+      passwordHash: hashPassword("x"), role: "ADMIN",
+    },
+    include: { grants: { select: { nodeId: true, level: true } } },
+  });
+  const manager = await prisma.user.create({
+    data: {
+      name: `${TAG} מנהל`, email: `${TAG}m@v.invalid`, username: `${TAG}-mgr`,
+      passwordHash: hashPassword("x"), role: "MANAGER",
+      grants: { create: [{ nodeId: section.id, level: "EDIT" }] },
+    },
+    include: { grants: { select: { nodeId: true, level: true } } },
+  });
+
+  return { withDob, noDob, unassigned, admin, manager };
+}
+
+async function main() {
+  await cleanup();
+  const { withDob, noDob, unassigned, admin, manager } = await makeSubjects();
   const { dir } = await buildSnapshot();
   try {
     const peopleRaw = await readFile(`${dir}/people.json`, "utf8");
@@ -91,32 +198,27 @@ async function main() {
     }
 
     console.log("\n=== the date of birth, which started this ===");
-    const withDob = await prisma.person.findFirst({
-      where: { birthDate: { not: null } },
-      select: { fullName: true, birthDate: true },
-    });
+    // the counts are the DATABASE's, and the snapshot holds only the assigned —
+    // printed as context, never as something an assertion leans on
     const total = await prisma.person.count();
     const haveDob = await prisma.person.count({ where: { birthDate: { not: null } } });
-    console.log(`     (${haveDob} of ${total} people hold a date of birth in the database)`);
+    console.log(`     (${haveDob} of ${total} people hold a date of birth; the snapshot carries ${people.length})`);
 
-    const iso = withDob!.birthDate!.toISOString().slice(0, 10);
+    const iso = withDob.birthDate!.toISOString().slice(0, 10);
     check("the snapshot carries a real person's date of birth", peopleRaw.includes(iso),
-      `${withDob!.fullName} → ${iso}${peopleRaw.includes(iso) ? "" : " NOT IN THE SNAPSHOT"}`);
+      `${withDob.fullName} → ${iso}${peopleRaw.includes(iso) ? "" : " NOT IN THE SNAPSHOT"}`);
 
-    const row = people.find((p) => p["שם"] === withDob!.fullName)!;
+    const row = people.find((p) => p["שם"] === withDob.fullName)!;
     check("on that person's own row", row?.["תאריך_לידה"] === iso, String(row?.["תאריך_לידה"]));
     check("and the age beside it", !!row?.["גיל"], String(row?.["גיל"]));
     check("computed by the SAME function the card uses",
-      row?.["גיל"] === ageFromBirthDate(withDob!.birthDate), `card says ${ageFromBirthDate(withDob!.birthDate)}`);
+      row?.["גיל"] === ageFromBirthDate(withDob.birthDate), `card says ${ageFromBirthDate(withDob.birthDate)}`);
 
-    const noDob = await prisma.person.findFirst({ where: { birthDate: null }, select: { fullName: true } });
-    if (noDob) {
-      const r = people.find((p) => p["שם"] === noDob.fullName);
-      check("a person with no date is present with null, not omitted", !!r && r["תאריך_לידה"] === null,
-        r ? String(r["תאריך_לידה"]) : "ROW MISSING ENTIRELY");
-    } else {
-      check("a person with no date is present with null, not omitted", true, "no such person in the data");
-    }
+    // built, not found — and the branch that used to say "no such person in the
+    // data" is gone with it: a pass for want of a subject is not a pass
+    const r = people.find((p) => p["שם"] === noDob.fullName);
+    check("a person with no date is present with null, not omitted", !!r && r["תאריך_לידה"] === null,
+      r ? String(r["תאריך_לידה"]) : "ROW MISSING ENTIRELY");
 
     console.log("\n=== which fields EXIST, not only which are filled ===");
     const schemaRaw = await readFile(`${dir}/schema.json`, "utf8").catch(() => "");
@@ -190,7 +292,7 @@ async function main() {
     // No configurable DATE field exists in the data today, which is exactly why
     // this fault was latent rather than visible. One is created here so the
     // guarantee is tested rather than assumed, and removed again afterwards.
-    const person = await prisma.person.findFirstOrThrow({ select: { id: true, fullName: true } });
+    const person = withDob; // this suite's own subject, which the snapshot holds
     const tempField = await prisma.personFieldDef.create({
       data: { key: `verify_date_${Date.now()}`, label: "תאריך בדיקה", type: "DATE", order: 999 },
     });
@@ -226,6 +328,14 @@ async function main() {
       await prisma.personFieldDef.delete({ where: { id: tempField.id } }); // values cascade
     }
 
+    console.log("\n=== the population axis: WHO the agent carries, not only WHAT ===");
+    await checkPopulation("admin", admin);
+    await checkPopulation("scoped manager", manager);
+    check("the unassigned person is on the admin's people list to begin with",
+      (await getVisiblePeople(await computeVisibility({ id: admin.id, name: admin.name, role: admin.role, grants: admin.grants })))
+        .some((p) => p.fullName === unassigned.fullName),
+      "otherwise the axis above proves nothing");
+
     console.log("\n=== the snapshot still exposes nothing new ===");
     check("no internal ids", !/"id"\s*:/.test(peopleRaw));
     check("no password hashes", !peopleRaw.includes("passwordHash"));
@@ -233,6 +343,11 @@ async function main() {
     check("the README names the new file", (await readFile(`${dir}/README.md`, "utf8")).includes("schema.json"));
   } finally {
     await removeSnapshot(dir);
+    await cleanup();
+    const residue =
+      (await prisma.person.count({ where: { fullName: { startsWith: TAG } } })) +
+      (await prisma.orgNode.count({ where: { name: { startsWith: TAG } } }));
+    check("no fixtures left behind", residue === 0, `${residue}`);
   }
 
   if (checks === 0) {

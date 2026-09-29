@@ -102,12 +102,34 @@ export async function getEnrollableTeams(visibility: Visibility): Promise<{ id: 
   return teamsWhere(visibility.mayEstablishAt);
 }
 
-/** People within the user's visibility. Admins also see unassigned people (teamId = null). */
-export async function getVisiblePeople(visibility: Visibility): Promise<PersonRow[]> {
+/**
+ * WHICH PEOPLE this user may see — the one definition, for every reader.
+ *
+ * `Visibility` answers the question about FRAMEWORKS; this answers it about
+ * PEOPLE, and the two are not the same question. A person belonging to no
+ * framework sits outside the tree entirely, so no set of node ids can describe
+ * them: the rule that an Admin sees them too has to live somewhere else, and
+ * for a long time it lived inline in `getVisiblePeople` alone.
+ *
+ * The agent's snapshot asked the same question and answered it for itself,
+ * with `teamId in <nodes>` — correct for a Manager, and silently missing every
+ * unassigned person for an Admin. The people list showed them; the agent did
+ * not know they existed. One condition, written twice, updated once.
+ *
+ * Anything that loads people FOR a user reads this. If a second `where` on
+ * `person` ever appears with a hand-written `teamId` clause, that is the same
+ * fault coming back.
+ */
+export function visiblePeopleWhere(visibility: Visibility) {
   const teamIds = [...visibility.nodeIds];
-  const where = visibility.isAdmin
+  return visibility.isAdmin
     ? { OR: [{ teamId: { in: teamIds } }, { teamId: null }] }
     : { teamId: { in: teamIds } };
+}
+
+/** People within the user's visibility. Admins also see unassigned people (teamId = null). */
+export async function getVisiblePeople(visibility: Visibility): Promise<PersonRow[]> {
+  const where = visiblePeopleWhere(visibility);
   const [people, attachmentsByPerson, resolvePath] = await Promise.all([
     // the plan and the deletion counts come along in this query rather than per
     // row: _count compiles to one query with sub-counts, and measured on the

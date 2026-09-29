@@ -2,6 +2,7 @@ import { mkdtemp, writeFile, rm, mkdir, copyFile } from "fs/promises";
 import { tmpdir } from "os";
 import path from "path";
 import { prisma } from "@/lib/prisma";
+import { visiblePeopleWhere } from "@/lib/people";
 import type { Visibility } from "@/lib/access";
 import type { FieldType } from "@/generated/prisma/client";
 import { computePersonGaps, GAP_META } from "@/lib/gaps";
@@ -52,11 +53,15 @@ function snapshotFieldValue(type: FieldType, value: string): string {
 export async function exportScopedSnapshot(visibility: Visibility, today: Date, userId: string): Promise<string> {
   const dir = await mkdtemp(path.join(tmpdir(), "agent-snap-"));
 
-  const teamIds = [...visibility.nodeIds];
   const [nodes, people] = await Promise.all([
     prisma.orgNode.findMany(),
     prisma.person.findMany({
-      where: { teamId: { in: teamIds } },
+      // The SAME rule the people list uses, read from one place rather than
+      // restated here. This used to be `teamId in <visible nodes>` — right for
+      // a Manager, and silently missing every unassigned person for an Admin,
+      // who sees them on screen. `pathOf` below has always handled a null
+      // teamId; until now nothing could reach that branch.
+      where: visiblePeopleWhere(visibility),
       include: {
         fieldValues: { include: { field: true } },
         pointProgress: true,
