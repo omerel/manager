@@ -247,6 +247,33 @@ export function buildPersonTimeline(person: PersonFull) {
  * shared verdict: its checkpoints are cumulative targets on ONE running value,
  * so they genuinely do stand or fall together.
  */
+/**
+ * Everything the drawing needs about ONE person, from ONE timeline.
+ *
+ * The status and the occurrence list are returned TOGETHER, and that is the
+ * whole point of the function existing. They were produced separately before:
+ * the status came from the timeline, which `unrollForPerson` clips at end of
+ * service, while the diagram unrolled the template's full schedule for itself.
+ * Every occurrence past the clip was therefore drawn with no status and fell
+ * back to the event's palette colour — a colour no standing produced.
+ *
+ * Handing a caller both halves at once means it cannot pass a status map from
+ * one list and a drawing from another.
+ */
+export function buildVectorView(
+  timeline: ReturnType<typeof buildPersonTimeline>,
+  placementDate: Date,
+  today: Date,
+): { status: Map<string, VectorStatus>; occurrences: Map<string, number[]> } {
+  const occurrences = new Map<string, number[]>();
+  for (const r of timeline.recurrences) {
+    const list = occurrences.get(r.recurringEventId) ?? [];
+    list.push(r.offsetMonths);
+    occurrences.set(r.recurringEventId, list);
+  }
+  return { status: buildVectorStatus(timeline, placementDate, today), occurrences };
+}
+
 export function buildVectorStatus(
   timeline: ReturnType<typeof buildPersonTimeline>,
   placementDate: Date,

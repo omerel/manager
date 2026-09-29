@@ -170,12 +170,37 @@ function iconDisc(kind: EventCard["kind"] | "repeat", cx: number, cy: number, fi
  *   checkpoint, or recurring event). Omitted on the plan page and in the PDF,
  *   where the drawing describes the TRACK and nobody's standing against it.
  */
-export function buildPlanDiagramSvg(plan: PlanWithEvents, status?: Map<string, VectorStatus>): string {
+function renderDiagram(
+  plan: PlanWithEvents,
+  status?: Map<string, VectorStatus>,
+  /**
+   * The occurrences of each recurring event, per event id — what THIS PERSON is
+   * actually asked for. Given only when drawing for a person; the plan page
+   * omits it and the full schedule is unrolled as before.
+   *
+   * It exists because the two were computed separately and disagreed: the
+   * diagram unrolled the template's schedule while the status was computed from
+   * `unrollForPerson`, which clips at end of service. Everything past the clip
+   * was drawn with no status and fell back to the event's palette colour — a
+   * colour no standing produced. Passing the list in, rather than passing the
+   * dates and unrolling again here, is the point: a second unroll is a second
+   * chance to disagree.
+   */
+  occurrences?: Map<string, number[]>,
+): { svg: string; missingStatus: string[] } {
   // when a status is given it REPLACES the palette colour: the card must say
   // how this person stands, not which metric it belongs to
+  const missingStatus: string[] = [];
   const styled = (id: string, fallback: { bg?: string; accent?: string; border?: string }) => {
     const s = status?.get(id);
-    return s ? { ...STATUS_STYLE[s], status: s } : fallback;
+    if (s) return { ...STATUS_STYLE[s], status: s };
+    // No map at all is the plan page, and the fallback is correct there. A map
+    // that is missing THIS item is a fault: the drawing and the status were
+    // computed from different lists. Recorded rather than thrown — a colour
+    // fault is not worth collapsing a commander's whole card over — so a test
+    // can catch what a viewer would only see as an oddly coloured disc.
+    if (status) missingStatus.push(id);
+    return fallback;
   };
 
   // ---- collect events ----
@@ -213,7 +238,12 @@ export function buildPlanDiagramSvg(plan: PlanWithEvents, status?: Map<string, V
       label: r.label,
       interval: r.intervalMonths,
       stop: `מ-${formatYearsMonths(r.startOffsetMonths)} עד ${formatYearsMonths(r.stopOffsetMonths ?? 0)} מההצבה`,
-      offsets: unrollRecurring(r.intervalMonths, r.stopOffsetMonths, r.startOffsetMonths),
+      // the person's own list when drawing for a person; the track's otherwise
+      offsets: occurrences?.get(r.id) ?? unrollRecurring(r.intervalMonths, r.stopOffsetMonths, r.startOffsetMonths),
+      // the event's own definition, kept so the legend can tell whether the
+      // markers drawn are the whole of it
+      planStart: r.startOffsetMonths,
+      planStop: r.stopOffsetMonths,
       // the event's OWN colour, which is its identity in the legend and never a
       // status: an occurrence's standing is asked for one occurrence at a time
       palette: { accent: col.accent, bg: col.bg, border: col.border },
@@ -451,8 +481,22 @@ export function buildPlanDiagramSvg(plan: PlanWithEvents, status?: Map<string, V
   // own label at every occurrence, so a legend row for it would be a second,
   // redundant key — and the header would be claiming markers that do not exist.
   if (recurring.length > 0) {
-    const clipped =
+    // Two reasons the markers can stop short of what the legend rows describe,
+    // and the note must cover BOTH — its whole purpose is to stop the drawing
+    // from implying that the recurrence ends where the markers do.
+    //
+    //   span   the marker span is narrower than the plan's concrete events
+    //   person this person's occurrences were clipped — they leave first
+    //
+    // The second arrived with per-person occurrence lists. Without it the
+    // legend would say "every 6 months until year 6" beside a drawing that
+    // stops at year 1.6, and nothing would explain the gap.
+    const clippedBySpan =
       firstCard != null && recurring.some((r) => r.offsets.some((o) => !inCardSpan(o)));
+    const clippedByPerson = recurring.some(
+      (r) => r.offsets.length < unrollRecurring(r.interval, r.planStop, r.planStart).length,
+    );
+    const clipped = clippedBySpan || clippedByPerson;
     // Fixed row metrics, because the swatches beside each row are drawn as SVG
     // and have to line up with text laid out by the browser.
     const ROW_H = 20;
@@ -501,7 +545,11 @@ export function buildPlanDiagramSvg(plan: PlanWithEvents, status?: Map<string, V
              .join("")}
            ${
              clipped
-               ? `<div style="color:${C.muted};height:20px;line-height:20px;font-size:11px">הסימונים מוצגים בטווח האירועים: ${formatYearsMonths(firstCard!)} עד ${formatYearsMonths(lastCard!)}.</div>`
+               ? `<div style="color:${C.muted};height:20px;line-height:20px;font-size:11px">${
+                   clippedByPerson
+                     ? "הסימונים מוצגים עד סיום השירות; מופעים שלאחריו אינם נדרשים."
+                     : `הסימונים מוצגים בטווח האירועים: ${formatYearsMonths(firstCard!)} עד ${formatYearsMonths(lastCard!)}.`
+                 }</div>`
                : ""
            }
          </div>
@@ -510,5 +558,34 @@ export function buildPlanDiagramSvg(plan: PlanWithEvents, status?: Map<string, V
   }
 
   parts.push(`</svg>`);
-  return parts.join("\n");
+  return { svg: parts.join("\n"), missingStatus };
+}
+
+/**
+ * The drawing. Unchanged for every caller — the plan page, the person's card
+ * and both PDF routes all want the SVG and nothing else.
+ */
+export function buildPlanDiagramSvg(
+  plan: PlanWithEvents,
+  status?: Map<string, VectorStatus>,
+  occurrences?: Map<string, number[]>,
+): string {
+  return renderDiagram(plan, status, occurrences).svg;
+}
+
+/**
+ * Every item the drawing rendered that the status map had no entry for.
+ *
+ * Reported from the RENDER itself rather than recomputed alongside it: a
+ * parallel computation of "what gets drawn" is exactly the shape of the fault
+ * this exists to catch — the diagram unrolled one list while the status was
+ * built from another, and nobody compared them. Empty is the only healthy
+ * answer whenever a status map is given.
+ */
+export function planDiagramStatusGaps(
+  plan: PlanWithEvents,
+  status: Map<string, VectorStatus>,
+  occurrences?: Map<string, number[]>,
+): string[] {
+  return renderDiagram(plan, status, occurrences).missingStatus;
 }

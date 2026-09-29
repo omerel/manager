@@ -458,6 +458,10 @@ Movement SHALL be reserved for the states that ask for action, and SHALL be supp
 
 The drawing and the textual lists on the same card SHALL agree about every occurrence: a card that marks one occurrence overdue in its list and a different number of them overdue in its drawing is stating two different facts about the same data.
 
+The vector SHALL show **the path required of that person**, not the track's full schedule. Where a person's occurrences are clipped — by their end of service, or by anything else that decides what is asked of them — the drawing SHALL be clipped with them. An occurrence that will never be required of this person SHALL NOT appear on their card: drawing it is a false statement about what they owe, not merely a missing colour.
+
+Every item the vector draws SHALL carry a status. A drawn item with no status SHALL be treated as a fault and SHALL be detectable as one, rather than falling back to a colour that reads as a verdict nobody reached.
+
 #### Scenario: Opening a card
 
 - **WHEN** a user opens the card of a person assigned a plan
@@ -522,3 +526,18 @@ The drawing and the textual lists on the same card SHALL agree about every occur
 
 - **WHEN** the person has no assigned plan
 - **THEN** no vector is drawn and the card reads as it does today
+
+#### Scenario: Occurrences beyond the person's service
+
+- **WHEN** a person's plan schedules recurring occurrences past their end-of-service date
+- **THEN** those occurrences do not appear on their card at all, the drawing ending where what is asked of them ends
+
+#### Scenario: The plan page still shows the whole track
+
+- **WHEN** the same plan is viewed on the plan page, where there is no person
+- **THEN** the full schedule is drawn, unclipped and uncoloured by any status
+
+#### Scenario: A drawn item without a status
+
+- **WHEN** the drawing is given a status map and renders an item the map has no entry for
+- **THEN** that is a fault the system can detect, and the item is never quietly painted in a colour that looks like a verdict

@@ -10,7 +10,7 @@ import { ageFromBirthDate } from "@/lib/person-name";
 import { fmtDate, addMonths } from "@/lib/dates";
 import { DateField } from "@/components/DateField";
 import { ActionForm } from "@/components/ActionForm";
-import { getPersonFull, buildPersonTimeline, buildVectorStatus, type PersonFull } from "@/lib/person-view";
+import { getPersonFull, buildPersonTimeline, buildVectorView, type PersonFull } from "@/lib/person-view";
 import { getPlan } from "@/lib/plans";
 import { buildPlanDiagramSvg, STATUS_STYLE, VECTOR_LEGEND } from "@/lib/plan-diagram";
 import { computePersonGaps, levelForPoint, evalMetric, GAP_META, type GapLevel } from "@/lib/gaps";
@@ -90,7 +90,11 @@ export default async function PersonPage({
   // template they came from.
   const planForVector = person.assignedPlanId ? await getPlan(person.assignedPlanId) : null;
   const vectorSvg = planForVector
-    ? buildPlanDiagramSvg(planForVector, buildVectorStatus(timeline, person.placementDate, today))
+    ? (() => {
+        // status AND occurrences from the same timeline — see buildVectorView
+        const v = buildVectorView(timeline, person.placementDate, today);
+        return buildPlanDiagramSvg(planForVector, v.status, v.occurrences);
+      })()
     : null;
   // adding an obligation to someone's path is an establishment act, like enrolling them
   const canAddPersonal = person.teamId ? visibility.mayEstablishAt(person.teamId) : visibility.isAdmin;

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getPlan } from "@/lib/plans";
 import { buildPlanDiagramSvg, STATUS_STYLE, VECTOR_LEGEND } from "@/lib/plan-diagram";
-import { buildPersonTimeline, buildVectorStatus, type PersonFull } from "@/lib/person-view";
+import { buildPersonTimeline, buildVectorView, type PersonFull } from "@/lib/person-view";
 
 /**
  * A person's career plan as a PDF, in THEIR colours.
@@ -19,7 +19,9 @@ export async function renderPlanPdf(person: PersonFull): Promise<NextResponse> {
   if (!plan) return new NextResponse("not found", { status: 404 });
 
   const today = new Date();
-  const svg = buildPlanDiagramSvg(plan, buildVectorStatus(buildPersonTimeline(person), person.placementDate, today));
+  // the same pairing the card uses, so the export and the card cannot differ
+  const view = buildVectorView(buildPersonTimeline(person), person.placementDate, today);
+  const svg = buildPlanDiagramSvg(plan, view.status, view.occurrences);
 
   // the key to the colours, from the same list the card's legend reads
   const legend =

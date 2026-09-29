@@ -18,9 +18,9 @@ import { prisma } from "@/lib/prisma";
 import { hashPassword } from "@/lib/password";
 import { createSessionToken, SESSION_COOKIE } from "@/lib/auth";
 import { addMonths } from "@/lib/dates";
-import { buildPlanDiagramSvg, STATUS_STYLE, VECTOR_LEGEND, occurrenceKey, type VectorStatus } from "@/lib/plan-diagram";
+import { buildPlanDiagramSvg, planDiagramStatusGaps, STATUS_STYLE, VECTOR_LEGEND, occurrenceKey, type VectorStatus } from "@/lib/plan-diagram";
 import { getPlan } from "@/lib/plans";
-import { getPersonFull, buildPersonTimeline, buildVectorStatus } from "@/lib/person-view";
+import { getPersonFull, buildPersonTimeline, buildVectorStatus, buildVectorView } from "@/lib/person-view";
 import { computePersonGaps } from "@/lib/gaps";
 
 const BASE = process.env.BASE_URL ?? "http://localhost:4321";
@@ -104,6 +104,41 @@ async function main() {
   });
   await prisma.planAssignment.create({
     data: { personId: person.id, planId: copy.id, templateName: copy.name, assignedAt: placement, waiverOffsetMonths: 0 },
+  });
+
+  /**
+   * A SECOND person, whose service ends in the middle of the schedule.
+   *
+   * This is the case that was missing, and its absence is why the fault below
+   * survived: with no end-of-service date, `unrollRecurring` (what the diagram
+   * draws) and `unrollForPerson` (what the status is computed for) return the
+   * identical list, and no disagreement between them can show. The convenient
+   * case was the only one tested.
+   *
+   * Their plan runs to month 36; they leave at month 18. Occurrences at 24, 30
+   * and 36 will never be required of them.
+   */
+  const leaverPlan = await prisma.careerPlan.create({
+    data: {
+      name: `${TAG} מסלול עוזב`, isTemplate: false,
+      pointEvents: { create: [{ label: `${TAG} נקודתי עוזב`, offsetMonths: 6 }] },
+      recurringEvents: {
+        create: [
+          { label: `${TAG} מחזורי עוזב`, intervalMonths: 6, startOffsetMonths: 6, stopMode: "UNTIL_OFFSET", stopOffsetMonths: 36, display: "CARD" },
+          { label: `${TAG} סמן עוזב`, intervalMonths: 6, startOffsetMonths: 6, stopMode: "UNTIL_OFFSET", stopOffsetMonths: 36, display: "MARKER" },
+        ],
+      },
+    },
+  });
+  const leaver = await prisma.person.create({
+    data: {
+      firstName: TAG, lastName: "עוזב", fullName: `${TAG} עוזב`,
+      recruitmentDate: placement, placementDate: placement, teamId: team.id, assignedPlanId: leaverPlan.id,
+      endOfServiceDate: addMonths(placement, 18),
+    },
+  });
+  await prisma.planAssignment.create({
+    data: { personId: leaver.id, planId: leaverPlan.id, templateName: leaverPlan.name, assignedAt: placement, waiverOffsetMonths: 0 },
   });
 
   /* Occurrences at 6 12 18 24 30 36, with today at month 25:
@@ -222,6 +257,39 @@ async function main() {
       `list ${listOverdue.length}, drawing ${drawnOverdueSlots.length}`);
     check("and that is 4 — two occurrences on each of the two events",
       listOverdue.length === 4, String(listOverdue.length));
+
+    console.log("\n=== the drawing covers the person's path, and only it ===");
+    {
+      const lFull = (await getPersonFull(leaver.id))!;
+      const lTimeline = buildPersonTimeline(lFull);
+      const lPlan = (await getPlan(leaverPlan.id))!;
+      // exactly how the card, /me and the PDF build it — status and occurrences
+      // from one timeline, so the suite cannot pass a pairing the app never does
+      const view = buildVectorView(lTimeline, lFull.placementDate, today);
+      const lSvg = buildPlanDiagramSvg(lPlan, view.status, view.occurrences);
+
+      // Reported by the RENDER, not recomputed beside it. A parallel "what gets
+      // drawn" calculation is the very shape of this bug — two lists, never
+      // compared — so the check asks the drawing what it actually painted.
+      const gaps = planDiagramStatusGaps(lPlan, view.status, view.occurrences);
+      check("every item the drawing paints carries a status",
+        gaps.length === 0, gaps.length ? `${gaps.length} WITHOUT: ${gaps.slice(0, 6).join(", ")}` : "all statused");
+
+      const drawnCount = [...view.occurrences.values()].reduce((n, l) => n + l.length, 0);
+      check("the drawing holds exactly the person's own occurrences",
+        drawnCount === lTimeline.recurrences.length,
+        `drawn ${drawnCount} · the person owes ${lTimeline.recurrences.length}`);
+      check("...and none of them falls past the end of service",
+        [...view.occurrences.values()].every((l) => l.every((o) => o <= 18)),
+        `months drawn: ${[...new Set([...view.occurrences.values()].flat())].sort((a, b) => a - b).join(", ")}`);
+
+      // the visible symptom, measured on the drawing itself
+      const paletteDiscs = [...lSvg.matchAll(/<circle cx="[\d.]+" cy="[\d.]+" r="16" fill="(#[0-9a-f]{6})"/g)]
+        .map((m) => m[1])
+        .filter((hex) => !Object.values(STATUS_STYLE).some((s) => s.accent === hex));
+      check("no icon disc is painted in a palette colour",
+        paletteDiscs.length === 0, paletteDiscs.length ? `${paletteDiscs.length} palette discs: ${[...new Set(paletteDiscs)].join(", ")}` : "all status colours");
+    }
 
     console.log("\n=== the gap engine is untouched ===");
     const gaps = computePersonGaps(full, today);

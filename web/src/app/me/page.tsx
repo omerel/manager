@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { FileDown, Route } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { getGuestPersonOrNull } from "@/lib/guest-session";
-import { getPersonFull, buildPersonTimeline, buildVectorStatus } from "@/lib/person-view";
+import { getPersonFull, buildPersonTimeline, buildVectorView } from "@/lib/person-view";
 import { getPlan } from "@/lib/plans";
 import { buildPlanDiagramSvg, STATUS_STYLE, VECTOR_LEGEND } from "@/lib/plan-diagram";
 import { computePersonGaps } from "@/lib/gaps";
@@ -64,7 +64,10 @@ export default async function MyRecordPage() {
   const gaps = computePersonGaps(person, today);
   const plan = await getPlan(person.assignedPlanId);
   const vectorSvg = plan
-    ? buildPlanDiagramSvg(plan, buildVectorStatus(timeline, person.placementDate, today))
+    ? (() => {
+        const v = buildVectorView(timeline, person.placementDate, today);
+        return buildPlanDiagramSvg(plan, v.status, v.occurrences);
+      })()
     : null;
 
   return (
