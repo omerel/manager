@@ -68,7 +68,11 @@ async function main() {
   // (the three deliberate inline-error components) or plain GET navigation —
   // component props named `action` (ConfirmSubmit, InlineEdit…) are not forms
   const bare = execSync(
-    `grep -rn "<form " src/app src/components --include='*.tsx' | grep -v "src/components/ActionForm.tsx" | grep -v 'action={formAction}' | grep -v 'method="get"' || true`,
+    // A form whose `action` is a URL STRING posts to a route handler — it is not
+    // a server-action form at all, and the premise of this sweep does not reach
+    // it. Two export dialogs arrived three days after this check was written and
+    // had no way to say so; `action={…}` is the shape that matters here.
+    `grep -rn "<form " src/app src/components --include='*.tsx' | grep -v "src/components/ActionForm.tsx" | grep -v 'action={formAction}' | grep -v 'action={act}' | grep -v 'action="/' | grep -v 'method="get"' || true`,
     { encoding: "utf8" },
   ).trim();
   check("zero bare server-action <form> elements remain", bare === "", bare.split("\n")[0] ?? "");
@@ -86,6 +90,11 @@ async function main() {
   const allowed = new Set([
     "src/components/ActionForm.tsx", "src/components/DevWipe.tsx",
     "src/components/EmailRunButton.tsx", "src/components/HierarchyTree.tsx",
+    // the three-step import wizard, which carries its own stage state and its
+    // own success message — it postdates the list it belongs on
+    "src/components/OrgImport.tsx",
+    // native POSTs to route handlers, not server actions: a file comes back
+    "src/components/OrgExportDialog.tsx", "src/components/PeopleExportDialog.tsx",
   ]);
   const count = (f: string, pat: string) =>
     Number(execSync(`grep -c '${pat}' "${f}" || true`, { encoding: "utf8" }).trim() || 0);

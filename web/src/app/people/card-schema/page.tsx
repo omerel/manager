@@ -101,7 +101,7 @@ export default async function CardSchemaPage({ searchParams }: { searchParams: P
                       <Link href={`/people/card-schema?edit=${d.id}`} className="text-xs text-brand-700 hover:underline">
                         ערוך
                       </Link>
-                      <ActionForm action={removeFieldDef}>
+                      <ActionForm action={removeFieldDef} confirmText={false}>
                         <input type="hidden" name="id" value={d.id} />
                         <button className="text-xs text-red-600 hover:underline">מחק</button>
                       </ActionForm>

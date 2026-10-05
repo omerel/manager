@@ -243,7 +243,7 @@ export default async function AccessPage({ searchParams }: { searchParams: Promi
                       <button className="text-xs text-brand-700 hover:underline">אפס סיסמה</button>
                     </ActionForm>
                     {u.id !== me.id && (
-                      <ActionForm action={deleteUser}>
+                      <ActionForm action={deleteUser} confirmText={false}>
                         <input type="hidden" name="userId" value={u.id} />
                         <button className="text-xs text-red-600 hover:underline">מחק משתמש</button>
                       </ActionForm>
@@ -268,7 +268,7 @@ export default async function AccessPage({ searchParams }: { searchParams: Promi
                             <span>{g.node.name}</span>
                             <LevelBadge level={g.level} />
                             {isAdmin && (
-                              <ActionForm action={removeGrant} className="inline">
+                              <ActionForm action={removeGrant} confirmText={false} className="inline">
                                 <input type="hidden" name="grantId" value={g.id} />
                                 <button className="text-xs text-red-600 hover:underline">הסר</button>
                               </ActionForm>

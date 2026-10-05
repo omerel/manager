@@ -99,7 +99,7 @@ export function EvaluationsSection({
                       )}
                     </span>
                     {editing && entry && (
-                      <ActionForm action={deleteEntry}>
+                      <ActionForm action={deleteEntry} confirmText={false}>
                         <input type="hidden" name="personId" value={person.id} />
                         <input type="hidden" name="entryId" value={entry.id} />
                         <button className="text-xs text-red-600 hover:underline">מחק מילוי</button>
@@ -183,7 +183,7 @@ export function EvaluationsSection({
                   <span className="flex items-center gap-2">
                     <span className="text-xs text-muted">{fmtDate(e.eventDate)}</span>
                     {editing && (
-                      <ActionForm action={deleteEntry}>
+                      <ActionForm action={deleteEntry} confirmText={false}>
                         <input type="hidden" name="personId" value={person.id} />
                         <input type="hidden" name="entryId" value={e.id} />
                         <button className="text-xs text-red-600 hover:underline">מחק</button>
@@ -260,7 +260,7 @@ export function EvaluationsSection({
                   <span className="flex items-center gap-2">
                     <span className="text-xs text-muted">{fmtDate(e.eventDate)}</span>
                     {editing && (
-                      <ActionForm action={deleteEntry}>
+                      <ActionForm action={deleteEntry} confirmText={false}>
                         <input type="hidden" name="personId" value={person.id} />
                         <input type="hidden" name="entryId" value={e.id} />
                         <button className="text-xs text-red-600 hover:underline">מחק</button>

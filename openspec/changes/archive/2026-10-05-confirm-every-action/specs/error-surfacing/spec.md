@@ -1,10 +1,4 @@
-# error-surfacing
-
-## Purpose
-
-User-facing outcome handling: a refused action reports its reason to the user in place — never as a dead page, and never redacted away by a production build — and an accepted one says that it happened, because a screen that re-renders unchanged is indistinguishable from one where nothing did.
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: A refused action reports its reason in place
 
@@ -20,14 +14,7 @@ When a user-submitted action is refused — invalid input, a business rule, a co
 - **WHEN** a user submits a form the server accepts
 - **THEN** the action completes exactly as today — including redirect-after-success where the action performs one — and the outcome is confirmed as the requirement below describes
 
-### Requirement: The generic error page is a last resort
-
-The system SHALL have a global error boundary offering recovery (return home, retry). It SHALL NOT be reached by ordinary refusals of user actions — those surface as toasts — and it makes no claim to show failure reasons.
-
-#### Scenario: An unforeseen failure still leaves an exit
-
-- **WHEN** an error outside the action-refusal path escapes to the boundary
-- **THEN** the user sees a branded recovery page with a way back, rather than the platform's default error screen
+## ADDED Requirements
 
 ### Requirement: An accepted action confirms that it happened
 

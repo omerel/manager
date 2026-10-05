@@ -170,7 +170,7 @@ export function PlanSection({
                 העבר למסלול אחר…
               </button>
             </form>
-            <ActionForm action={unassignPlan}>
+            <ActionForm action={unassignPlan} confirmText={false}>
               <input type="hidden" name="personId" value={person.id} />
               <button className="text-xs text-red-600 hover:underline">בטל שיוך</button>
             </ActionForm>
@@ -209,7 +209,7 @@ export function PlanSection({
                   </a>
                 )}
                 {p.personal && canAddPersonal && canEdit && (
-                  <ActionForm action={removePersonalEvent}>
+                  <ActionForm action={removePersonalEvent} confirmText={false}>
                     <input type="hidden" name="personId" value={person.id} />
                     <input type="hidden" name="pointEventId" value={p.id} />
                     <button className="text-xs text-red-600 hover:underline">הסר</button>

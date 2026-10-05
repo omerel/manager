@@ -6,6 +6,7 @@ import { KIND_LABEL, type OrgKindStr } from "@/lib/org-kinds";
 import { bySiblingOrder, frameworkLabel } from "@/lib/org-nesting";
 import { updateOrgNode, removeOrgNode, type OrgEditState } from "@/lib/org-actions";
 import { ConfirmDelete, plural } from "@/components/ConfirmDelete";
+import { OutcomeToast, CONFIRM_MS } from "@/components/OutcomeToast";
 
 export type HierarchyNode = {
   id: string;
@@ -27,17 +28,21 @@ const KINDS: OrgKindStr[] = ["CENTER", "DOMAIN", "SECTION", "TEAM", "COMMANDERS"
 function EditRow({
   node,
   parentOptions,
-  onDone,
+  onSaved,
+  onCancel,
 }: {
   node: HierarchyNode;
   parentOptions: ParentOption[];
-  onDone: () => void;
+  /** the server accepted the change — close the row AND confirm it */
+  onSaved: () => void;
+  /** the user backed out — close the row and say nothing */
+  onCancel: () => void;
 }) {
   const [state, formAction, pending] = useActionState<OrgEditState, FormData>(updateOrgNode, {});
 
   useEffect(() => {
-    if (state.savedAt) onDone(); // close only when the server accepted the change
-  }, [state.savedAt, onDone]);
+    if (state.savedAt) onSaved(); // close only when the server accepted the change
+  }, [state.savedAt, onSaved]);
 
   return (
     <div>
@@ -67,7 +72,7 @@ function EditRow({
         </button>
         <button
           type="button"
-          onClick={onDone}
+          onClick={onCancel}
           className="rounded-md border border-border px-3 py-1 text-xs hover:bg-stone-50"
         >
           ביטול
@@ -126,6 +131,15 @@ function ViewRow({
 export function HierarchyTree({ nodes }: { nodes: HierarchyNode[] }) {
   const [editing, setEditing] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<HierarchyNode | null>(null);
+  // Held HERE and not in EditRow: a successful save closes the row, so a toast
+  // living inside it would unmount together with the thing it confirms. The
+  // framework editor used to close silently, which reads as nothing happening.
+  const [saved, setSaved] = useState(0);
+  useEffect(() => {
+    if (!saved) return;
+    const t = setTimeout(() => setSaved(0), CONFIRM_MS);
+    return () => clearTimeout(t);
+  }, [saved]);
 
   const { byParent, descendantsOf } = useMemo(() => {
     const map = new Map<string | null, HierarchyNode[]>();
@@ -162,7 +176,12 @@ export function HierarchyTree({ nodes }: { nodes: HierarchyNode[] }) {
     <div key={node.id}>
       <div style={{ paddingInlineStart: `${depth * 20 + 8}px` }}>
         {editing === node.id ? (
-          <EditRow node={node} parentOptions={parentOptionsFor(node)} onDone={() => setEditing(null)} />
+          <EditRow
+            node={node}
+            parentOptions={parentOptionsFor(node)}
+            onSaved={() => { setEditing(null); setSaved(Date.now()); }}
+            onCancel={() => setEditing(null)}
+          />
         ) : (
           <ViewRow
             node={node}
@@ -184,6 +203,7 @@ export function HierarchyTree({ nodes }: { nodes: HierarchyNode[] }) {
 
   return (
     <>
+      {saved > 0 && <OutcomeToast kind="done" text="המסגרת עודכנה" onClose={() => setSaved(0)} />}
       <div className="rounded-xl border border-border/70 bg-card p-2 shadow-sm">
         {roots.length === 0 ? (
           <p className="px-2 py-2 text-sm text-muted">אין מסגרות עדיין. התחל ביצירת מרכז.</p>

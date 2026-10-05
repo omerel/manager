@@ -117,7 +117,7 @@ export default async function HierarchyPage() {
                   {f.options.map((o) => (
                     <li key={o} className="flex items-center gap-2 rounded-md border border-border px-2 py-1 text-sm">
                       <span>{o}</span>
-                      <ActionForm action={removeEnumOption}>
+                      <ActionForm action={removeEnumOption} confirmText={false}>
                         <input type="hidden" name="fieldId" value={f.id} />
                         <input type="hidden" name="option" value={o} />
                         <button className="text-xs text-red-600 hover:underline">הסר</button>

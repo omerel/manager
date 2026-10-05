@@ -129,7 +129,7 @@ function GuideControl({ planId, kind, id, name }: { planId: string; kind: string
             <Paperclip className="h-3 w-3" aria-hidden />
             {name.length > 18 ? `${name.slice(0, 17)}…` : name}
           </a>
-          <ActionForm action={removeItemGuide}>
+          <ActionForm action={removeItemGuide} confirmText={false}>
             <input type="hidden" name="planId" value={planId} />
             <input type="hidden" name="kind" value={kind} />
             <input type="hidden" name="id" value={id} />
@@ -155,7 +155,7 @@ function GuideControl({ planId, kind, id, name }: { planId: string; kind: string
 
 function DeleteButton({ planId, kind, id }: { planId: string; kind: string; id: string }) {
   return (
-    <ActionForm action={deletePlanItem}>
+    <ActionForm action={deletePlanItem} confirmText={false}>
       <input type="hidden" name="planId" value={planId} />
       <input type="hidden" name="kind" value={kind} />
       <input type="hidden" name="id" value={id} />
