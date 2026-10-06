@@ -3,6 +3,11 @@
 Walking skeleton of the career-management system (see `../openspec/changes/career-management-system/`).
 Stack: Next.js 16 (App Router) + TypeScript + Prisma 7 + PostgreSQL. UI is Hebrew / RTL.
 
+> This file describes **what the system does**. For step-by-step setup, the
+> failure modes worth knowing in advance, the verification suites and the
+> air-gap image build, see [`../README.md`](../README.md) — written for an agent
+> working in this repo.
+
 ## Prerequisites
 
 - Node 20+
