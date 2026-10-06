@@ -140,7 +140,7 @@ async function main() {
     const prog = await prisma.pointProgress.findFirst({ where: { personId: avi.id } });
     check("the completion landed on אבי's OWN plan copy", prog?.pointEventId === copy.pointEvents[0].id,
       prog ? "the right event id" : "NO PROGRESS ROW");
-    check("dated from the file", prog?.doneOn.toISOString().slice(0, 10) === "2024-03-05");
+    check("dated from the file", prog?.doneOn?.toISOString().slice(0, 10) === "2024-03-05");
     const beniCity = await prisma.personFieldValue.findFirst({ where: { personId: beni.id, fieldDefId: cityDef.id } });
     check("בני, unapproved, is untouched", !beniCity, beniCity?.value ?? "untouched");
 

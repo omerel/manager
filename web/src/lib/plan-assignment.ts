@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { isPointDone } from "@/lib/gaps";
 import { unrollRecurring } from "@/lib/plans";
 import { monthsSince } from "@/lib/waivers";
 
@@ -142,7 +143,7 @@ export async function buildAssignmentPreview(
     const doneByEvent = new Map(person.pointProgress.map((p) => [p.pointEventId, p]));
     for (const oldE of prev.pointEvents) {
       const prog = doneByEvent.get(oldE.id);
-      if (!prog) continue; // only completed milestones can be carried
+      if (!isPointDone(prog)) continue; // only COMPLETED milestones carry — a watch is not progress
       for (const newE of tpl.pointEvents) {
         if (newE.label === oldE.label) {
           candidates.push({

@@ -1,4 +1,6 @@
 import { addMonths } from "@/lib/dates";
+// the watch key space for one occurrence, defined where the diagram defines it
+import { occurrenceKey } from "@/lib/plan-diagram";
 import { unrollForPerson } from "@/lib/person-view";
 import {
   NO_WAIVERS,
@@ -18,7 +20,9 @@ export type PersonForGaps = {
    */
   placementDate: Date;
   endOfServiceDate: Date | null;
-  pointProgress: { pointEventId: string; doneOn: Date }[];
+  // `doneOn` is nullable: a row without one is an item under WATCH, not a
+  // completion. The engine routes this through `isPointDone`.
+  pointProgress: { pointEventId: string; doneOn: Date | null }[];
   metricReadings: { metricId: string; value: number; asOf: Date }[];
   evalEntries: { recurringEventId: string | null; occurrenceOffset: number | null }[];
   assignedPlan: {
@@ -56,7 +60,32 @@ export type GapItem = {
   dueDate: Date;
   level: GapLevel;
   detail: string;
+  /**
+   * The item this gap came from, in the `WatchMark.itemKey` key space — the
+   * point event's id, the metric's id, or `occurrenceKey` for one occurrence.
+   * Lets a consumer line a gap up with its mark without re-deriving the key.
+   */
+  key: string;
+  /**
+   * ACKNOWLEDGED — a known gap, not a closed one.
+   *
+   * A flag beside `level`, deliberately not a fifth `GapLevel`: every existing
+   * `Record<GapLevel, …>`, rollup and filter keeps working untouched, and a
+   * watched item goes on being counted as the gap it is. The display vocabulary
+   * grows; the measurement vocabulary does not.
+   */
+  watched: boolean;
+  /** how long it has been under watch, so an old watch is visible and not merely extant */
+  watchAgeDays: number | null;
 };
+
+/**
+ * Watches in force for one person, keyed by `itemKey` — what `liveWatchesFor`
+ * returns, narrowed to what the engine needs. An EMPTY map (the default) gives
+ * byte-for-byte the behaviour that existed before this feature.
+ */
+export type WatchContext = ReadonlyMap<string, { ageDays: number; live: boolean }>;
+export const NO_WATCHES: WatchContext = new Map();
 
 type Pointish = { label: string; offsetMonths: number; done: boolean; doneOn: Date | null };
 type Metricish = {
@@ -65,6 +94,30 @@ type Metricish = {
   checkpoints: { offsetMonths: number; target: number }[];
   value: number | null;
 };
+
+/**
+ * Has this point event been COMPLETED for this person?
+ *
+ * A `PointProgress` row used to mean exactly that, and every reader said so in
+ * its own way — `!!prog`, a `_count`, a set of ids. Then the row grew a second
+ * meaning: a row with no `doneOn` is an item under WATCH, carrying the note that
+ * explains why, and completing nothing.
+ *
+ * The danger is that none of those readers would have failed to compile. `!!prog`
+ * on a row whose `doneOn` is null is still true; a count is still a number. The
+ * question "is it done?" therefore has exactly one answer in this codebase, and
+ * `scripts/verify-gaps-under-watch.ts` sweeps for anyone asking it another way.
+ */
+export function isPointDone<T extends { doneOn: Date | null }>(
+  prog: T | null | undefined,
+): prog is T & { doneOn: Date } {
+  return prog?.doneOn != null;
+}
+
+/** The counterpart: a row that exists but completes nothing is a watch. */
+export function isPointWatched(prog: { doneOn: Date | null } | null | undefined): boolean {
+  return prog != null && prog.doneOn == null;
+}
 
 export function levelForPoint(p: { dueDate: Date; done: boolean; doneOn: Date | null }, today: Date): GapLevel {
   if (p.done) return "MET";
@@ -96,9 +149,20 @@ export function evalMetric(
 }
 
 /** All gaps for a person + a rolled-up person status (null = no assigned plan). */
-export function computePersonGaps(person: PersonForGaps, today: Date): { items: GapItem[]; status: GapLevel | null } {
+export function computePersonGaps(
+  person: PersonForGaps,
+  today: Date,
+  /** Optional: absent means nothing is marked, which is exactly today's behaviour. */
+  watches: WatchContext = NO_WATCHES,
+): { items: GapItem[]; status: GapLevel | null } {
   const plan = person.assignedPlan;
   if (!plan) return { items: [], status: null };
+  // The flag, never the level. `watchOf` decides only what is REPORTED about an
+  // item, never what the item counts as.
+  const watchOf = (key: string) => {
+    const w = watches.get(key);
+    return { key, watched: w?.live === true, watchAgeDays: w?.live ? w.ageDays : null };
+  };
 
   const rec = person.placementDate;
   // Items that predate the assignment were never required of this person;
@@ -114,7 +178,7 @@ export function computePersonGaps(person: PersonForGaps, today: Date): { items: 
     if (isPointWaived(ctx, e.id, e.offsetMonths)) continue;
     const prog = doneByEvent.get(e.id);
     const due = addMonths(rec, e.offsetMonths);
-    const pt: Pointish = { label: e.label, offsetMonths: e.offsetMonths, done: !!prog, doneOn: prog?.doneOn ?? null };
+    const pt: Pointish = { label: e.label, offsetMonths: e.offsetMonths, done: isPointDone(prog), doneOn: prog?.doneOn ?? null };
     const level = levelForPoint({ dueDate: due, done: pt.done, doneOn: pt.doneOn }, today);
     items.push({
       kind: "point",
@@ -122,6 +186,7 @@ export function computePersonGaps(person: PersonForGaps, today: Date): { items: 
       dueDate: due,
       level,
       detail: pt.done ? "הושלם" : GAP_META[level].label,
+      ...watchOf(e.id),
     });
   }
 
@@ -140,6 +205,7 @@ export function computePersonGaps(person: PersonForGaps, today: Date): { items: 
       dueDate: ev.boundDue ?? rec,
       level: ev.level,
       detail: ev.detail,
+      ...watchOf(m.id),
     });
   }
 
@@ -158,24 +224,60 @@ export function computePersonGaps(person: PersonForGaps, today: Date): { items: 
       (off) => !isOccurrenceWaived(ctx, r.id, off),
     );
     const filled = filledByEvent.get(r.id) ?? new Set<number>();
+    /**
+     * Does this occurrence count as done?
+     *
+     * Normally: an `EvalEntry` exists for it. But a MARK overrides the entry —
+     * the text was filed as a watch note, not as a summary, so the occurrence is
+     * still owed. Clearing the mark is the declaration that the interview
+     * happened; that makes completion an explicit act instead of an inference,
+     * and ONLY for an occurrence someone marked.
+     *
+     * `watches.has` deliberately, not `.live`: an expired mark no longer reports
+     * as watched, and still must not let the entry close the gap. Expiry returns
+     * an occurrence to red, never to green.
+     */
+    const isFilled = (o: number) => filled.has(o) && !watches.has(occurrenceKey(r.id, o));
     // A past-due occurrence with no filed content → 🔴.
-    const overdue = offsets.filter((o) => !filled.has(o) && addMonths(rec, o).getTime() < today.getTime());
+    const overdue = offsets.filter((o) => !isFilled(o) && addMonths(rec, o).getTime() < today.getTime());
     if (overdue.length > 0) {
+      // The item stands for several occurrences; it reads as watched only when
+      // EVERY overdue one is, so one acknowledged month cannot silence the rest.
+      const last = overdue[overdue.length - 1];
+      const allWatched = overdue.every((o) => watches.get(occurrenceKey(r.id, o))?.live === true);
       items.push({
         kind: "recurring",
         label: r.label,
-        dueDate: addMonths(rec, overdue[overdue.length - 1]),
+        dueDate: addMonths(rec, last),
         level: "OVERDUE",
         detail: `${overdue.length} מופעים טרם מולאו`,
+        key: occurrenceKey(r.id, last),
+        watched: allWatched,
+        watchAgeDays: allWatched ? (watches.get(occurrenceKey(r.id, last))?.ageDays ?? null) : null,
       });
     } else {
-      const next = offsets.find((o) => !filled.has(o) && addMonths(rec, o).getTime() >= today.getTime());
+      const next = offsets.find((o) => !isFilled(o) && addMonths(rec, o).getTime() >= today.getTime());
       if (next != null) {
         const due = addMonths(rec, next);
         const level = dueLevel(due, today);
-        items.push({ kind: "recurring", label: r.label, dueDate: due, level, detail: GAP_META[level].label });
+        items.push({
+          kind: "recurring",
+          label: r.label,
+          dueDate: due,
+          level,
+          detail: GAP_META[level].label,
+          ...watchOf(occurrenceKey(r.id, next)),
+        });
       } else if (offsets.length > 0) {
-        items.push({ kind: "recurring", label: r.label, dueDate: addMonths(rec, offsets[offsets.length - 1]), level: "MET", detail: "כל המופעים מולאו" });
+        const last = offsets[offsets.length - 1];
+        items.push({
+          kind: "recurring",
+          label: r.label,
+          dueDate: addMonths(rec, last),
+          level: "MET",
+          detail: "כל המופעים מולאו",
+          ...watchOf(occurrenceKey(r.id, last)),
+        });
       }
     }
   }

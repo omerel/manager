@@ -5,7 +5,8 @@ import { prisma } from "@/lib/prisma";
 import { visiblePeopleWhere } from "@/lib/people";
 import type { Visibility } from "@/lib/access";
 import type { FieldType } from "@/generated/prisma/client";
-import { computePersonGaps, GAP_META } from "@/lib/gaps";
+import { computePersonGaps, GAP_META, NO_WATCHES, isPointDone, isPointWatched } from "@/lib/gaps";
+import { watchContextForMany } from "@/lib/watch";
 import { KIND_LABEL } from "@/lib/org";
 import { STATUS_LABEL } from "@/lib/people";
 import { addMonths, formatIsraeliDate, todayMarker, parseIsraeliDate } from "@/lib/dates";
@@ -134,8 +135,15 @@ export async function exportScopedSnapshot(visibility: Visibility, today: Date, 
   }
 
   // People with plan, progress, gaps, and evaluation text
+  const watchesByPerson = await watchContextForMany(people.map((p) => p.id), today);
   const peopleOut = people.map((p) => {
-    const gaps = computePersonGaps(p, today);
+    // The snapshot gets the SAME context the card does. `design.md` listed the
+    // snapshot as untouched on the grounds that levels do not change — true for
+    // every item nobody marked, but NOT for a recurring occurrence whose mark
+    // overrides its entry. Left out, the agent would report green where the card
+    // reports red, for the same person on the same day.
+    const watches = watchesByPerson.get(p.id) ?? NO_WATCHES;
+    const gaps = computePersonGaps(p, today, watches);
     return {
       שם: p.fullName,
       מסגרת: pathOf(p.teamId),
@@ -176,8 +184,15 @@ export async function exportScopedSnapshot(visibility: Visibility, today: Date, 
               return {
                 אירוע: e.label,
                 תאריך_יעד: addMonths(p.placementDate, e.offsetMonths).toISOString().slice(0, 10),
-                הושלם: !!prog,
-                תאריך_ביצוע: prog?.doneOn.toISOString().slice(0, 10) ?? null,
+                הושלם: isPointDone(prog),
+                // `prog.doneOn` is nullable now: a watch row would have thrown here
+                תאריך_ביצוע: prog?.doneOn?.toISOString().slice(0, 10) ?? null,
+                // The live MARK, not `isPointWatched(prog)`. The row having no
+                // date says it completes nothing — still true after the mark
+                // expires, which is a different question from "is this
+                // acknowledged". An acknowledgement that has lapsed must read as
+                // a plain gap again.
+                במעקב: watches.get(e.id)?.live === true,
                 הערה: prog?.note ?? null,
               };
             }),
@@ -203,6 +218,11 @@ export async function exportScopedSnapshot(visibility: Visibility, today: Date, 
         מצב: GAP_META[it.level].label,
         תאריך_יעד: it.dueDate.toISOString().slice(0, 10),
         פירוט: it.detail,
+        // ACKNOWLEDGED, not closed: `מצב` is unchanged and still counts as the
+        // gap it is. Without this the agent would report a gap the commander
+        // marked last week as though it were news.
+        במעקב: it.watched,
+        ימים_במעקב: it.watchAgeDays,
       })),
       מצב_כללי: gaps.status ? GAP_META[gaps.status].label : "אין תכנית",
       חוות_דעת_ואירועים: p.evalEntries.map((e) => ({

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CircleDot, Map as MapIcon, Paperclip, Star, TrendingUp } from "lucide-react";
+import { CircleDot, Eye, Map as MapIcon, Paperclip, Star, TrendingUp } from "lucide-react";
 import { getFieldDefs, formatFieldValue } from "@/lib/person-schema";
 import { STATUS_LABEL } from "@/lib/people";
 import { ageFromBirthDate } from "@/lib/person-name";
@@ -10,6 +10,7 @@ import { PersonFormFields } from "@/components/PersonFormFields";
 import { MetricCurve } from "@/components/MetricCurve";
 import { PlanRowActions } from "@/components/PlanRowActions";
 import { buildPersonTimeline, type PersonFull } from "@/lib/person-view";
+import type { WatchContext } from "@/lib/gaps";
 import { levelForPoint, evalMetric, GAP_META, type GapLevel } from "@/lib/gaps";
 import {
   updatePerson,
@@ -17,6 +18,8 @@ import {
   setPointDone,
   clearPointDone,
   setMetricReading,
+  setWatch,
+  clearWatch,
   addPersonalEvent,
   removePersonalEvent,
 } from "@/lib/person-actions";
@@ -114,6 +117,7 @@ export function PlanSection({
   canEdit,
   canAddPersonal,
   today,
+  watches,
 }: {
   person: PersonFull;
   templates: { id: string; name: string }[];
@@ -122,6 +126,8 @@ export function PlanSection({
   /** establishment authority: may add or remove this person's own events */
   canAddPersonal: boolean;
   today: Date;
+  /** marks this person carries, keyed as `WatchMark.itemKey` — expired ones included */
+  watches: WatchContext;
 }) {
 
   if (!person.assignedPlan) {
@@ -230,20 +236,37 @@ export function PlanSection({
                   </div>
                   {p.note && <span className="text-xs text-muted">📝 {p.note}</span>}
                 </div>
-              ) : canEdit ? (
-                <ActionForm action={setPointDone} className="flex flex-wrap items-center gap-1">
-                  <input type="hidden" name="personId" value={person.id} />
-                  <input type="hidden" name="pointEventId" value={p.id} />
-                  <DateField name="doneOn" defaultDate={today} className="w-32 rounded border border-border px-2 py-1 text-xs text-end" />
-                  <input
-                    name="note"
-                    placeholder="הערה (למשל: איזה מופע)"
-                    className="w-44 rounded border border-border px-2 py-1 text-xs"
-                  />
-                  <button className="rounded bg-brand-600 px-2 py-1 text-xs text-white hover:bg-brand-700">סמן כהושלם</button>
-                </ActionForm>
               ) : (
-                <span className="text-muted">⬜ טרם</span>
+                <div className="flex flex-col items-end gap-1">
+                  {canEdit ? (
+                    <ActionForm action={setPointDone} className="flex flex-wrap items-center gap-1">
+                      <input type="hidden" name="personId" value={person.id} />
+                      <input type="hidden" name="pointEventId" value={p.id} />
+                      <DateField name="doneOn" defaultDate={today} className="w-32 rounded border border-border px-2 py-1 text-xs text-end" />
+                      <input
+                        name="note"
+                        placeholder="הערה (למשל: איזה מופע)"
+                        className="w-44 rounded border border-border px-2 py-1 text-xs"
+                      />
+                      <button className="rounded bg-brand-600 px-2 py-1 text-xs text-white hover:bg-brand-700">סמן כהושלם</button>
+                    </ActionForm>
+                  ) : (
+                    <span className="text-muted">⬜ טרם</span>
+                  )}
+                  {/* the gap is still open: it can be acknowledged. Not offered on a
+                      waived item — nothing was ever asked of this person there. */}
+                  {!p.waived && (
+                    <WatchControls
+                      personId={person.id}
+                      kind="point"
+                      itemId={p.id}
+                      watch={watches.get(p.id)}
+                      canEdit={canEdit}
+                      notePlaceholder="מה ידוע? (הערת מעקב)"
+                    />
+                  )}
+                  {watches.get(p.id)?.live && p.note && <span className="text-xs text-muted">📝 {p.note}</span>}
+                </div>
               )}
             </li>
           ))}
@@ -314,6 +337,23 @@ export function PlanSection({
                 today={today}
                 unit={m.unit}
               />
+              {/* a metric with no live checkpoint was never asked of this person */}
+              {live.length > 0 && (
+                <div className="mt-2">
+                  <WatchControls
+                    personId={person.id}
+                    kind="metric"
+                    itemId={m.id}
+                    watch={watches.get(m.id)}
+                    canEdit={canEdit}
+                    notePlaceholder="מה ידוע? (הערת מעקב)"
+                    // `MetricReading.value` is required, so there is no truthful
+                    // row to hang a note on until a value exists — writing 0
+                    // would turn «טרם נרשם» into «0 מתוך היעד».
+                    noteDisabledReason={m.value === null ? "כדי לרשום הערה למדד יש לרשום קודם ערך מצטבר" : undefined}
+                  />
+                </div>
+              )}
               {canEdit && (
                 <ActionForm action={setMetricReading} className="mt-2 flex flex-wrap items-center gap-1">
                   <input type="hidden" name="personId" value={person.id} />
@@ -350,12 +390,83 @@ export function PlanSection({
   );
 }
 
+/**
+ * «במעקב» — one control for all three item kinds.
+ *
+ * Beside «הושלם» and deliberately not instead of it: the two say different
+ * things. Completing closes a gap; marking says the gap is KNOWN and still open,
+ * and the counts do not move. The wording carries that — «פער במעקב», never
+ * «במעקב» alone — because the one wrong conclusion available here is that this
+ * behaves like an exemption.
+ *
+ * `itemId` is the key `WatchMark.itemKey` holds: a bare id for a point or a
+ * metric, `eventId:offset` for one occurrence.
+ */
+export function WatchControls({
+  personId,
+  kind,
+  itemId,
+  watch,
+  canEdit,
+  notePlaceholder,
+  noteDisabledReason,
+}: {
+  personId: string;
+  kind: "point" | "metric" | "occurrence";
+  itemId: string;
+  watch: { ageDays: number; live: boolean } | undefined;
+  canEdit: boolean;
+  notePlaceholder: string;
+  /** when set, a note cannot be filed here and this says why */
+  noteDisabledReason?: string;
+}) {
+  if (watch?.live) {
+    return (
+      <span className="flex flex-wrap items-center gap-2">
+        <span
+          className="flex items-center gap-1 rounded bg-orange-100 px-1.5 py-0.5 text-xs text-orange-900"
+          title="פער ידוע שסומן במעקב — ממשיך להיספר כפיגור לכל דבר"
+        >
+          <Eye className="h-3 w-3" aria-hidden />
+          פער במעקב · {watch.ageDays === 0 ? "היום" : `${watch.ageDays} ימים`}
+        </span>
+        {canEdit && (
+          <ActionForm action={clearWatch}>
+            <input type="hidden" name="personId" value={personId} />
+            <input type="hidden" name="kind" value={kind} />
+            <input type="hidden" name="itemId" value={itemId} />
+            <button className="text-xs text-orange-700 hover:underline">הסר מעקב</button>
+          </ActionForm>
+        )}
+      </span>
+    );
+  }
+  if (!canEdit) return null;
+  return (
+    <ActionForm action={setWatch} className="flex flex-wrap items-center gap-1">
+      <input type="hidden" name="personId" value={personId} />
+      <input type="hidden" name="kind" value={kind} />
+      <input type="hidden" name="itemId" value={itemId} />
+      {noteDisabledReason ? (
+        <span className="text-xs text-muted" title={noteDisabledReason}>
+          (ללא הערה)
+        </span>
+      ) : (
+        <input name="note" placeholder={notePlaceholder} className="w-44 rounded border border-border px-2 py-1 text-xs" />
+      )}
+      <button className="rounded border border-orange-400 px-2 py-1 text-xs text-orange-800 hover:bg-orange-50">
+        סמן במעקב
+      </button>
+    </ActionForm>
+  );
+}
+
 export function GapBadge({ level }: { level: GapLevel }) {
   const meta = GAP_META[level];
   return <span className={`rounded px-1.5 py-0.5 text-xs ${meta.badge}`}>{meta.icon} {meta.label}</span>;
 }
 
-export function GapBanner({ status, items }: { status: GapLevel | null; items: { level: GapLevel }[] }) {
+export function GapBanner({ status, items }: { status: GapLevel | null; items: { level: GapLevel; watched?: boolean }[] }) {
   if (status === null) {
     return (
       <div className="rounded-xl border border-border/70 bg-card shadow-sm px-4 py-3 text-sm text-muted">
@@ -365,13 +476,15 @@ export function GapBanner({ status, items }: { status: GapLevel | null; items: {
   }
   const overdue = items.filter((i) => i.level === "OVERDUE").length;
   const approaching = items.filter((i) => i.level === "APPROACHING").length;
+  // a SUBSET of `overdue`, phrased as «מתוכם» so it cannot be read as a deduction
+  const watched = items.filter((i) => i.level === "OVERDUE" && i.watched).length;
   const meta = GAP_META[status];
   return (
     <div className={`flex flex-wrap items-center gap-3 rounded-lg px-4 py-3 ${meta.badge}`}>
       <span className="text-lg">{meta.icon}</span>
       <span className="font-semibold">מצב פערים: {meta.label}</span>
       <span className="text-sm">
-        🔴 {overdue} בפיגור · 🟡 {approaching} מתקרבים
+        🔴 {overdue} בפיגור{watched > 0 && <> (מתוכם 👁 {watched} במעקב)</>} · 🟡 {approaching} מתקרבים
       </span>
     </div>
   );

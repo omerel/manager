@@ -74,7 +74,7 @@ type EventCard = {
  * that lost it — it mapped FUTURE onto MET, so an item nobody had reached yet
  * was painted in the colour of an item already done.
  */
-export type VectorStatus = "OVERDUE" | "APPROACHING" | "MET" | "NOT_DUE" | "WAIVED";
+export type VectorStatus = "OVERDUE" | "APPROACHING" | "MET" | "NOT_DUE" | "WAIVED" | "WATCHED";
 
 /**
  * How one drawn occurrence of a recurring event is addressed in the status map.
@@ -104,6 +104,10 @@ export const VECTOR_LEGEND: { status: VectorStatus; label: string }[] = [
   { status: "MET", label: "תקין" },
   { status: "NOT_DUE", label: "טרם הגיע" },
   { status: "WAIVED", label: "פטור" },
+  // «פער במעקב» and not «במעקב» alone: the word פער has to stay in the label,
+  // because the one thing a reader must not conclude is that this is an
+  // exemption. A waiver leaves the count; a watch does not.
+  { status: "WATCHED", label: "פער במעקב" },
 ];
 
 /**
@@ -122,6 +126,11 @@ export const STATUS_STYLE: Record<VectorStatus, { bg: string; accent: string; bo
   MET: { bg: "#ecfdf5", accent: "#059669", border: "#6ee7b7" },
   NOT_DUE: { bg: "#f8fafc", accent: "#64748b", border: "#94a3b8" },
   WAIVED: { bg: "#fafaf9", accent: "#a8a29e", border: "#e7e5e4" },
+  // Orange, as asked. The collision to worry about is NOT red — it is
+  // APPROACHING's amber (#d97706), an adjacent hue. So colour is not left to
+  // carry this alone: a watched card also gets the eye glyph below, which reads
+  // whether or not the viewer is comparing two oranges side by side.
+  WATCHED: { bg: "#fff7ed", accent: "#ea580c", border: "#fb923c" },
 };
 
 /**
@@ -140,10 +149,25 @@ const ANIMATION_CSS = `
     .vs-approach .vs-ring { animation: vsGlow 3s ease-in-out infinite; }
   }
   .vs-waived { opacity: .55; }
+  /* No halo for WATCHED, deliberately: movement is for what asks to be acted on,
+     and an acknowledged gap has already been acted on once. It stays orange and
+     stays counted. */
   /* print captures one arbitrary frame of a loop, so the halo would land at a
      random opacity in the PDF. The colour carries the meaning on paper. */
   @media print { .vs-ring { display: none; } }
 `;
+
+/**
+ * The mark that says "known, and still owed" — an eye, drawn rather than
+ * coloured so it reads in greyscale and beside the amber it sits next to.
+ */
+function watchEye(cx: number, cy: number): string {
+  const c = STATUS_STYLE.WATCHED.accent;
+  return (
+    `<g><ellipse cx="${cx}" cy="${cy}" rx="9" ry="6" fill="white" stroke="${c}" stroke-width="2"/>` +
+    `<circle cx="${cx}" cy="${cy}" r="2.6" fill="${c}"/></g>`
+  );
+}
 
 /** The mark that says "this one is yours" — a shape, so it survives any palette. */
 function personalStar(cx: number, cy: number): string {
@@ -412,7 +436,13 @@ function renderDiagram(
       card.status === "OVERDUE" || card.status === "APPROACHING"
         ? `<circle class="vs-ring" cx="${discX}" cy="${cardCy}" r="16" fill="none" stroke="${card.accent ?? C.action}" stroke-width="3" opacity="0"/>`
         : "",
-      iconDisc(card.kind, discX, cardCy, card.accent),
+      // A SHAPE for "acknowledged", so the state survives a reader who cannot
+      // separate orange from amber — and survives a greyscale print. Appended to
+      // the disc's own string rather than added as a slot: the parts are joined
+      // with newlines, so a new slot would add a blank line per card and drift
+      // the status-less golden by exactly the number of cards drawn.
+      iconDisc(card.kind, discX, cardCy, card.accent) +
+        (card.status === "WATCHED" ? watchEye(side === "R" ? cardX - 15 : cardX + CARD_W + 15, cardCy) : ""),
       // a personal event says so by its SHAPE, so it reads even in one colour.
       // Placed on the card's OUTER edge — away from the spine — because the
       // inside is the text block's, and a star there lands under a long label.

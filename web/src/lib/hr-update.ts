@@ -255,7 +255,8 @@ type LoadedPerson = {
   placementDate: Date;
   endOfServiceDate: Date | null;
   fieldValues: { fieldDefId: string; value: string }[];
-  pointProgress: { pointEventId: string; doneOn: Date }[];
+  // nullable: a row with no date is an item under watch, not a completion
+  pointProgress: { pointEventId: string; doneOn: Date | null }[];
   metricReadings: { metricId: string; value: number }[];
   assignedPlan: { pointEvents: { id: string; label: string }[]; cumulativeMetrics: { id: string; name: string }[] } | null;
 };

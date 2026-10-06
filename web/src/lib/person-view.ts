@@ -8,7 +8,7 @@ import {
   type WaiverOverride,
 } from "@/lib/waivers";
 import { addMonths, monthsBetween } from "@/lib/dates";
-import { dueLevel, evalMetric, levelForPoint } from "@/lib/gaps";
+import { dueLevel, evalMetric, isPointDone, levelForPoint, NO_WATCHES, type WatchContext } from "@/lib/gaps";
 import type { GapLevel } from "@/lib/gap-meta";
 // the status map is the diagram's input, so its key format is defined there and
 // read here — the entry-per-slot map below keys by the same thing
@@ -174,7 +174,7 @@ export function buildPersonTimeline(person: PersonFull) {
       label: e.label,
       offsetMonths: e.offsetMonths,
       dueDate: addMonths(rec, e.offsetMonths),
-      done: !!prog,
+      done: isPointDone(prog),
       doneOn: prog?.doneOn ?? null,
       note: prog?.note ?? null,
       waived: isPointWaived(ctx, e.id, e.offsetMonths),
@@ -264,6 +264,8 @@ export function buildVectorView(
   timeline: ReturnType<typeof buildPersonTimeline>,
   placementDate: Date,
   today: Date,
+  /** absent means nothing is marked — exactly the drawing that existed before */
+  watches: WatchContext = NO_WATCHES,
 ): { status: Map<string, VectorStatus>; occurrences: Map<string, number[]> } {
   const occurrences = new Map<string, number[]>();
   for (const r of timeline.recurrences) {
@@ -271,13 +273,14 @@ export function buildVectorView(
     list.push(r.offsetMonths);
     occurrences.set(r.recurringEventId, list);
   }
-  return { status: buildVectorStatus(timeline, placementDate, today), occurrences };
+  return { status: buildVectorStatus(timeline, placementDate, today, watches), occurrences };
 }
 
 export function buildVectorStatus(
   timeline: ReturnType<typeof buildPersonTimeline>,
   placementDate: Date,
   today: Date,
+  watches: WatchContext = NO_WATCHES,
 ): Map<string, VectorStatus> {
   const out = new Map<string, VectorStatus>();
   // one-to-one: FUTURE used to be crushed onto MET, which told the viewer that
@@ -285,8 +288,25 @@ export function buildVectorStatus(
   const ofLevel = (l: GapLevel): VectorStatus =>
     l === "OVERDUE" ? "OVERDUE" : l === "APPROACHING" ? "APPROACHING" : l === "FUTURE" ? "NOT_DUE" : "MET";
 
+  /**
+   * A live mark repaints a GAP, and only a gap.
+   *
+   * `MET` and `NOT_DUE` are left alone: there is nothing to acknowledge about a
+   * finished item or one nobody has reached, and repainting those would make the
+   * mark look like a state of its own rather than a note on a shortfall.
+   * `WAIVED` outranks it too — an item never asked of this person is not a gap
+   * someone could know about.
+   */
+  const marked = (key: string, s: VectorStatus): VectorStatus =>
+    (s === "OVERDUE" || s === "APPROACHING") && watches.get(key)?.live ? "WATCHED" : s;
+
   for (const p of timeline.points) {
-    out.set(p.id, p.waived ? "WAIVED" : ofLevel(levelForPoint({ dueDate: p.dueDate, done: p.done, doneOn: p.doneOn }, today)));
+    out.set(
+      p.id,
+      p.waived
+        ? "WAIVED"
+        : marked(p.id, ofLevel(levelForPoint({ dueDate: p.dueDate, done: p.done, doneOn: p.doneOn }, today))),
+    );
   }
 
   for (const m of timeline.metrics) {
@@ -302,20 +322,25 @@ export function buildVectorStatus(
           ).level,
         )
       : "MET";
-    for (const c of m.checkpoints) out.set(c.id, c.waived ? "WAIVED" : level);
+    for (const c of m.checkpoints) out.set(c.id, c.waived ? "WAIVED" : marked(m.id, level));
   }
 
   for (const r of timeline.recurrences) {
     // filled BEFORE its date is still met, never "not due yet": the person did
     // the thing, and the drawing should say so rather than hold it as pending
+    const key = occurrenceKey(r.recurringEventId, r.offsetMonths);
+    // `watches.has`, not `.live`: a mark overrides the entry, and an EXPIRED mark
+    // still does — otherwise the occurrence would turn green a month after
+    // someone acknowledged it, which is the one direction expiry must never go.
+    const filled = !!r.filledByEntryId && !watches.has(key);
     const status: VectorStatus = r.waived
       ? "WAIVED"
-      : r.filledByEntryId
+      : filled
         ? "MET"
         : r.dueDate.getTime() < today.getTime()
           ? "OVERDUE"
           : ofLevel(dueLevel(r.dueDate, today));
-    out.set(occurrenceKey(r.recurringEventId, r.offsetMonths), status);
+    out.set(key, marked(key, status));
   }
 
   return out;

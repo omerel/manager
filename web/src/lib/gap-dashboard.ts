@@ -1,10 +1,15 @@
 import type { AccessLevel, OrgKind } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import type { Visibility } from "@/lib/access";
-import { computePersonGaps, type GapLevel } from "@/lib/gaps";
-import { UNASSIGNED_NODE_ID, UNASSIGNED_NODE_NAME } from "@/lib/gap-meta";
+import { computePersonGaps, NO_WATCHES, type GapLevel } from "@/lib/gaps";
+import { watchContextForMany } from "@/lib/watch";
+import { UNASSIGNED_NODE_ID, UNASSIGNED_NODE_NAME, type GapKind } from "@/lib/gap-meta";
 import { bySiblingOrder } from "@/lib/org-nesting";
 export { UNASSIGNED_NODE_ID };
+// The filter vocabulary lives in the CLIENT-SAFE module: the filter control is a
+// client component, and importing a value from here would drag prisma into its
+// bundle. Re-exported so existing importers are unaffected.
+export { GAP_KIND_LABEL, GAP_KIND_ORDER, parseGapKind, type GapKind } from "@/lib/gap-meta";
 
 const personGapInclude = {
   pointProgress: true,
@@ -21,7 +26,13 @@ const personGapInclude = {
   },
 } as const;
 
-export type GapPerson = { id: string; name: string; status: GapLevel | null };
+/**
+ * `status` is the person's worst level. `hasUnwatchedOverdue` cannot be derived
+ * from it: a person in OVERDUE may have every overdue item acknowledged, or
+ * none, and the filter «בפיגור ולא במעקב» is exactly that distinction. It is a
+ * question about ITEMS, so it has to be answered where the items are.
+ */
+export type GapPerson = { id: string; name: string; status: GapLevel | null; hasUnwatchedOverdue: boolean };
 
 export type GapTreeNode = {
   id: string;
@@ -35,6 +46,16 @@ export type GapTreeNode = {
   yellow: number; // people approaching (worst status)
   overdueEvents: number; // count of overdue gap items
   approachingEvents: number; // count of approaching gap items
+  // A SUBSET of overdueEvents, not a deduction from it: these gaps are
+  // acknowledged, not closed. If this number ever had to be subtracted anywhere,
+  // a watch would have become an exemption.
+  watchedEvents: number;
+  /**
+   * Age in days of the OLDEST watch under this node, or null if there is none.
+   * A count alone makes a watch look like progress; «12 במעקב, הישן שבהם 27 ימים»
+   * makes a watch that has quietly become a parking space visible from the top.
+   */
+  oldestWatchDays: number | null;
   people: GapPerson[]; // only populated on TEAM nodes
   children: GapTreeNode[];
 };
@@ -54,18 +75,35 @@ export async function buildGapTree(visibility: Visibility, today: Date): Promise
   const peopleByTeam = new Map<string, GapPerson[]>();
   const overdueEventsByTeam = new Map<string, number>();
   const approachingEventsByTeam = new Map<string, number>();
+  // «מתוכם במעקב» — a SUBSET of the overdue count above, never a deduction from
+  // it. One query for every visible person's marks; one per person would be one
+  // query per person.
+  const watchedEventsByTeam = new Map<string, number>();
+  const oldestWatchByTeam = new Map<string, number>();
+  const watchesByPerson = await watchContextForMany(people.map((p) => p.id), today);
 
   for (const p of people) {
     if (!p.teamId) continue; // unassigned people belong to no framework
-    const { status, items } = computePersonGaps(p, today);
+    const { status, items } = computePersonGaps(p, today, watchesByPerson.get(p.id) ?? NO_WATCHES);
     const arr = peopleByTeam.get(p.teamId) ?? [];
-    arr.push({ id: p.id, name: p.fullName, status });
+    arr.push({
+      id: p.id,
+      name: p.fullName,
+      status,
+      hasUnwatchedOverdue: items.some((i) => i.level === "OVERDUE" && !i.watched),
+    });
     peopleByTeam.set(p.teamId, arr);
 
     const overdue = items.filter((i) => i.level === "OVERDUE").length;
     const approaching = items.filter((i) => i.level === "APPROACHING").length;
+    // counted among the overdue, and ALSO here — the two numbers overlap on purpose
+    const watchedItems = items.filter((i) => i.level === "OVERDUE" && i.watched);
+    const watched = watchedItems.length;
+    const oldest = watchedItems.reduce((m, i) => Math.max(m, i.watchAgeDays ?? 0), -1);
     overdueEventsByTeam.set(p.teamId, (overdueEventsByTeam.get(p.teamId) ?? 0) + overdue);
     approachingEventsByTeam.set(p.teamId, (approachingEventsByTeam.get(p.teamId) ?? 0) + approaching);
+    watchedEventsByTeam.set(p.teamId, (watchedEventsByTeam.get(p.teamId) ?? 0) + watched);
+    if (oldest >= 0) oldestWatchByTeam.set(p.teamId, Math.max(oldestWatchByTeam.get(p.teamId) ?? 0, oldest));
   }
 
   const childrenOf = new Map<string, typeof visible>();
@@ -86,6 +124,11 @@ export async function buildGapTree(visibility: Visibility, today: Date): Promise
     const yellow = own.filter((p) => p.status === "APPROACHING").length + children.reduce((s, c) => s + c.yellow, 0);
     const overdueEvents = (overdueEventsByTeam.get(id) ?? 0) + children.reduce((s, c) => s + c.overdueEvents, 0);
     const approachingEvents = (approachingEventsByTeam.get(id) ?? 0) + children.reduce((s, c) => s + c.approachingEvents, 0);
+    const watchedEvents = (watchedEventsByTeam.get(id) ?? 0) + children.reduce((s, c) => s + c.watchedEvents, 0);
+    const ages = [oldestWatchByTeam.get(id), ...children.map((c) => c.oldestWatchDays)].filter(
+      (n): n is number => n != null,
+    );
+    const oldestWatchDays = ages.length ? Math.max(...ages) : null;
     return {
       id: node.id,
       name: node.name,
@@ -97,6 +140,8 @@ export async function buildGapTree(visibility: Visibility, today: Date): Promise
       yellow,
       overdueEvents,
       approachingEvents,
+      watchedEvents,
+      oldestWatchDays,
       people: own.sort((a, b) => a.name.localeCompare(b.name, "he")),
       children,
     };
@@ -115,15 +160,28 @@ export async function buildGapTree(visibility: Visibility, today: Date): Promise
   const centerRoot = roots.find((r) => r.kind === "CENTER" && r.id !== UNASSIGNED_NODE_ID);
   if (centerRoot) {
     const unassigned = await prisma.person.findMany({ where: { teamId: null }, include: personGapInclude });
+    const unassignedWatches = await watchContextForMany(unassigned.map((p) => p.id), today);
     const people: GapPerson[] = [];
     let overdueEvents = 0;
     let approachingEvents = 0;
+    let watchedEvents = 0;
+    let oldestWatchDays: number | null = null;
     for (const p of unassigned) {
       // gap-computed like anyone else: losing a framework must not hide a gap
-      const { status, items } = computePersonGaps(p, today);
-      people.push({ id: p.id, name: p.fullName, status });
+      const { status, items } = computePersonGaps(p, today, unassignedWatches.get(p.id) ?? NO_WATCHES);
+      people.push({
+        id: p.id,
+        name: p.fullName,
+        status,
+        hasUnwatchedOverdue: items.some((i) => i.level === "OVERDUE" && !i.watched),
+      });
       overdueEvents += items.filter((i) => i.level === "OVERDUE").length;
       approachingEvents += items.filter((i) => i.level === "APPROACHING").length;
+      const watchedItems = items.filter((i) => i.level === "OVERDUE" && i.watched);
+      watchedEvents += watchedItems.length;
+      for (const i of watchedItems) {
+        oldestWatchDays = Math.max(oldestWatchDays ?? 0, i.watchAgeDays ?? 0);
+      }
     }
     const node: GapTreeNode = {
       id: UNASSIGNED_NODE_ID,
@@ -136,6 +194,8 @@ export async function buildGapTree(visibility: Visibility, today: Date): Promise
       yellow: people.filter((p) => p.status === "APPROACHING").length,
       overdueEvents,
       approachingEvents,
+      watchedEvents,
+      oldestWatchDays,
       people: people.sort((a, b) => a.name.localeCompare(b.name, "he")),
       children: [],
     };
@@ -145,6 +205,10 @@ export async function buildGapTree(visibility: Visibility, today: Date): Promise
     centerRoot.yellow += node.yellow;
     centerRoot.overdueEvents += node.overdueEvents;
     centerRoot.approachingEvents += node.approachingEvents;
+    centerRoot.watchedEvents += node.watchedEvents;
+    if (node.oldestWatchDays != null) {
+      centerRoot.oldestWatchDays = Math.max(centerRoot.oldestWatchDays ?? 0, node.oldestWatchDays);
+    }
   }
 
   return roots;
@@ -163,29 +227,28 @@ export async function buildGapTree(visibility: Visibility, today: Date): Promise
  * approaching" would silently drop compliant people out of the tree in the
  * DEFAULT state, which is a loss nobody asked for.
  */
-export type GapKind = "all" | "overdue" | "approaching";
-
-export function parseGapKind(raw: string | undefined): GapKind {
-  return raw === "overdue" || raw === "approaching" ? raw : "all";
-}
-
-export const GAP_KIND_LABEL: Record<GapKind, string> = {
-  all: "הכל",
-  overdue: "אי-עמידה",
-  approaching: "מתקרב",
-};
-
-/** Does this person belong in a list of PROBLEMS under this kind? Green people never do. */
-export function isAttention(status: GapLevel | null, kind: GapKind): boolean {
+/**
+ * Does this person belong in a list of PROBLEMS under this kind? Green people
+ * never do.
+ *
+ * Takes the person rather than their level: «אי-עמידה שאינה במעקב» is a question
+ * about items, and a level cannot answer it.
+ */
+export function isAttention(person: { status: GapLevel | null; hasUnwatchedOverdue: boolean }, kind: GapKind): boolean {
+  const { status } = person;
   if (status !== "OVERDUE" && status !== "APPROACHING") return false;
   if (kind === "all") return true;
-  return kind === "overdue" ? status === "OVERDUE" : status === "APPROACHING";
+  if (kind === "approaching") return status === "APPROACHING";
+  if (kind === "overdue") return status === "OVERDUE";
+  // A narrowing of `overdue`, never a separate state: someone whose every
+  // overdue item is acknowledged drops out here and stays red everywhere else.
+  return status === "OVERDUE" && person.hasUnwatchedOverdue;
 }
 
 /** Does this person belong in the TREE's list of a team's people under this kind? */
-export function belongsInTree(status: GapLevel | null, kind: GapKind): boolean {
+export function belongsInTree(person: { status: GapLevel | null; hasUnwatchedOverdue: boolean }, kind: GapKind): boolean {
   if (kind === "all") return true; // the tree is a roster, not a problem list
-  return isAttention(status, kind);
+  return isAttention(person, kind);
 }
 
 /** Depth-first search for a node in an already-built forest. */
@@ -215,7 +278,7 @@ export function attentionList(root: GapTreeNode, kind: GapKind): { id: string; n
   const out: { id: string; name: string; path: string; status: GapLevel }[] = [];
   const walk = (n: GapTreeNode, prefix: string[]) => {
     for (const p of n.people) {
-      if (isAttention(p.status, kind)) {
+      if (isAttention(p, kind)) {
         out.push({ id: p.id, name: p.name, path: [...prefix, n.name].join(" ▸ "), status: p.status as GapLevel });
       }
     }
@@ -231,7 +294,7 @@ export function narrowTree(roots: GapTreeNode[], kind: GapKind): GapTreeNode[] {
   if (kind === "all") return roots; // untouched, so the default cannot drift
   const narrow = (n: GapTreeNode): GapTreeNode => ({
     ...n,
-    people: n.people.filter((p) => belongsInTree(p.status, kind)),
+    people: n.people.filter((p) => belongsInTree(p, kind)),
     children: n.children.map(narrow),
   });
   return roots.map(narrow);

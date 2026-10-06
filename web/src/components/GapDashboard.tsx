@@ -13,6 +13,21 @@ function Counts({ node }: { node: GapTreeNode }) {
     <span className="flex items-center gap-2 text-sm">
       {node.red > 0 && <span className="rounded bg-red-100 px-1.5 py-0.5 text-red-700">🔴 {node.red}</span>}
       {node.yellow > 0 && <span className="rounded bg-amber-100 px-1.5 py-0.5 text-amber-700">🟡 {node.yellow}</span>}
+      {/* Acknowledged gap items under this node. The red/yellow chips above count
+          PEOPLE by worst status and are untouched by any watch; this one counts
+          ITEMS, so it carries «אירועים» in its title rather than standing as a
+          third people-chip the reader would add to the other two. */}
+      {node.watchedEvents > 0 && (
+        <span
+          className="rounded bg-orange-100 px-1.5 py-0.5 text-orange-800"
+          title={
+            `${node.watchedEvents} אירועים באי-עמידה שסומנו במעקב — נספרים באי-עמידה ככל השאר` +
+            (node.oldestWatchDays != null ? `. הסימון הישן ביותר: לפני ${node.oldestWatchDays} ימים` : "")
+          }
+        >
+          👁 {node.watchedEvents}
+        </span>
+      )}
       <span className="text-muted">
         {node.total} {node.total === 1 ? "איש" : "אנשים"}
       </span>

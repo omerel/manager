@@ -13,7 +13,8 @@ import { ActionForm } from "@/components/ActionForm";
 import { getPersonFull, buildPersonTimeline, buildVectorView, type PersonFull } from "@/lib/person-view";
 import { getPlan } from "@/lib/plans";
 import { buildPlanDiagramSvg, STATUS_STYLE, VECTOR_LEGEND } from "@/lib/plan-diagram";
-import { computePersonGaps, levelForPoint, evalMetric, GAP_META, type GapLevel } from "@/lib/gaps";
+import { computePersonGaps, levelForPoint, evalMetric, isPointDone, GAP_META, type GapLevel } from "@/lib/gaps";
+import { watchContextFor } from "@/lib/watch";
 import { PersonFormFields } from "@/components/PersonFormFields";
 import { MetricCurve } from "@/components/MetricCurve";
 import { CircleDot, FileDown, History, Map as MapIcon, Paperclip, Route, Star, TrendingUp } from "lucide-react";
@@ -82,7 +83,8 @@ export default async function PersonPage({
 
   const timeline = buildPersonTimeline(person);
   const today = new Date();
-  const gaps = computePersonGaps(person, today);
+  const watches = await watchContextFor(person.id, today);
+  const gaps = computePersonGaps(person, today, watches);
 
   // The career vector: built HERE, on every open, from the person's own plan
   // copy — nothing is stored and nothing needs syncing. Coloured by this
@@ -92,7 +94,7 @@ export default async function PersonPage({
   const vectorSvg = planForVector
     ? (() => {
         // status AND occurrences from the same timeline — see buildVectorView
-        const v = buildVectorView(timeline, person.placementDate, today);
+        const v = buildVectorView(timeline, person.placementDate, today, watches);
         return buildPlanDiagramSvg(planForVector, v.status, v.occurrences);
       })()
     : null;
@@ -256,12 +258,12 @@ export default async function PersonPage({
       {preview ? (
         <AssignmentReview preview={preview} backHref={`/people/${person.id}?edit=1`} />
       ) : (
-        <PlanSection person={person} templates={templates} timeline={timeline} canEdit={editing} canAddPersonal={canAddPersonal} today={today} />
+        <PlanSection person={person} templates={templates} timeline={timeline} canEdit={editing} canAddPersonal={canAddPersonal} today={today} watches={watches} />
       )}
 
       <PlanHistorySection person={person} />
 
-      <EvaluationsSection person={person} recurrences={timeline.recurrences} editing={editing} today={today} interviewFormat={interviewFormat} />
+      <EvaluationsSection person={person} recurrences={timeline.recurrences} editing={editing} today={today} interviewFormat={interviewFormat} watches={watches} />
     </div>
   );
 }
@@ -282,7 +284,8 @@ function PlanHistorySection({ person }: { person: PersonFull }) {
       </p>
       <ul className="space-y-3">
         {past.map((a) => {
-          const doneIds = new Set(person.pointProgress.map((pp) => pp.pointEventId));
+          // only the COMPLETED ones: a watch row carries no doneOn and is not progress
+          const doneIds = new Set(person.pointProgress.filter(isPointDone).map((pp) => pp.pointEventId));
           const events = a.plan.pointEvents;
           const done = events.filter((e) => doneIds.has(e.id));
           const missed = events.filter((e) => !doneIds.has(e.id));

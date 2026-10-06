@@ -35,7 +35,9 @@ export type PersonRow = {
 const IMPACT_COUNTS = {
   planAssignments: true,
   evalEntries: true,
-  pointProgress: true,
+  // COMPLETED milestones only — the label reads «אבני דרך שסומנו», and a row
+  // under watch has marked nothing
+  pointProgress: { where: { doneOn: { not: null } } },
   metricReadings: true,
 } as const;
 

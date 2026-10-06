@@ -1,12 +1,14 @@
 import { fmtDate } from "@/lib/dates";
 import type { PersonFull, RecurrenceRow } from "@/lib/person-view";
 import { addFreeEntry, addInterview, fillSlot, deleteEntry } from "@/lib/eval-actions";
-import { RefreshCw, PenLine, Paperclip, FolderOpen, MessagesSquare } from "lucide-react";
+import { RefreshCw, PenLine, Paperclip, FolderOpen, MessagesSquare, Eye } from "lucide-react";
 import { ActionForm } from "@/components/ActionForm";
 import { FileDrop } from "@/components/FileDrop";
 import { DateField } from "@/components/DateField";
 import { EVAL_SCALE, scoreLabel } from "@/lib/eval-scale";
-import { dueLevel } from "@/lib/gaps";
+import { dueLevel, type WatchContext } from "@/lib/gaps";
+import { occurrenceKey } from "@/lib/plan-diagram";
+import { WatchControls } from "@/components/person-card";
 
 const inputCls = "rounded-md border border-border px-3 py-1.5 text-sm";
 
@@ -16,11 +18,14 @@ export function EvaluationsSection({
   editing,
   today,
   interviewFormat,
+  watches,
 }: {
   person: PersonFull;
   recurrences: RecurrenceRow[];
   editing: boolean;
   today: Date;
+  /** marks this person carries, keyed as `WatchMark.itemKey` — expired ones included */
+  watches: WatchContext;
   /** the house format for an interview summary; null when none is configured */
   interviewFormat: { name: string } | null;
 }) {
@@ -62,25 +67,36 @@ export function EvaluationsSection({
           <ul className="space-y-2">
             {visibleSlots.map((s) => {
               const entry = s.filledByEntryId ? entryById.get(s.filledByEntryId) : undefined;
-              const pastDue = !entry && !s.waived && s.dueDate.getTime() < today.getTime();
+              const watch = watches.get(occurrenceKey(s.recurringEventId, s.offsetMonths));
+              /**
+               * A MARKED occurrence is not complete, whatever text it carries:
+               * the entry was filed as a note, not as a summary. The same rule
+               * `computePersonGaps` applies, written here too because this list
+               * decides its own colours — and `watches.has`, not `.live`, so an
+               * expired mark returns the occurrence to red rather than to green.
+               */
+              const done = !!entry && !watch;
+              const pastDue = !done && !s.waived && s.dueDate.getTime() < today.getTime();
               // the same rule the dashboard counts 🟡 by — the two screens must agree
-              const approaching = !entry && !s.waived && !pastDue && dueLevel(s.dueDate, today) === "APPROACHING";
+              const approaching = !done && !s.waived && !pastDue && dueLevel(s.dueDate, today) === "APPROACHING";
               return (
                 <li
                   key={`${s.recurringEventId}:${s.offsetMonths}`}
                   className={`rounded-md border px-3 py-2 text-sm ${
-                    entry
+                    done
                       ? "border-emerald-200 bg-emerald-50/50"
-                      : pastDue
-                        ? "border-red-200 bg-red-50/50"
-                        : approaching
-                          ? "border-amber-200 bg-amber-50/50"
-                          : "border-border"
+                      : watch?.live
+                        ? "border-orange-300 bg-orange-50/50"
+                        : pastDue
+                          ? "border-red-200 bg-red-50/50"
+                          : approaching
+                            ? "border-amber-200 bg-amber-50/50"
+                            : "border-border"
                   }`}
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <span>
-                      {entry ? "✅" : pastDue ? "🔴" : s.waived ? "⊘" : approaching ? "🟡" : "⬜"}{" "}
+                      {done ? "✅" : watch?.live ? "👁" : pastDue ? "🔴" : s.waived ? "⊘" : approaching ? "🟡" : "⬜"}{" "}
                       <span className="font-medium">{s.label}</span>{" "}
                       <span className="text-muted">· יעד {fmtDate(s.dueDate)}</span>
                       {pastDue && <span className="text-red-700"> · טרם מולא</span>}
@@ -109,6 +125,18 @@ export function EvaluationsSection({
 
                   {entry && (
                     <div className="mt-2 space-y-1">
+                      {/* While the mark stands the text is a NOTE, not an
+                          assessment, and must not be read as one. Clearing the
+                          mark is the declaration that the interview happened —
+                          at which point this label disappears and the same text
+                          becomes the summary. A forgotten note that silently
+                          became an assessment is the failure this prevents. */}
+                      {watch?.live && (
+                        <span className="inline-flex items-center gap-1 rounded bg-orange-100 px-1.5 py-0.5 text-xs text-orange-900">
+                          <Eye className="h-3 w-3" aria-hidden />
+                          פתק מעקב — טרם סיכום ראיון
+                        </span>
+                      )}
                       {entry.score != null && (
                         <span className="inline-block rounded-full bg-brand-50 px-2 py-0.5 text-xs font-medium text-brand-800">
                           {scoreLabel(entry.score)}
@@ -117,6 +145,22 @@ export function EvaluationsSection({
                       {entry.content && <p className="whitespace-pre-wrap">{entry.content}</p>}
                       <AttachmentLinks attachments={entry.attachments} />
                       <p className="text-xs text-muted">הוזן {fmtDate(entry.createdAt)}</p>
+                    </div>
+                  )}
+
+                  {/* still owed → it can be acknowledged. Offered beside filling,
+                      never instead of it: clearing the mark is what says the
+                      interview happened. */}
+                  {!done && !s.waived && (
+                    <div className="mt-2">
+                      <WatchControls
+                        personId={person.id}
+                        kind="occurrence"
+                        itemId={occurrenceKey(s.recurringEventId, s.offsetMonths)}
+                        watch={watch}
+                        canEdit={editing}
+                        notePlaceholder="מה ידוע? (פתק מעקב)"
+                      />
                     </div>
                   )}
 

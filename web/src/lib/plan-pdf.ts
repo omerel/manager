@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getPlan } from "@/lib/plans";
 import { buildPlanDiagramSvg, STATUS_STYLE, VECTOR_LEGEND } from "@/lib/plan-diagram";
 import { buildPersonTimeline, buildVectorView, type PersonFull } from "@/lib/person-view";
+import { watchContextFor } from "@/lib/watch";
 
 /**
  * A person's career plan as a PDF, in THEIR colours.
@@ -20,7 +21,9 @@ export async function renderPlanPdf(person: PersonFull): Promise<NextResponse> {
 
   const today = new Date();
   // the same pairing the card uses, so the export and the card cannot differ
-  const view = buildVectorView(buildPersonTimeline(person), person.placementDate, today);
+  // the PDF must say what the card says: a watched gap is orange on both
+  const watches = await watchContextFor(person.id, today);
+  const view = buildVectorView(buildPersonTimeline(person), person.placementDate, today, watches);
   const svg = buildPlanDiagramSvg(plan, view.status, view.occurrences);
 
   // the key to the colours, from the same list the card's legend reads

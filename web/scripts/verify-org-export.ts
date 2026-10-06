@@ -33,7 +33,7 @@ async function cleanup() {
 /** A hand-built forest — the layout module knows nothing of the database. */
 const n = (id: string, name: string, total: number, commander: string | null, children: GapTreeNode[] = []): GapTreeNode => ({
   id, name, kind: "TEAM", level: null, commander, total,
-  red: 0, yellow: 0, overdueEvents: 0, approachingEvents: 0, people: [], children,
+  red: 0, yellow: 0, overdueEvents: 0, approachingEvents: 0, watchedEvents: 0, oldestWatchDays: null, people: [], children,
 });
 
 const OPTS = { excluded: new Set<string>(), showCommander: true, showCount: true };

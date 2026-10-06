@@ -452,7 +452,7 @@ A person carrying an assigned plan SHALL see that plan drawn as a career vector 
 
 The vector SHALL be rendered from the person's own plan at the moment the card is opened, storing nothing, and SHALL be coloured by **that person's** status against **each item the drawing actually shows** — never against the item's definition. A recurring event is drawn once per occurrence, so each occurrence SHALL carry its own status, decided by that occurrence's own date and its own filed content; the states of an event's other occurrences SHALL NOT reach it. This SHALL hold for both ways a recurring event is drawn — a card at each occurrence, or a cadence marker at each occurrence.
 
-The statuses SHALL be: in gap, approaching, met, waived, and **not yet due** — the last for an item whose date is still ahead and which has not been done, drawn in a neutral colour that reads as neither achievement nor fault. Being not yet due SHALL be distinguished from being met: an item completed ahead of its date reads as met, not as pending. The neutral state SHALL apply to every kind of future item the drawing shows — point event, metric checkpoint and recurring occurrence alike — so that two items falling in the same month are never coloured differently for the same reason. Every state the drawing uses SHALL appear in its legend.
+The statuses SHALL be: in gap, **in gap and under watch**, approaching, met, waived, and **not yet due** — the last for an item whose date is still ahead and which has not been done, drawn in a neutral colour that reads as neither achievement nor fault. Being not yet due SHALL be distinguished from being met: an item completed ahead of its date reads as met, not as pending. The neutral state SHALL apply to every kind of future item the drawing shows — point event, metric checkpoint and recurring occurrence alike — so that two items falling in the same month are never coloured differently for the same reason. An item in gap that has been marked as under watch SHALL be drawn in a colour of its own, distinct from both an unattended gap and a met item, so that a glance separates what is known from what is new. It remains a gap: the colour says who is looking at it, not whether it is outstanding. Every state the drawing uses SHALL appear in its legend.
 
 Movement SHALL be reserved for the states that ask for action, and SHALL be suppressed for a viewer who has asked their system for reduced motion, colour alone then carrying the meaning. A personal event SHALL be distinguishable on the drawing from the events the track requires. Because the drawing is reduced to fit its column, it SHALL be enlargeable to fill the screen, and SHALL be exportable as a PDF carrying the same colours — available only to a user who may already see that person.
 
@@ -541,3 +541,18 @@ Every item the vector draws SHALL carry a status. A drawn item with no status SH
 
 - **WHEN** the drawing is given a status map and renders an item the map has no entry for
 - **THEN** that is a fault the system can detect, and the item is never quietly painted in a colour that looks like a verdict
+
+#### Scenario: A watched gap is drawn apart from a new one
+
+- **WHEN** a person carries two overdue items and one of them is under watch
+- **THEN** the two are drawn in different colours, and neither reads as met
+
+#### Scenario: Marking and clearing from the card
+
+- **WHEN** a commander opens a person's card on an outstanding item
+- **THEN** they can mark it as under watch and clear that mark, alongside the control that marks it complete
+
+#### Scenario: A watch note is not mistaken for a record
+
+- **WHEN** a recurring occurrence is under watch and carries the text explaining the watch
+- **THEN** that text is presented as a watch note rather than as the evaluation summary, until the watch is cleared

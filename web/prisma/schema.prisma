@@ -93,6 +93,7 @@ model User {
   // delete the person who commanded it.
   commandsNode     OrgNode?      @relation("FrameworkCommander", fields: [commandsNodeId], references: [id], onDelete: SetNull)
   commandsNodeId   String?       @unique
+  watchMarks       WatchMark[]   @relation("WatchMarker")
   authoredQueries  Query[]       @relation("QueryAuthor")
   queryAnswers     QueryTarget[] @relation("QueryAnswerer")
   queryInbox       QueryTarget[] @relation("QueryTargetUser")
@@ -525,6 +526,7 @@ model Person {
   pointProgress    PointProgress[]
   metricReadings   MetricReading[]
   evalEntries      EvalEntry[]
+  watchMarks       WatchMark[]
   proposals        ExtractionProposal[]
   agentRuns        AgentRun[]
   createdAt        DateTime           @default(now())
@@ -649,10 +651,42 @@ model PointProgress {
   personId     String
   pointEvent   PointEvent @relation(fields: [pointEventId], references: [id], onDelete: Cascade)
   pointEventId String
-  doneOn       DateTime
-  note         String? // e.g. which occurrence type was completed
+  // NULLABLE, and this is the whole point: a row with no date is not a
+  // completion but an item UNDER WATCH, carrying the note that explains why.
+  // Every reader asks `isPointDone` rather than testing the row's existence —
+  // `!!prog` was true for a watch too, and would have made the gap disappear.
+  doneOn       DateTime?
+  note         String? // e.g. which occurrence type was completed; the watch note lives here too
 
   @@unique([personId, pointEventId])
+}
+
+// A gap the commander has ACKNOWLEDGED: known, not yet closed.
+//
+// One table for all three item kinds, because a watch says the same thing about
+// each of them. `itemKey` is the point event's id, the metric's id, or
+// `occurrenceKey(recurringEventId, offsetMonths)` = `id:offset`. Cuids carry no
+// colon, so a recurring key can never collide with a bare id.
+//
+// The NOTE is deliberately absent here: it lives in the field the item already
+// has — PointProgress.note, MetricReading.note, EvalEntry.content — so the
+// system never grows a second place to write the same thing.
+//
+// Expiry is NOT stored either. It is computed at read time from `markedAt`
+// against the configured window, so an admin who changes that window changes
+// what is ALREADY marked, not only what gets marked next.
+model WatchMark {
+  id         String   @id @default(cuid())
+  person     Person   @relation(fields: [personId], references: [id], onDelete: Cascade)
+  personId   String
+  itemKey    String
+  markedAt   DateTime @default(now())
+  // SetNull, never Cascade: removing the user who marked must not erase the mark
+  // and silently reopen the gap as "new".
+  markedBy   User?    @relation("WatchMarker", fields: [markedById], references: [id], onDelete: SetNull)
+  markedById String?
+
+  @@unique([personId, itemKey])
 }
 
 // Current accumulated value of a cumulative metric, with an as-of date.

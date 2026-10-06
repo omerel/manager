@@ -14,6 +14,8 @@ import type { EmploymentStatus, FieldType } from "@/generated/prisma/client";
 import { composeFullName } from "@/lib/person-name";
 import { deleteUploadDir } from "@/lib/storage";
 import { logActivity } from "@/lib/activity-log";
+import { getSessionUserOrNull } from "@/lib/session";
+import { isPointDone, isPointWatched } from "@/lib/gaps";
 import { assertIdentityFree } from "@/lib/identity-keys";
 import { emitMovement } from "@/lib/movements";
 import { monthsSince } from "@/lib/waivers";
@@ -650,6 +652,140 @@ export async function clearPointDone(formData: FormData) {
   await requireEditForPerson(personId);
   await prisma.pointProgress.deleteMany({ where: { personId, pointEventId: str(formData.get("pointEventId")) } });
   revalidatePath(`/people/${personId}`);
+}
+
+/* ---------- Watch marks: a known gap, not a closed one ---------- */
+
+/**
+ * Mark a gap as UNDER WATCH, and file the note explaining why.
+ *
+ * Two writes, and they answer different questions. The `WatchMark` row is the
+ * acknowledgement: who marked it, when, and therefore when it lapses. The note
+ * goes into the field the item ALREADY has — no second text field for the same
+ * thing — which is why `PointProgress.doneOn` had to become nullable.
+ *
+ * `requireEditForPerson` is the same gate completion passes: EDIT on the team is
+ * «the direct commander and above», and marking a gap is a statement about a
+ * subordinate that only they should be able to make.
+ */
+export async function setWatch(formData: FormData) {
+  const personId = str(formData.get("personId"));
+  await requireEditForPerson(personId);
+  const kind = str(formData.get("kind")); // point | metric | occurrence
+  const itemId = str(formData.get("itemId"));
+  const note = str(formData.get("note")) || null;
+
+  if (kind === "point") {
+    const existing = await prisma.pointProgress.findUnique({
+      where: { personId_pointEventId: { personId, pointEventId: itemId } },
+    });
+    // A COMPLETED item is not a gap, so it cannot be put under watch; marking it
+    // would otherwise quietly erase the completion date.
+    if (isPointDone(existing)) throw new Error("האירוע סומן כבוצע — אין פער לסמן במעקב.");
+    await prisma.pointProgress.upsert({
+      where: { personId_pointEventId: { personId, pointEventId: itemId } },
+      create: { personId, pointEventId: itemId, doneOn: null, note },
+      update: { note },
+    });
+  } else if (kind === "metric") {
+    const reading = await prisma.metricReading.findUnique({
+      where: { personId_metricId: { personId, metricId: itemId } },
+    });
+    // `MetricReading.value` is required, and inventing a 0 would turn «טרם נרשם»
+    // into «0 מתוך היעד» — a measurement nobody took. The mark is placed either
+    // way; only the note needs somewhere truthful to live.
+    if (note && !reading) throw new Error("כדי לרשום הערה למדד יש לרשום קודם ערך מצטבר.");
+    if (reading) await prisma.metricReading.update({ where: { id: reading.id }, data: { note } });
+  } else if (kind === "occurrence") {
+    const [recurringEventId, offsetRaw] = itemId.split(":");
+    const occurrenceOffset = Number(offsetRaw);
+    if (!recurringEventId || !Number.isInteger(occurrenceOffset)) throw new Error("מופע לא תקין.");
+    const ev = await prisma.recurringEvent.findUnique({
+      where: { id: recurringEventId },
+      select: { label: true },
+    });
+    const existing = await prisma.evalEntry.findFirst({
+      where: { personId, recurringEventId, occurrenceOffset },
+    });
+    // The entry carries the note. It makes the occurrence look "filled", and the
+    // engine deliberately lets the MARK override that: the text is a note, not a
+    // summary, until someone clears the mark.
+    if (existing) {
+      if (note) await prisma.evalEntry.update({ where: { id: existing.id }, data: { content: note } });
+    } else if (note) {
+      await prisma.evalEntry.create({
+        data: {
+          personId,
+          kind: "FREE", // never INTERVIEW: that would manufacture an interview
+          title: `פתק מעקב — ${ev?.label ?? "מופע"}`,
+          content: note,
+          eventDate: new Date(),
+          recurringEventId,
+          occurrenceOffset,
+        },
+      });
+    }
+  } else {
+    throw new Error("סוג פריט לא מוכר.");
+  }
+
+  // resolved here, like `logActivity` does it: who marked is not a caller-supplied fact
+  const me = await getSessionUserOrNull();
+  await prisma.watchMark.upsert({
+    where: { personId_itemKey: { personId, itemKey: itemId } },
+    // re-marking RESETS the clock, which is the point: a commander who looks
+    // again has acknowledged it again
+    create: { personId, itemKey: itemId, markedById: me?.id ?? null },
+    update: { markedAt: new Date(), markedById: me?.id ?? null },
+  });
+
+  const who = await prisma.person.findUnique({ where: { id: personId }, select: { fullName: true } });
+  await logActivity({
+    action: "progress.watch",
+    description: `סימן פער במעקב עבור ${who?.fullName ?? personId}`,
+    subjectType: "person",
+    subjectId: personId,
+  });
+  revalidatePath(`/people/${personId}`);
+  revalidatePath("/");
+}
+
+/**
+ * Clear the mark. For a recurring occurrence this is the DECLARATION that the
+ * interview happened — the note stops being a note and becomes the summary, and
+ * the occurrence counts as filled again.
+ *
+ * The note itself is left alone everywhere: it is the record of what was known,
+ * and deleting it would lose the only account of why the gap was accepted. The
+ * one exception is a `PointProgress` row that exists ONLY to hold a watch note —
+ * left behind, it is a row with no completion date that nothing would ever read
+ * again.
+ */
+export async function clearWatch(formData: FormData) {
+  const personId = str(formData.get("personId"));
+  await requireEditForPerson(personId);
+  const kind = str(formData.get("kind"));
+  const itemId = str(formData.get("itemId"));
+
+  await prisma.watchMark.deleteMany({ where: { personId, itemKey: itemId } });
+
+  if (kind === "point") {
+    const prog = await prisma.pointProgress.findUnique({
+      where: { personId_pointEventId: { personId, pointEventId: itemId } },
+    });
+    // watch-only row: no completion to preserve
+    if (isPointWatched(prog)) await prisma.pointProgress.delete({ where: { id: prog!.id } });
+  }
+
+  const who = await prisma.person.findUnique({ where: { id: personId }, select: { fullName: true } });
+  await logActivity({
+    action: "progress.watchCleared",
+    description: `הסיר סימון מעקב עבור ${who?.fullName ?? personId}`,
+    subjectType: "person",
+    subjectId: personId,
+  });
+  revalidatePath(`/people/${personId}`);
+  revalidatePath("/");
 }
 
 export async function setMetricReading(formData: FormData) {

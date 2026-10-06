@@ -6,6 +6,7 @@ import { getPersonFull, buildPersonTimeline, buildVectorView } from "@/lib/perso
 import { getPlan } from "@/lib/plans";
 import { buildPlanDiagramSvg, STATUS_STYLE, VECTOR_LEGEND } from "@/lib/plan-diagram";
 import { computePersonGaps } from "@/lib/gaps";
+import { watchContextFor } from "@/lib/watch";
 import { getFieldDefs } from "@/lib/person-schema";
 import { getInterviewFormat } from "@/lib/branding";
 import { UNASSIGNED_LABEL } from "@/lib/people";
@@ -61,11 +62,12 @@ export default async function MyRecordPage() {
 
   const timeline = buildPersonTimeline(person);
   const today = new Date();
-  const gaps = computePersonGaps(person, today);
+  const watches = await watchContextFor(person.id, today);
+  const gaps = computePersonGaps(person, today, watches);
   const plan = await getPlan(person.assignedPlanId);
   const vectorSvg = plan
     ? (() => {
-        const v = buildVectorView(timeline, person.placementDate, today);
+        const v = buildVectorView(timeline, person.placementDate, today, watches);
         return buildPlanDiagramSvg(plan, v.status, v.occurrences);
       })()
     : null;
@@ -119,9 +121,9 @@ export default async function MyRecordPage() {
         )}
       </div>
 
-      <PlanSection person={person} templates={[]} timeline={timeline} canEdit={false} canAddPersonal={false} today={today} />
+      <PlanSection person={person} templates={[]} timeline={timeline} canEdit={false} canAddPersonal={false} today={today} watches={watches} />
 
-      <EvaluationsSection person={person} recurrences={timeline.recurrences} editing={false} today={today} interviewFormat={interviewFormat} />
+      <EvaluationsSection person={person} recurrences={timeline.recurrences} editing={false} today={today} interviewFormat={interviewFormat} watches={watches} />
     </div>
   );
 }

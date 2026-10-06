@@ -32,6 +32,7 @@ import {
   belongsInTree,
   type GapKind,
 } from "@/lib/gap-dashboard";
+import type { GapLevel } from "@/lib/gap-meta";
 
 const TAG = "dfverify";
 
@@ -190,12 +191,28 @@ async function main() {
       teamIn(all, f.teamL) === 4, `${teamIn(all, f.teamL)} — the original must survive`);
 
     console.log("\n=== the two rules, stated directly ===");
-    check("a compliant person belongs in the tree under ״all״", belongsInTree("MET", "all"));
-    check("but never in a problem list", !isAttention("MET", "all"));
-    check("a person with no plan belongs in the tree under ״all״", belongsInTree(null, "all"));
-    check("and is not a problem either", !isAttention(null, "all"));
+    // the predicates take a PERSON now: «אי-עמידה שאינה במעקב» asks about items,
+    // and a level cannot answer it
+    const who = (status: GapLevel | null, hasUnwatchedOverdue = true) => ({ status, hasUnwatchedOverdue });
+    check("a compliant person belongs in the tree under ״all״", belongsInTree(who("MET"), "all"));
+    check("but never in a problem list", !isAttention(who("MET"), "all"));
+    check("a person with no plan belongs in the tree under ״all״", belongsInTree(who(null), "all"));
+    check("and is not a problem either", !isAttention(who(null), "all"));
     check("under a specific kind the tree and the problem list agree",
-      belongsInTree("OVERDUE", "overdue") === isAttention("OVERDUE", "overdue"));
+      belongsInTree(who("OVERDUE"), "overdue") === isAttention(who("OVERDUE"), "overdue"));
+
+    console.log("\n=== the fourth kind: acknowledged gaps step aside ===");
+    check("someone with an unwatched overdue item is in ״אי-עמידה שאינה במעקב״",
+      isAttention(who("OVERDUE", true), "overdue-unwatched"));
+    check("someone whose every overdue item is watched is NOT",
+      !isAttention(who("OVERDUE", false), "overdue-unwatched"),
+      "this is the filter's whole purpose");
+    check("and that same person is STILL in plain ״אי-עמידה״",
+      isAttention(who("OVERDUE", false), "overdue"),
+      "a watch narrows a view, it never removes a gap");
+    check("an approaching person is not in it either",
+      !isAttention(who("APPROACHING", true), "overdue-unwatched"));
+    check("the fourth kind is read back from the URL", parseGapKind("overdue-unwatched") === "overdue-unwatched");
 
     console.log("\n=== reading the choice ===");
     check("an unknown kind falls back to all, rather than erroring", parseGapKind("nonsense") === "all");

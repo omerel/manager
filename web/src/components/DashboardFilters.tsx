@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { Filter, X } from "lucide-react";
 import { KIND_LABEL } from "@/lib/org-kinds";
 import type { OrgKindStr } from "@/lib/org-kinds";
-import type { GapKind } from "@/lib/gap-dashboard";
+import { GAP_KIND_LABEL, GAP_KIND_ORDER, type GapKind } from "@/lib/gap-meta";
 
 export type FrameworkOption = { id: string; path: string; kind: OrgKindStr };
 
@@ -74,9 +74,13 @@ export function DashboardFilters({
           onChange={(e) => go({ kind: e.target.value })}
           className="rounded-md border border-border px-3 py-1.5 text-sm"
         >
-          <option value="all">הכל</option>
-          <option value="approaching">מתקרב</option>
-          <option value="overdue">אי-עמידה</option>
+          {/* rendered from the vocabulary, not hand-listed: a kind added to the
+              type must not be able to stay out of the control */}
+          {GAP_KIND_ORDER.map((k) => (
+            <option key={k} value={k}>
+              {GAP_KIND_LABEL[k]}
+            </option>
+          ))}
         </select>
       </div>
 

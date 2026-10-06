@@ -42,6 +42,10 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const red = roots.reduce((s, r) => s + r.red, 0);
   const overdueEvents = roots.reduce((s, r) => s + r.overdueEvents, 0);
   const approachingEvents = roots.reduce((s, r) => s + r.approachingEvents, 0);
+  // A SUBSET of overdueEvents. Shown as the tile's `sub` line, the same shape
+  // «(מתוכם N ללא שיוך)» already uses on this row — so the reader meets a
+  // familiar «מתוכם» and is less likely to read two numbers as a subtraction.
+  const watchedEvents = roots.reduce((s, r) => s + r.watchedEvents, 0);
   // Deliberately NOT a function of `kind`. If you are here to "fix" that: a
   // gauge that changed meaning with a filter would make one number on one
   // screen mean two different things depending on a control easily forgotten.
@@ -87,6 +91,10 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           icon={<AlertTriangle className="h-5 w-5" aria-hidden />}
           value={overdueEvents}
           label="אירועים באי-עמידה"
+          // The headline number is UNCHANGED by any watch: acknowledging a gap
+          // does not close it. The watched ones are named underneath, inside the
+          // same tile, so the pair reads as "of these" and never as a deduction.
+          sub={watchedEvents > 0 ? `מתוכם ${watchedEvents} במעקב` : undefined}
           tone={overdueEvents > 0 ? "red" : "green"}
         />
         <StatTile
